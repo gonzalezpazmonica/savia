@@ -34,6 +34,8 @@ def presencia(root, max_validez=MAX_VALIDEZ_DEFECTO, ahora=None):
         at, hasta = store.parse_ts(data["at"]), store.parse_ts(data["valid_until"])
     except ValueError:
         return False, "su presencia tiene fechas inválidas"
+    if hasta <= at:
+        return False, "su presencia vence antes de declararse"
     if hasta - at > dt.timedelta(seconds=max_validez):
         return False, "su presencia declara una validez mayor que el máximo"
     if at > ahora + dt.timedelta(seconds=60):
@@ -45,6 +47,11 @@ def presencia(root, max_validez=MAX_VALIDEZ_DEFECTO, ahora=None):
 
 def _limpio(texto, n=200):
     return _CTRL.sub(" ", texto)[:n]
+
+
+def _mostrable(texto):
+    """Texto ajeno para la terminal: sin caracteres de control (ni secuencias ANSI)."""
+    return _CTRL.sub(" ", texto)
 
 
 def notificar_so(titulo, texto):
@@ -85,6 +92,10 @@ def pendientes(root, ahora=None, incluir_respaldo=False):
 DELIVER_LOCK = ".deliver.lock"
 
 
+class PasadaEnCurso(PulseError):
+    """Otra pasada de respaldo tiene su cerrojo: no es un fallo, esta pasada no hace nada."""
+
+
 def entregar(root, max_validez=MAX_VALIDEZ_DEFECTO, maximo=MAX_POR_PASADA, notificador=notificar_so):
     """Una pasada de respaldo. Devuelve {'soul': bool, 'motivo': str, 'avisados': [ids]}.
 
@@ -92,15 +103,22 @@ def entregar(root, max_validez=MAX_VALIDEZ_DEFECTO, maximo=MAX_POR_PASADA, notif
     cerrojo de escritor cogido, para no bloquear el fin de un trabajo. «Una vez»
     lo garantiza el cerrojo propio de la pasada (una sola pasada a la vez) más
     volver a comprobar `pendientes` con el cerrojo de escritor antes de anotar.
+
+    Fail-closed con el ledger: si no se puede leer, no se sabe qué se avisó ya ni
+    se podría anotar el aviso, así que no se notifica nada (PulseError, salida 1).
     """
     vigente, motivo = presencia(root, max_validez)
     if vigente:
         return {"soul": True, "motivo": motivo, "avisados": []}
-    avisados = []
-    with store.lock(root, timeout=0, name=DELIVER_LOCK,
+    avisados, sin_so = [], 0
+    with store.lock(root, timeout=0, name=DELIVER_LOCK, error=PasadaEnCurso,
                     ocupado="otra pasada de respaldo está en curso; no se avisa dos veces"):
-        for pet in pendientes(root)[:maximo]:
+        with store.lock(root):
+            events._locked_ledger(root)
+            lista = pendientes(root)[:maximo]
+        for pet in lista:
             with store.lock(root):
+                events._locked_ledger(root)  # ilegible: ni se avisa ni se podría anotar
                 if pet["id"] not in {p["id"] for p in pendientes(root)}:
                     continue  # acusada o caducada entretanto
             texto = "%s: %s" % (MARCA, pet["que"])
@@ -110,7 +128,8 @@ def entregar(root, max_validez=MAX_VALIDEZ_DEFECTO, maximo=MAX_POR_PASADA, notif
             with store.lock(root):
                 store.append_jsonl(root, events.EVENTS, ev, "evento")
             avisados.append(pet["id"])
-    return {"soul": False, "motivo": motivo, "avisados": avisados}
+            sin_so += 0 if ok else 1
+    return {"soul": False, "motivo": motivo, "avisados": avisados, "sin_canal_so": sin_so}
 
 
 def inbox_text(root):
@@ -125,9 +144,9 @@ def inbox_text(root):
         return "No hay nada pendiente de ti."
     out = ["Pendiente de ti (%d):" % len(pend)]
     for p in pend:
-        out += ["- " + p["que"],
-                "    Por qué ahora: " + p["por_que_ahora"],
-                "    Si no contestas: " + p["si_no_contestas"],
-                "    Si aplazas: " + p["si_aplazas"],
+        out += ["- " + _mostrable(p["que"]),
+                "    Por qué ahora: " + _mostrable(p["por_que_ahora"]),
+                "    Si no contestas: " + _mostrable(p["si_no_contestas"]),
+                "    Si aplazas: " + _mostrable(p["si_aplazas"]),
                 "    Vale hasta: " + store.parse_ts(p["caduca"]).astimezone().strftime("%d/%m %H:%M")]
     return "\n".join(out)

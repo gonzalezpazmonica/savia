@@ -149,7 +149,8 @@ def read_jsonl(path, schema_name):
     return OK, records, rejected
 
 
-def _lock(root, timeout=10.0, name=".lock", ocupado="otro proceso de Pulse tiene el cerrojo; no se ha escrito nada"):
+def _lock(root, timeout=10.0, name=".lock", ocupado="otro proceso de Pulse tiene el cerrojo; no se ha escrito nada",
+          error=PulseError):
     """Cerrojo exclusivo en `<root>/<name>` (fcntl; el SO lo libera si el proceso muere).
 
     `.lock` es el de escritor: se coge solo lo que dura leer y escribir, nunca
@@ -166,7 +167,7 @@ def _lock(root, timeout=10.0, name=".lock", ocupado="otro proceso de Pulse tiene
                 break
             except OSError:
                 if time.monotonic() >= deadline:
-                    raise PulseError(ocupado)
+                    raise error(ocupado)
                 time.sleep(0.05)
         yield
     finally:

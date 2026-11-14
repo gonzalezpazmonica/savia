@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # SE-518 S1 — Pulse: contratos con esquema y validador, lanzador, `pulse status` y canal de respaldo.
-# Ref: SE-518 S1 (AC-2, AC-3, AC-12 parcial, AC-17, AC-18 lado Pulse)
+# Ref: SE-518 S1 (AC-3, AC-12 parcial, AC-17; AC-18 solo el lado Pulse). AC-1 y AC-2 dependen de Soul: no se verifican aquí.
 # La batería completa vive en projects/pulse/tests/test_pulse.py (stdlib); aquí se ejecuta y se
 # comprueba la CLI de extremo a extremo con un estado temporal fuera del repo.
 
@@ -66,7 +66,22 @@ setup() {
   PATH="$BATS_TEST_TMPDIR/bin:$PATH"
   "$PULSE" run --job-id w1 -- true
   run "$PULSE" deliver
+  [ "$status" -eq 0 ]
   [[ "$output" == *"Avisos por respaldo: 1"* ]]
   run "$PULSE" deliver
+  [ "$status" -eq 0 ]
   [[ "$output" == *"Avisos por respaldo: 0"* ]]
+}
+
+@test "negativo: con el ledger inseguro el respaldo no avisa y sale con 1" {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  printf '#!/bin/sh\ntouch "%s"\n' "$BATS_TEST_TMPDIR/notificado" > "$BATS_TEST_TMPDIR/bin/notify-send"
+  chmod +x "$BATS_TEST_TMPDIR/bin/notify-send"
+  PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+  "$PULSE" run --job-id w1 -- true
+  chmod 666 "$PULSE_DATA_DIR/eventos.jsonl"
+  run "$PULSE" deliver
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ledger"* ]]
+  [ ! -e "$BATS_TEST_TMPDIR/notificado" ]
 }

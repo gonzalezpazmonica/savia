@@ -26,7 +26,36 @@ class SchemaNoSoportado(Exception):
 
 def load_schema(name):
     with open(os.path.join(SCHEMAS_DIR, name + ".schema.json"), encoding="utf-8") as fh:
-        return json.load(fh)
+        sch = json.load(fh)
+    check_supported(sch)  # fail-closed al cargar, no solo en las ramas que visite un documento
+    return sch
+
+
+_TYPES = {"object", "array", "string", "boolean", "integer", "number"}
+
+
+def check_supported(schema, path="$"):
+    """Recorre TODO el esquema (también `then`, `properties` e `items` anidados) y lanza
+    `SchemaNoSoportado` ante una palabra clave, tipo o formato que el validador no soporta.
+    `validate` solo lo descubre en las ramas que un documento concreto visita."""
+    if not isinstance(schema, dict):
+        raise SchemaNoSoportado(path + ": un esquema debe ser un objeto")
+    unknown = set(schema) - _SUPPORTED
+    if unknown:
+        raise SchemaNoSoportado(path + ": palabras clave no soportadas: " + ", ".join(sorted(unknown)))
+    if "type" in schema and schema["type"] not in _TYPES:
+        raise SchemaNoSoportado(path + ": tipo " + repr(schema["type"]))
+    if "format" in schema and schema["format"] not in _FORMATS:
+        raise SchemaNoSoportado(path + ": formato " + repr(schema["format"]))
+    for key, sub in schema.get("properties", {}).items():
+        check_supported(sub, path + ".properties." + key)
+    if "items" in schema:
+        check_supported(schema["items"], path + ".items")
+    for i, sub in enumerate(schema.get("allOf", [])):
+        check_supported(sub, "%s.allOf[%d]" % (path, i))
+    for key in ("if", "then"):
+        if key in schema:
+            check_supported(schema[key], path + "." + key)
 
 
 def _type_ok(value, tname):

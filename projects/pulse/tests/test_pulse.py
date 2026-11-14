@@ -829,6 +829,198 @@ class Revision1576(Base):
         self.assertIs(signal.getsignal(signal.SIGTERM), signal.SIG_DFL)  # manejadores restaurados
 
 
+class Revision1576b(Base):
+    """Segunda revisión independiente de la PR #1576 (cabeza 4c0c224)."""
+
+    def setUp(self):
+        super().setUp()
+        self.avisos = []
+        self.notif = lambda t, x: (self.avisos.append(x) or True)
+
+    def aviso_evs(self):
+        return [e for e in self.ledger() if e["tipo"] == "aviso_respaldo"]
+
+    def fake_notify(self, rc=0):
+        fake = os.path.join(self._tmp.name, "bin")
+        os.makedirs(fake, exist_ok=True)
+        self.marca = os.path.join(self._tmp.name, "notificado")
+        with open(os.path.join(fake, "notify-send"), "w") as fh:
+            fh.write('#!/bin/sh\necho x >> "%s"\nexit %d\n' % (self.marca, rc))
+        os.chmod(os.path.join(fake, "notify-send"), 0o755)
+        return dict(self.env, PATH=fake + os.pathsep + os.environ["PATH"])
+
+    # P1-1: ledger ilegible => no se notifica (ni se repite en cada pasada) y sale con 1
+    def test_ledger_ilegible_el_respaldo_no_avisa_y_sale_con_1(self):
+        self.publica(self.peticion("p1"))
+        events.job_start(self.root, "w0")
+        os.chmod(os.path.join(self.root, "eventos.jsonl"), 0o666)
+        for _ in range(3):
+            with self.assertRaises(PulseError):
+                backup.entregar(self.root, notificador=self.notif)
+        self.assertEqual(self.avisos, [])
+        r = self.cli("deliver", env=self.fake_notify())
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("ledger", r.stderr)
+        self.assertFalse(os.path.exists(self.marca))
+
+    def test_ledger_que_se_estropea_a_mitad_de_pasada_corta_los_avisos(self):
+        self.publica(self.peticion("p1"), self.peticion("p2"))
+
+        def notif(_t, x):
+            self.avisos.append(x)
+            return True
+        real = store.append_jsonl
+
+        def append_y_estropea(*a, **k):
+            real(*a, **k)
+            os.chmod(os.path.join(self.root, "eventos.jsonl"), 0o666)
+        store.append_jsonl = append_y_estropea
+        try:
+            with self.assertRaises(PulseError):
+                backup.entregar(self.root, notificador=notif)
+        finally:
+            store.append_jsonl = real
+        self.assertEqual(len(self.avisos), 1)  # el primero se anotó; el segundo no se notifica
+
+    # P2-1: la comprobación de palabras clave recorre todo el esquema
+    def test_palabra_no_soportada_anidada_se_detecta(self):
+        anidados = (
+            {"allOf": [{"if": {"properties": {"t": {"const": 1}}},
+                        "then": {"properties": {"x": {"additionalProperties": False}}}}]},
+            {"properties": {"l": {"type": "array", "items": {"properties": {"y": {"oneOf": []}}}}}},
+            {"properties": {"z": {"type": "null"}}},
+            {"properties": {"f": {"type": "string", "format": "email"}}},
+        )
+        for sch in anidados:
+            self.assertEqual(schema.validate({}, sch), [])  # validate({}) no visita la rama
+            with self.assertRaises(schema.SchemaNoSoportado):
+                schema.check_supported(sch)
+        for name in ("evento", "peticiones", "latido", "presencia", "acuse"):
+            schema.check_supported(schema.load_schema(name))
+
+    # P2-2: si no se puede anotar el fin, el mensaje da la orden exacta de reparación
+    def test_run_sin_poder_anotar_el_fin_da_la_orden_de_reparacion(self):
+        self.write("peticiones.json", "{roto")
+        r = self.cli("run", "--job-id", "w1", "--", "true")
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("pulse job-finish --job-id w1 --rc 0", r.stderr)
+        os.unlink(os.path.join(self.root, "peticiones.json"))
+        self.assertEqual(self.cli("job-finish", "--job-id", "w1", "--rc", "0").returncode, 0)
+        self.assertEqual(len([e for e in self.ledger() if e["tipo"] == "job_finished"]), 1)
+
+    # P2-3: presencia que vence antes de su propia fecha
+    def test_presencia_que_vence_antes_de_declararse_no_cuenta(self):
+        self.presencia(at_delta=50, hasta_delta=20)
+        self.assertEqual(backup.presencia(self.root), (False, "su presencia vence antes de declararse"))
+        self.presencia(at_delta=0, hasta_delta=20)
+        self.assertTrue(backup.presencia(self.root)[0])
+
+    # P2-4: una pasada concurrente no es un fallo para el planificador
+    def test_cli_deliver_con_otra_pasada_en_curso_sale_con_0_sin_avisar(self):
+        self.publica(self.peticion("p1"))
+        env = self.fake_notify()
+        with store.lock(self.root, name=backup.DELIVER_LOCK):
+            r = self.cli("deliver", env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("en curso", r.stdout)
+        self.assertFalse(os.path.exists(self.marca))
+        self.assertFalse(os.path.exists(os.path.join(self.root, "eventos.jsonl")))
+
+    def test_cerrojo_de_escritor_cogido_no_es_pasada_en_curso(self):
+        self.publica(self.peticion("p1"))
+        real = store.lock
+        store.lock = lambda root, timeout=10.0, **kw: real(root, min(timeout, 0.2), **kw)
+        try:
+            with real(self.root):
+                with self.assertRaises(PulseError) as cm:
+                    backup.entregar(self.root, notificador=self.notif)
+        finally:
+            store.lock = real
+        self.assertNotIsInstance(cm.exception, backup.PasadaEnCurso)
+        self.assertEqual(self.avisos, [])
+
+    # P2-5: Ctrl-C en la terminal llega una sola vez al hijo; un SIGINT directo se reenvía
+    def _contador_sigint(self):
+        script = os.path.join(self._tmp.name, "cuenta.py")
+        with open(script, "w") as fh:
+            fh.write("import signal, sys, time\n"
+                     "n = [0]\n"
+                     "signal.signal(signal.SIGINT, lambda s, f: n.__setitem__(0, n[0] + 1))\n"
+                     "open(sys.argv[1], 'w').close()\n"
+                     "t = time.time()\n"
+                     "while n[0] == 0 and time.time() - t < 20: time.sleep(0.05)\n"
+                     "time.sleep(1.0)\n"
+                     "open(sys.argv[2], 'w').write(str(n[0]))\n")
+        return script, os.path.join(self._tmp.name, "listo"), os.path.join(self._tmp.name, "cuenta")
+
+    def _espera(self, path):
+        for _ in range(400):
+            if os.path.exists(path):
+                return
+            time.sleep(0.05)
+        self.fail("no apareció " + path)
+
+    def test_ctrl_c_en_la_terminal_llega_una_sola_vez_al_hijo(self):
+        import pty
+        script, listo, cuenta = self._contador_sigint()
+        pid, master = pty.fork()
+        if pid == 0:  # hijo: sesión nueva con la pty como terminal de control
+            try:
+                os.execve(BIN, [BIN, "run", "--job-id", "w1", "--", sys.executable, script, listo, cuenta], self.env)
+            finally:
+                os._exit(127)
+        try:
+            self._espera(listo)
+            time.sleep(0.3)
+            os.write(master, b"\x03")
+            self._espera(cuenta)
+            time.sleep(0.2)
+        finally:
+            _, st = os.waitpid(pid, 0)
+            os.close(master)
+        self.assertEqual(leer(cuenta), "1")
+
+    def test_sigint_directo_al_lanzador_sin_terminal_se_reenvia(self):
+        script, listo, cuenta = self._contador_sigint()
+        p = subprocess.Popen([BIN, "run", "--job-id", "w1", "--", sys.executable, script, listo, cuenta],
+                             env=self.env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+        self._espera(listo)
+        time.sleep(0.3)
+        p.send_signal(signal.SIGINT)
+        self.assertEqual(p.wait(timeout=30), 0)
+        self.assertEqual(leer(cuenta), "1")
+
+    # P2-6 (y seguridad P2-2): validate con JSON muy anidado no revienta
+    def test_validate_json_muy_anidado_no_da_traceback(self):
+        f = self.write("anidado.json", "[" * 200000)
+        r = self.cli("validate", "peticiones", f)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("no es JSON válido", r.stderr)
+        self.assertNotIn("Traceback", r.stderr)
+
+    # P2-7: sin notificación del sistema se dice que el único canal es el inbox
+    def test_cli_deliver_sin_notificacion_del_sistema_lo_dice(self):
+        self.publica(self.peticion("p1"))
+        r = self.cli("deliver", env=self.fake_notify(rc=1))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("el único canal es «pulse inbox»", r.stdout)
+        self.assertEqual(self.aviso_evs()[0]["canal_so"], "no_disponible")
+        r = self.cli("deliver", env=self.fake_notify(rc=0))
+        self.assertNotIn("único canal", r.stdout)
+
+    # Seguridad P2-1: el inbox no pasa secuencias de control a la terminal
+    def test_inbox_no_pasa_secuencias_de_control_a_la_terminal(self):
+        self.publica(self.peticion("p1", que="titulo \x1b[2J\x1b]0;x\x07 fin", por_que_ahora="a\rb"))
+        txt = backup.inbox_text(self.root)
+        self.assertIn("titulo", txt)
+        self.assertNotIn("\x1b", txt)
+        self.assertNotIn("\x07", txt)
+        self.assertNotIn("\r", txt)
+        r = self.cli("inbox")
+        self.assertNotIn("\x1b", r.stdout)
+
+
 class Estaticas(unittest.TestCase):
     def test_el_codigo_no_tiene_red_ni_listener(self):
         # AC-16/AC-27 (parte S1): ningún módulo importa nada de red.

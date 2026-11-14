@@ -33,7 +33,11 @@ bin/pulse deliver                                      # una pasada del canal de
 bin/pulse status | inbox
 ```
 
-Salidas: 0 bien, 1 rechazado por el estado, 2 entrada inválida (también un dato fuera de contrato, como un rango o una fecha imposible). Excepción: `pulse run` devuelve el código de la orden; si Pulse la rechaza antes de lanzarla, no hay `job_started` en el ledger.
+Salidas: 0 bien, 1 rechazado por el estado, 2 entrada inválida (también un dato fuera de contrato, como un rango o una fecha imposible). Excepción: `pulse run` devuelve el código de la orden; si Pulse la rechaza antes de lanzarla, no hay `job_started` en el ledger. Si lanzó la orden pero no pudo anotar el fin (por ejemplo, `peticiones.json` ilegible o lleno), el trabajo consta en marcha y el aviso da la orden exacta: `pulse job-finish --job-id ID --rc N`. `pulse deliver` con otra pasada en curso sale con 0 sin avisar; con el ledger ilegible no avisa y sale con 1.
+
+Señales en `pulse run`: SIGTERM, SIGINT y SIGHUP se reenvían a la orden, salvo Ctrl-C desde la terminal en primer plano, que ya llega a la orden directamente (no se duplica). Solo 143 y 137 (SIGTERM, SIGKILL) son clase `entorno`; 130 (SIGINT) y 129 (SIGHUP) quedan `desconocida`, como dice la spec.
+
+Sin herramienta de notificación del sistema (`notify-send` u `osascript`), el aviso de respaldo queda anotado con `canal_so=no_disponible`, no se reintenta y el único canal es `pulse inbox`; `deliver` lo dice. `inbox` muestra el texto de las peticiones sin caracteres de control.
 
 Cerrojos: `.lock` (escritor) solo dura lo que se tarda en leer y escribir; `deliver` notifica fuera de él y usa `.deliver.lock` para que dos pasadas no avisen dos veces. El fin de un trabajo y su petición van juntos: si `peticiones.json` es ilegible no se anota el fin, y un reintento regenera la petición que falte.
 

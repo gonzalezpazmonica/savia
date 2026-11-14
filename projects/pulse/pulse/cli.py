@@ -86,6 +86,18 @@ def _lanzar(cmd, env, estado, forward):
     return 128 + (-code) if code < 0 else code
 
 
+def _terminal_ya_entrega_sigint():
+    """True si Pulse está en el grupo de primer plano de su terminal: entonces Ctrl-C ya
+    llega al hijo (mismo grupo) y reenviarlo sería un segundo SIGINT («salida forzada»)."""
+    for fd in (0, 1, 2):
+        try:
+            if os.isatty(fd):
+                return os.tcgetpgrp(fd) == os.getpgrp()
+        except OSError:
+            continue
+    return False
+
+
 def _run(root, a):
     if not a.argv or a.argv[0] != "--" or len(a.argv) < 2:
         raise EntradaInvalida("uso: pulse run --job-id ID -- orden [args...]")
@@ -98,6 +110,8 @@ def _run(root, a):
     def forward(signum, _frame):
         if estado["proc"] is None:
             estado["pendientes"].append(signum)
+            return
+        if signum == signal.SIGINT and _terminal_ya_entrega_sigint():
             return
         try:
             estado["proc"].send_signal(signum)
@@ -116,11 +130,15 @@ def _run(root, a):
     finally:
         for s, h in old.items():
             signal.signal(s, h)
+    rc = min(rc, 255)
     try:
-        events.job_finish(root, a.job_id, min(rc, 255))
+        events.job_finish(root, a.job_id, rc)
     except PulseError as exc:
-        print("pulse: no se registró el fin: %s" % exc, file=sys.stderr)
-    return min(rc, 255)
+        # El trabajo queda «en marcha» en el ledger hasta que se anote su fin a mano.
+        print("pulse: no se registró el fin: %s\n"
+              "pulse: el trabajo consta en marcha; corrige la causa y anota el fin con:\n"
+              "  pulse job-finish --job-id %s --rc %d" % (exc, a.job_id, rc), file=sys.stderr)
+    return rc
 
 
 def _validate(a):
@@ -135,7 +153,7 @@ def _validate(a):
     for n, raw in enumerate(docs, 1):
         try:
             errs = schema.validate(json.loads(raw), sch)
-        except ValueError:
+        except (ValueError, RecursionError):
             errs = ["no es JSON válido"]
         for e in errs[:1]:
             bad += 1
@@ -168,11 +186,18 @@ def main(argv=None):
             events.write_latido(root, a.pasada, a.ttl, a.duracion, a.fuente_vencida)
             print("latido publicado (pasada %d)" % a.pasada)
         elif a.cmd == "deliver":
-            r = backup.entregar(root, a.max_validez)
+            try:
+                r = backup.entregar(root, a.max_validez)
+            except backup.PasadaEnCurso as exc:
+                print("Otra pasada de respaldo está en curso; esta no hace nada (%s)." % exc)
+                return 0
             if r["soul"]:
                 print("Soul presente: no emito nada.")
             else:
                 print("Soul %s. Avisos por respaldo: %d." % (r["motivo"], len(r["avisados"])))
+                if r["sin_canal_so"]:
+                    print("Sin notificación del sistema para %d aviso(s): el único canal es «pulse inbox»."
+                          % r["sin_canal_so"])
         elif a.cmd == "inbox":
             print(backup.inbox_text(root))
         elif a.cmd == "status":
