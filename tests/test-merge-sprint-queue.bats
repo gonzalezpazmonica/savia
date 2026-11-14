@@ -4,6 +4,8 @@
 # El gh falso es el de test-merge-sprint.bats más la cola: $FAKE/queue_enabled (la rama base exige cola),
 # $FAKE/<pr>.queue_outcome (merge | eject:<motivo> | move | mergemoved | wait), $FAKE/<pr>.on_poll (se ejecuta
 # una vez en la primera consulta de la cola), log de entradas en $FAKE/enqueued y de salidas en $FAKE/dequeued.
+# Fallos simulados: $FAKE/dequeue_fail (la mutación falla y la PR sigue en la cola), $FAKE/<pr>.state_fail (leer el
+# estado falla), $FAKE/<pr>.lag (la primera consulta de la cola dice «fuera» aunque siga dentro: desfase de GitHub).
 
 SCRIPT="scripts/merge-sprint.sh"
 
@@ -35,7 +37,7 @@ case "$1 $2" in
       *isDraft*) echo true ;;
       *mergedBy*) echo executor ;;
       *mergeCommit*) printf 'c%039d\n' "$n" ;;
-      *state*) cat "$F/$n.state" 2>/dev/null || echo OPEN ;;
+      *state*) [[ -f "$F/$n.state_fail" ]] && exit 1; cat "$F/$n.state" 2>/dev/null || echo OPEN ;;
     esac ;;
   "pr diff") cat "$F/$3.files" ;;
   "pr checks") printf 'CI\t%s\n' "$(cat "$F/$3.checks" 2>/dev/null || echo pass)" ;;
@@ -54,6 +56,7 @@ case "$1 $2" in
       "api graphql"*isInMergeQueue*)
         n=$(sed -E 's/.* -F n=([0-9]+).*/\1/' <<<"$a")
         if [[ -f "$F/$n.on_poll" ]]; then bash "$F/$n.on_poll"; mv "$F/$n.on_poll" "$F/$n.on_poll.done"; fi
+        if [[ -f "$F/$n.lag" && -f "$F/$n.inqueue" ]]; then rm "$F/$n.lag"; echo false; exit 0; fi
         [[ -f "$F/$n.inqueue" ]] || { echo false; exit 0; }
         o=$(cat "$F/$n.queue_outcome" 2>/dev/null || echo merge)
         case "$o" in
@@ -66,7 +69,7 @@ case "$1 $2" in
         mv "$F/$n.inqueue" "$F/$n.left"; echo false ;;
       "api graphql"*RemovedFromMergeQueueEvent*) n=$(sed -E 's/.* -F n=([0-9]+).*/\1/' <<<"$a"); cat "$F/$n.eject_reason" 2>/dev/null; exit 0 ;;
       "api graphql"*dequeuePullRequest*)
-        n=$(sed -E 's/.* -f id=PR_([0-9]+).*/\1/' <<<"$a"); echo "$n" >> "$F/dequeued"
+        n=$(sed -E 's/.* -f id=PR_([0-9]+).*/\1/' <<<"$a"); [[ -f "$F/dequeue_fail" ]] && exit 1; echo "$n" >> "$F/dequeued"
         [[ -f "$F/$n.inqueue" ]] && mv "$F/$n.inqueue" "$F/$n.left"; exit 0 ;;
       api*protection/required_status_checks*) cat "$F/required" 2>/dev/null ;;
       api*/issues/*/events*) echo 0 ;;
@@ -227,9 +230,15 @@ sys.exit(0 if any(e.get("event")==sys.argv[2] and e.get("pr")==sys.argv[3] and (
   plan_and_grant
   printf '%040d' 7 | tr 0 d > "$FAKE/39.head"
   run bash "$SCRIPT" run
+  RUN_STATUS=$status; RUN_OUT=$output
   run grep -c '^pr merge 39' "$FAKE/calls"
   [ "$output" = 0 ]
   [ ! -e "$FAKE/merged" ]
+  # El motivo es la cabeza movida, no cualquier otro fallo del run: la cabeza nueva no es equivalente a la revisada
+  # (aquí no existe en git, así que la comprobación de equivalencia la aparca como ilegible) y el run termina limpio.
+  [ "$RUN_STATUS" -eq 0 ]
+  ledger_has PARK 39 equivalencia_ilegible
+  [[ "$RUN_OUT" == *"aparcado #39: equivalencia_ilegible"* ]]
 }
 
 @test "cola block: grant revocado mientras la PR espera en la cola; se saca de la cola y el run para con anomalía" {
@@ -309,4 +318,81 @@ sys.exit(0 if any(e.get("event")==sys.argv[2] and e.get("pr")==sys.argv[3] and (
 @test "cola default: la política versionada deja el modo cola apagado (merge_queue=0)" {
   run awk -F'=' '$1=="merge_queue" {print $2}' config/merge-sprint-policy.conf
   [ "$output" = 0 ]
+}
+
+resv_of() { find "$MERGE_SPRINT_HOME/reservations" -name "pr.merge__$1.head"; }
+
+@test "cola error: estado ilegible mientras espera es anomalía cola_ilegible y la PR se saca de la cola (no se olvida)" {
+  queue_on
+  mkpr 50 "scripts/a.sh"; review 50 APPROVE correctness
+  echo wait > "$FAKE/50.queue_outcome"
+  echo "touch '$FAKE/50.state_fail'" > "$FAKE/50.on_poll"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"cola_ilegible"* ]]
+  grep -qx 50 "$FAKE/dequeued"
+  run ledger_has PARK 50 no_abierto
+  [ "$status" -ne 0 ]
+}
+
+@test "cola fail: PR cerrada mientras espera se saca de la cola antes de aparcarla como no_abierto" {
+  queue_on
+  mkpr 51 "scripts/a.sh"; review 51 APPROVE correctness
+  echo wait > "$FAKE/51.queue_outcome"
+  echo "echo CLOSED > '$FAKE/51.state'" > "$FAKE/51.on_poll"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 51 "$FAKE/dequeued"
+  ledger_has DEQUEUE 51
+  ledger_has PARK 51 no_abierto
+}
+
+@test "cola error: dequeue fallido con cabeza movida para con anomalía, sin aparcar ni liberar la reserva" {
+  queue_on
+  mkpr 52 "scripts/a.sh"; review 52 APPROVE correctness
+  echo wait > "$FAKE/52.queue_outcome"; touch "$FAKE/dequeue_fail"
+  echo "printf '%040d' 8 | tr 0 e > '$FAKE/52.head'" > "$FAKE/52.on_poll"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"dequeue_fallo"* ]]
+  ledger_has DEQUEUE_FALLO 52
+  run ledger_has PARK 52 head_movido
+  [ "$status" -ne 0 ]
+  [ -n "$(resv_of 52)" ]
+  [ "$(head -1 "$MERGE_SPRINT_HOME/STOP")" = dequeue_fallo ]
+}
+
+@test "cola error: STOP manual con dequeue fallido no sale con 0; reserva conservada y sprint parado" {
+  queue_on
+  mkpr 53 "scripts/a.sh"; review 53 APPROVE correctness
+  echo wait > "$FAKE/53.queue_outcome"; touch "$FAKE/dequeue_fail"
+  echo "bash '$SCRIPT_ABS' stop >/dev/null" > "$FAKE/53.on_poll"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"SIGUE en la cola"* ]]
+  ledger_has DEQUEUE_FALLO 53
+  [ -n "$(resv_of 53)" ]
+}
+
+@test "cola boundary: una sola lectura «fuera de la cola» (desfase) no expulsa; la PR se fusiona" {
+  queue_on
+  mkpr 54 "scripts/a.sh"; review 54 APPROVE correctness
+  touch "$FAKE/54.lag"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 54 "$FAKE/merged"
+  run ledger_has PARK 54 cola_expulsada
+  [ "$status" -ne 0 ]
+}
+
+@test "cola boundary: la espera por defecto (polls × poll_s) supera timeout de checks 120 min + espera de grupo 5 min" {
+  polls=$(sed -n 's/.*MERGE_SPRINT_QUEUE_POLLS:-\([0-9]*\)}.*/\1/p' "$SCRIPT" | head -1)
+  poll_s=$(sed -n 's/.*MERGE_SPRINT_POLL_S:-\([0-9]*\)}.*/\1/p' "$SCRIPT" | head -1)
+  [ -n "$polls" ] && [ -n "$poll_s" ]
+  [ $(( polls * poll_s )) -gt $(( 125 * 60 )) ]
 }

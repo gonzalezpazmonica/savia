@@ -14,6 +14,9 @@
 # Modo cola (apagado por defecto; MERGE_SPRINT_QUEUE=1 o merge_queue=1 en la política): cada PR autorizada entra en
 # la cola de fusión de GitHub sobre su head revisado, en el orden del manifiesto, sin re-sincronizar; el ejecutor
 # espera a que GitHub la fusione o la expulse. Grant, manifiesto, equivalencia, juez y ledger no cambian.
+# Al salir, el trap saca de la cola lo que quede; si no lo consigue, exit 5 (dequeue_fallo) y reserva conservada.
+# Límite: un kill -9 o la caída del host no ejecutan el trap y dejan PR en la cola sin vigilar. Tras una caída,
+# revisar la cola de main en GitHub y sacar a mano las PR del sprint (o dejar que el siguiente run las reconcilie).
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -866,32 +869,45 @@ queue_release() {  # la reserva F5 no queda submitted: un merge posterior ajeno 
   if f5 release pr.merge "$1" >/dev/null; then rm -f "$(resv_head "$1")"; else ledger event=F5_RELEASE_FALLO pr="$1"; fi
 }
 queue_forget() { QUEUED=$(tr ' ' '\n' <<<"$QUEUED" | grep -v "^$1:" | paste -sd' ' -); }
-dequeue() {  # dequeue <pr> → la saca de la cola de GitHub; si ya no estaba, no hace nada
-  local id; id=$($GH pr view "$1" -R "$REPO" --json id --jq .id 2>/dev/null)
-  if [[ -n "$id" ]] && gql -f query='mutation($id:ID!){dequeuePullRequest(input:{id:$id}){clientMutationId}}' -f id="$id" >/dev/null 2>&1; then
-    ledger event=DEQUEUE pr="$1"
-  else
-    ledger event=DEQUEUE_FALLO pr="$1"
-  fi
+dequeue() {  # dequeue <pr> → 0 solo si se verifica que ya no está en la cola de GitHub; 1 si sigue o no se puede leer
+  # La mutación puede fallar (red, permisos) o no hacer falta (ya salió): manda la lectura posterior, no su resultado.
+  local id q i
+  for i in 1 2 3; do
+    id=$($GH pr view "$1" -R "$REPO" --json id --jq .id 2>/dev/null) || id=""
+    [[ -n "$id" ]] && gql -f query='mutation($id:ID!){dequeuePullRequest(input:{id:$id}){clientMutationId}}' -f id="$id" >/dev/null 2>&1
+    q=$(in_queue "$1")
+    [[ "$q" == false ]] && { ledger event=DEQUEUE pr="$1"; return 0; }
+    (( i < 3 )) && sleep "${MERGE_SPRINT_POLL_S:-30}"
+  done
+  [[ "$q" == true ]] || q=ilegible
+  ledger event=DEQUEUE_FALLO pr="$1" queue="$q"; return 1
 }
 queue_abort() {  # al salir del run (STOP, anomalía, TTL, main no verde): ninguna PR sigue en la cola sin el ejecutor
-  local item pr
+  # Si una PR no sale de la cola, su reserva F5 sigue submitted y conserva la etiqueta D6: un merge posterior de
+  # GitHub se reconcilia como propio (o para el siguiente run), y el sprint queda parado con anomalía (exit 5).
+  local item pr fail=""
   for item in $QUEUED; do
     pr="${item%%:*}"
     [[ "$($GH pr view "$pr" -R "$REPO" --json state --jq .state 2>/dev/null)" == MERGED ]] && continue   # se reconcilia en el siguiente run (F5)
-    dequeue "$pr"
-    [[ "$($GH pr view "$pr" -R "$REPO" --json state --jq .state 2>/dev/null)" == MERGED ]] || queue_release "$pr"
-    echo "  #$pr sacada de la cola"
+    if dequeue "$pr"; then
+      [[ "$($GH pr view "$pr" -R "$REPO" --json state --jq .state 2>/dev/null)" == MERGED ]] || queue_release "$pr"
+      echo "  #$pr sacada de la cola"
+    else
+      fail=1; keep_label "$pr"; echo "  #$pr SIGUE en la cola de GitHub: no se pudo sacar; reserva F5 conservada"
+    fi
   done
   QUEUED=""
+  [[ -z "$fail" ]] || { halt dequeue_fallo; ledger event=STOP reason=dequeue_fallo; echo "STOP: dequeue_fallo"; return 1; }
 }
-on_exit() { queue_abort; unlabel; }
+on_exit() { local rc=0; queue_abort || rc=5; unlabel; (( rc == 0 )) || exit "$rc"; }
 queue_drain() {  # espera, en orden de entrada, a que GitHub fusione o expulse cada PR encolada
-  local item pr tier s eq jr inq st h ok
+  # Fail-closed: estado o cabeza ilegibles son anomalía; nunca se olvida una PR que podría seguir en la cola.
+  local item pr tier s eq jr inq st h ok nf
   for item in $QUEUED; do
     IFS=: read -r pr tier s eq jr <<<"$item"
-    ok=""
-    for _ in $(seq 1 "${MERGE_SPRINT_QUEUE_POLLS:-240}"); do
+    ok=""; nf=""
+    # Espera por defecto 300 × 30 s = 150 min: más que el timeout de checks de la cola (120 min) más la espera de grupo.
+    for _ in $(seq 1 "${MERGE_SPRINT_QUEUE_POLLS:-300}"); do
       stop_gate
       [[ -f "$GRANT" && "$(grant_field digest)" == "$DIGEST" ]] || anomaly grant_revocado "$pr"
       (( $(date +%s) < $(grant_field expires_epoch) )) || { ledger event=STOP reason=ttl; echo "STOP: grant caducado"; exit 0; }
@@ -904,19 +920,29 @@ queue_drain() {  # espera, en orden de entrada, a que GitHub fusione o expulse c
         [[ "$h" == "$s" ]] || anomaly cola_head_distinto "$pr"
         queue_forget "$pr"; record_merge "$pr" "$tier" "$s" "$eq" ${jr:+"$jr"}; ok=1; break
       fi
-      [[ "$st" == OPEN ]] || { queue_forget "$pr"; queue_release "$pr"; park "$pr" no_abierto; ok=1; break; }
+      case "$st" in
+        OPEN) ;;
+        CLOSED) dequeue "$pr" || anomaly dequeue_fallo "$pr"
+                queue_forget "$pr"; queue_release "$pr"; park "$pr" no_abierto; ok=1; break ;;
+        *) anomaly cola_ilegible "$pr" ;;   # vacío por error de API u otro valor: no se sabe si sigue en la cola
+      esac
+      [[ -n "$h" ]] || anomaly cola_ilegible "$pr"
       if [[ "$h" != "$s" ]]; then
-        dequeue "$pr"; queue_forget "$pr"; queue_release "$pr"; park "$pr" head_movido; ok=1; break
+        dequeue "$pr" || anomaly dequeue_fallo "$pr"
+        queue_forget "$pr"; queue_release "$pr"; park "$pr" head_movido; ok=1; break
       fi
       case "$inq" in
-        true) sleep "${MERGE_SPRINT_POLL_S:-30}" ;;
-        false) local why; why=$(eject_reason "$pr")
-               ledger event=QUEUE_EJECT pr="$pr" reason="$why"
-               queue_forget "$pr"; queue_release "$pr"; park "$pr" cola_expulsada "$why"; ok=1; break ;;
+        true) nf=""; sleep "${MERGE_SPRINT_POLL_S:-30}" ;;
+        false)
+          # Una sola lectura «fuera de la cola» puede ser desfase de GitHub justo tras encolar: se confirma con otra.
+          if [[ -z "$nf" ]]; then nf=1; sleep "${MERGE_SPRINT_POLL_S:-30}"; continue; fi
+          local why; why=$(eject_reason "$pr")
+          ledger event=QUEUE_EJECT pr="$pr" reason="$why"
+          queue_forget "$pr"; queue_release "$pr"; park "$pr" cola_expulsada "$why"; ok=1; break ;;
         *) anomaly cola_ilegible "$pr" ;;
       esac
     done
-    [[ -n "$ok" ]] || { dequeue "$pr"; queue_forget "$pr"; queue_release "$pr"; park "$pr" cola_agotada; }
+    [[ -n "$ok" ]] || { dequeue "$pr" || anomaly dequeue_fallo "$pr"; queue_forget "$pr"; queue_release "$pr"; park "$pr" cola_agotada; }
   done
 }
 
