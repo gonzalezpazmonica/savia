@@ -28,11 +28,12 @@ teardown() {
     [ "$status" -eq 0 ]
 }
 
-@test "pre-compact-backup.sh: extracts decisions from input" {
+@test "pre-compact-backup.sh: extracts decisions from the transcript (SE-529 S1)" {
     export HOME="$TMPDIR/home"
     export CLAUDE_PROJECT_DIR="$TMPDIR/proj"
-    mkdir -p "$HOME" "$CLAUDE_PROJECT_DIR"
-    run bash -c "echo '{\"text\":\"We decided to use PostgreSQL for the database\"}' | bash '$HOOKS_DIR/pre-compact-backup.sh'"
+    mkdir -p "$HOME/.claude/projects/p" "$CLAUDE_PROJECT_DIR"
+    python3 -I -c 'import json; print(json.dumps({"type":"user","message":{"content":[{"type":"text","text":"We decided to use PostgreSQL for the database"}]}}))' > "$HOME/.claude/projects/p/s.jsonl"
+    run bash -c "printf '{\"transcript_path\":\"%s\"}' '$HOME/.claude/projects/p/s.jsonl' | bash '$HOOKS_DIR/pre-compact-backup.sh'"
     [ "$status" -eq 0 ]
     [[ "$output" == *"Pre-compact: "* ]]
     hot=$(find "$HOME/.claude/projects" -name session-hot.md)
