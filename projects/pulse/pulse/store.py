@@ -149,8 +149,7 @@ def read_jsonl(path, schema_name):
     return OK, records, rejected
 
 
-@contextlib.contextmanager
-def lock(root, timeout=10.0):
+def _lock(root, timeout=10.0):
     """Cerrojo exclusivo de escritor en `<root>/.lock` (fcntl; el SO lo libera si el proceso muere)."""
     import fcntl
     ensure_dir(root)
@@ -168,6 +167,9 @@ def lock(root, timeout=10.0):
         yield
     finally:
         os.close(fd)
+
+
+lock = contextlib.contextmanager(_lock)
 
 
 def write_json_atomic(root, name, data, schema_name):
