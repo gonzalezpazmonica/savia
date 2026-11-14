@@ -1,10 +1,10 @@
 {
   "id": "SE-493",
-  "status": "APPROVED",
+  "status": "RETIRED",
   "priority": "P0",
   "phase": "A",
   "title": "Effect Ledger y reconciliación de efectos ambiguos",
   "evidence": "docs/specs/SE-493-effect-ledger-ambiguous-reconciliation.spec.md",
-  "note": "Ledger único de efectos con clave idempotente, huella de argumentos, write-ahead de DISPATCHED, sonda remota y estado NEEDS_REVIEW; ningún estado ambiguo devuelve «adelante». Recibo encadenado y verificable. Corrige que f5-state.sh y push-pr.sh permiten repetir un merge de resultado incierto y que effect-reservation.sh cuenta como cierre sin consumidores. Origen: análisis de repos externos (SAVIA-RESEARCH-01, V1); patrón de OpenRath sin adoptar el producto.",
+  "note": "Retirada por la operadora el 2026-11-14 (pregunta interactiva, regla «conectar antes de construir»): 132 fusiones en un mes sin ninguna de resultado incierto y ningún consumidor de effect-ledger.py. El contrato vivo de reservas de fusión es scripts/f5-state.sh. Código y pruebas recuperables del historial de git. Reabrir solo si aparece un caso real de fusión incierta.",
   "approval": "Operadora, pregunta interactiva 2026-11-09 («Savia Viva + tokens y efectos»), con escenas confirmadas («Confirmo las escenas»); se formaliza al fusionar la PR (SE-488)"
 }
