@@ -273,12 +273,17 @@ montar_mac() {
   local b="$BATS_TEST_TMPDIR/bin" t
   rm -rf "$b"
   mkdir -p "$b" "$BATS_TEST_TMPDIR/casa/Library/LaunchAgents"
-  for t in mktemp id mkdir rmdir rm sleep cat dirname touch sed; do
+  for t in mktemp id mkdir rmdir rm sleep cat dirname touch sed cp; do
     ln -sf "$(command -v "$t")" "$b/$t"
   done
   printf '#!/bin/sh\necho Darwin\n' > "$b/uname"
   printf '#!/bin/sh\nexit 0\n' > "$b/xcode-select"
-  printf '#!/bin/sh\nexit 0\n' > "$b/plutil"
+  # PLUTIL_ACTIVE_BAD=1: rechaza solo el plist del ciclo activo, no el de ejemplo
+  cat > "$b/plutil" <<EOF
+#!/bin/sh
+[ "${PLUTIL_ACTIVE_BAD:-0}" = 1 ] && case "\$2" in *ejemplo.plist) exit 0 ;; *) exit 1 ;; esac
+exit 0
+EOF
   printf '#!/bin/sh\necho "git version 2.40"\n' > "$b/git"
   if [ "${PY:-3.11}" != ninguno ]; then
     printf '#!/bin/sh\necho %s\n' "${PY:-3.11}" > "$b/python3"
@@ -290,8 +295,11 @@ montar_mac() {
 case "\$1" in
   print) exit ${PRINT_RC:-0} ;;
   bootstrap) [ ${BOOT_RC:-0} -ne 0 ] && { echo "Operation not permitted" >&2; exit ${BOOT_RC:-0}; }
-    m=\$(sed -n 's|.*<string>\\(/[^<]*marca\\)</string>.*|\\1|p' "\$3"); [ -n "\$m" ] && touch "\$m"; exit 0 ;;
-  bootout) exit 0 ;;
+    cp "\$3" "$BATS_TEST_TMPDIR/plist.copia"
+    echo "bootstrap \$3" >> "$BATS_TEST_TMPDIR/launchctl.log"
+    m=\$(sed -n 's|.*<string>\\(/[^<]*marca\\)</string>.*|\\1|p' "\$3" | sed 's|&amp;|\&|g')
+    [ ${NOMARK:-0} -eq 0 ] && [ -n "\$m" ] && touch "\$m"; exit 0 ;;
+  bootout) echo "bootout \$2" >> "$BATS_TEST_TMPDIR/launchctl.log"; exit 0 ;;
 esac
 EOF
   for t in uname xcode-select plutil git python3 claude gh launchctl; do [ -f "$b/$t" ] && [ ! -L "$b/$t" ] && chmod +x "$b/$t"; done
@@ -318,7 +326,9 @@ correr_mac() {  # correr_mac [opciones de la sonda]
   [ "$status" -eq 1 ]
   printf '#!/bin/sh\nexit 0\n' > "$BATS_TEST_TMPDIR/soul-rt"; chmod +x "$BATS_TEST_TMPDIR/soul-rt"
   correr_mac --active --soul-runtime "$BATS_TEST_TMPDIR/soul-rt"
-  [[ "$output" == *"CHECK interprete PASS runtime de Soul"* ]]
+  [[ "$output" == *"CHECK interprete UNKNOWN runtime de Soul: existe y es ejecutable, pero no se ha ejecutado"* ]]
+  [ "$status" -eq 2 ]
+  [[ "$output" != *"MODO observar PERMITIDO"* ]]
 }
 
 @test "sonda real simulada --active: servicio cargado, ejecutado y descargado, con todo presente" {
@@ -372,6 +382,96 @@ correr_mac() {  # correr_mac [opciones de la sonda]
   chmod 755 "$BATS_TEST_TMPDIR/casa/Library/LaunchAgents"
   [ "$status" -eq 1 ]
   [[ "$output" == *"CHECK servicio_escritura FAIL no puedo escribir"* ]]
+}
+
+# ── Sonda: revisión independiente de la PR #1569 ─────────────────────────────
+
+@test "sonda real: el atajo de las Command Line Tools (en el directorio del atajo, sin CLT) es UNKNOWN" {
+  montar_mac
+  printf '#!/bin/sh\nexit 1\n' > "$MACPATH/xcode-select"; chmod +x "$MACPATH/xcode-select"
+  PULSE_PROBE_SHIM_DIR="$MACPATH" correr_mac --active
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"CHECK interprete UNKNOWN python3 es el atajo de las Command Line Tools"* ]]
+  [[ "$output" == *"CHECK git UNKNOWN git es el atajo de las Command Line Tools"* ]]
+  [[ "$output" != *"MODO observar PERMITIDO"* ]]
+}
+
+@test "sonda real: con las Command Line Tools instaladas el mismo binario del atajo es PASS" {
+  montar_mac
+  PULSE_PROBE_SHIM_DIR="$MACPATH" correr_mac --active
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"CHECK interprete PASS python 3.11"* ]]
+  [[ "$output" == *"CHECK git PASS"* ]]
+}
+
+@test "sonda real: sin CLT pero fuera del directorio del atajo no es atajo (PASS)" {
+  montar_mac
+  printf '#!/bin/sh\nexit 1\n' > "$MACPATH/xcode-select"; chmod +x "$MACPATH/xcode-select"
+  correr_mac --active
+  [[ "$output" == *"CHECK interprete PASS python 3.11"* ]]
+  [[ "$output" == *"CHECK git PASS"* ]]
+}
+
+@test "sonda real --active: si se interrumpe con TERM entre bootstrap y bootout, descarga y borra el plist" {
+  NOMARK=1 montar_mac
+  HOME="$BATS_TEST_TMPDIR/casa" PATH="$MACPATH" TMPDIR="$BATS_TEST_TMPDIR" "$BASH" "$BATS_TEST_DIRNAME/../$PROBE" --active >/dev/null 2>&1 &
+  local pid=$! i=0
+  while [ ! -s "$BATS_TEST_TMPDIR/launchctl.log" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+  grep -q '^bootstrap ' "$BATS_TEST_TMPDIR/launchctl.log"
+  kill -TERM "$pid"
+  wait "$pid" || true
+  grep -q '^bootout gui/.*/local.pulse.probe' "$BATS_TEST_TMPDIR/launchctl.log"
+  [ -z "$(ls "$BATS_TEST_TMPDIR/casa/Library/LaunchAgents")" ]
+  [ -z "$(ls -d "$BATS_TEST_TMPDIR"/pulse-probe.* 2>/dev/null)" ]
+}
+
+@test "sonda real --active: un servicio que no se ejecuta en 10 s es UNKNOWN, no FAIL ni «A puede bastar»" {
+  NOMARK=1 montar_mac; correr_mac --active
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"CHECK servicio_carga UNKNOWN cargó pero no se ejecutó en 10 s"* ]]
+  [[ "$output" != *"A (contratos"* ]]
+  [ -z "$(ls "$BATS_TEST_TMPDIR/casa/Library/LaunchAgents")" ]
+}
+
+@test "sonda real --active: un plist de prueba que no pasa plutil es UNKNOWN (fallo de la sonda), no política" {
+  PLUTIL_ACTIVE_BAD=1 montar_mac; correr_mac --active
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"CHECK servicio_carga UNKNOWN el plist de prueba no pasa plutil -lint"* ]]
+  [[ "$output" != *"A (contratos"* ]]
+  [ ! -e "$BATS_TEST_TMPDIR/launchctl.log" ]
+  [ -z "$(ls "$BATS_TEST_TMPDIR/casa/Library/LaunchAgents")" ]
+}
+
+@test "sonda real --active: un TMPDIR con & se escapa en el plist y el servicio se ejecuta" {
+  montar_mac
+  mkdir -p "$BATS_TEST_TMPDIR/a&b"
+  HOME="$BATS_TEST_TMPDIR/casa" PATH="$MACPATH" TMPDIR="$BATS_TEST_TMPDIR/a&b" run "$BASH" "$BATS_TEST_DIRNAME/../$PROBE" --active
+  [ "$status" -eq 0 ]
+  grep -q 'a&amp;b' "$BATS_TEST_TMPDIR/plist.copia"
+  run grep -c 'a&b' "$BATS_TEST_TMPDIR/plist.copia"
+  [ "$output" = "0" ]
+}
+
+@test "sonda real --active: si LaunchAgents no existía, no lo deja creado y el detalle no dice que existe" {
+  montar_mac; rmdir "$BATS_TEST_TMPDIR/casa/Library/LaunchAgents"
+  correr_mac --active
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"no existe todavía"* ]]
+  [ ! -e "$BATS_TEST_TMPDIR/casa/Library/LaunchAgents" ]
+}
+
+@test "sonda real: si no puede crear su directorio temporal es un fallo del entorno (2), no uso incorrecto (64)" {
+  montar_mac
+  HOME="$BATS_TEST_TMPDIR/casa" PATH="$MACPATH" TMPDIR="$BATS_TEST_TMPDIR/no-existe" run "$BASH" "$BATS_TEST_DIRNAME/../$PROBE"
+  [ "$status" -eq 2 ]
+}
+
+@test "prototipo: la pestaña se valida con claves propias del objeto, no heredadas" {
+  grep -q 'Object.hasOwn(states,k)' "$PROTO"
+}
+
+@test "spec: la frase «C se sostiene» conserva la condición (a), como las medidas" {
+  grep -q 'C se sostiene, condicionada a (a)' "$SPEC"
 }
 
 # ── Sonda: portabilidad y alcance, estático ──────────────────────────────────

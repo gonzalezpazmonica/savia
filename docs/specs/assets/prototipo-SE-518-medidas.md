@@ -26,8 +26,8 @@ Procedimiento, con el usuario normal, sin `sudo` y desde Terminal en el propio M
 
 1. `bash scripts/pulse-probe-macos.sh --plan` enseña qué ejecutará cada comprobación. No ejecuta nada.
 2. `bash scripts/pulse-probe-macos.sh` hace la sonda pasiva (solo lectura). Termina en «sin datos» a propósito: sin cargar un servicio no se sabe si la organización lo permite.
-3. `bash scripts/pulse-probe-macos.sh --active` carga un servicio de usuario de prueba (una etiqueta propia, que solo hace `touch` de un fichero temporal), espera hasta 10 s a que se ejecute, lo descarga y borra su plist. Es lo único que escribe fuera del directorio temporal, y se deshace solo.
-4. Opcional: `--soul-runtime <ruta>` cuenta el runtime de Soul como intérprete si no hay Python ≥ 3.9.
+3. `bash scripts/pulse-probe-macos.sh --active` carga un servicio de usuario de prueba (una etiqueta propia, que solo hace `touch` de un fichero temporal), espera hasta 10 s a que se ejecute, lo descarga y borra su plist. Es lo único que escribe fuera del directorio temporal, y se deshace solo, también si se interrumpe con Ctrl-C o `kill` (no con `kill -9`); si `~/Library/LaunchAgents` no existía, lo borra al terminar. Un plist de prueba que no pasa `plutil -lint`, o un servicio que no se ejecuta en 10 s, dan `UNKNOWN`, no `FAIL`: no son un rechazo de la política.
+4. Opcional: `--soul-runtime <ruta>`: si la ruta es ejecutable, el intérprete queda en `UNKNOWN` (existe, pero no se ha ejecutado; si sirve para el núcleo se decide en S1) y `observar` no pasa a `PERMITIDO`.
 
 Comprobaciones: intérprete (Python ≥ 3.9 o runtime de Soul), `git`, escritura en `~/Library/LaunchAgents` con un plist válido (`plutil -lint`), carga y ejecución de un servicio de usuario sin `sudo`, bloqueo de fichero por `mkdir` atómico (sin `flock`), CLI del forge (`gh` o `az`), motor de inferencia y, siempre desconocido aquí, el push de prueba.
 

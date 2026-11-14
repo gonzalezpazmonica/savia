@@ -16,6 +16,7 @@
 # Salida: líneas «CHECK nombre ESTADO detalle», «MODO m ESTADO motivo» y «VEREDICTO ...».
 # Salida de proceso: 0 observar PERMITIDO · 1 observar NO_PERMITIDO · 2 NO_DETERMINADO ·
 #                    3 NO_APLICA (no es macOS) · 64 uso incorrecto.
+#   (un fallo del entorno de la sonda, como no poder crear el directorio temporal, sale con 2.)
 # Fail-closed: un dato que no se puede observar es UNKNOWN y nunca cuenta como PASS.
 set -uo pipefail
 
@@ -79,10 +80,12 @@ simulate() {
 }
 
 clt_ok() { xcode-select -p >/dev/null 2>&1; }
-is_shim() { case "$(command -v "$1" 2>/dev/null)" in /usr/bin/"$1") ! clt_ok ;; *) return 1 ;; esac; }
+# PULSE_PROBE_SHIM_DIR: solo para tests; en un Mac real el atajo vive siempre en /usr/bin.
+SHIM_DIR="${PULSE_PROBE_SHIM_DIR:-/usr/bin}"
+is_shim() { case "$(command -v "$1" 2>/dev/null)" in "$SHIM_DIR/$1") ! clt_ok ;; *) return 1 ;; esac; }
 
 probe_python() {
-  if [ -n "$SOUL_RT" ] && [ -x "$SOUL_RT" ]; then add interprete PASS "runtime de Soul: existe y es ejecutable (si sirve para el núcleo se decide en S1)"; return; fi
+  if [ -n "$SOUL_RT" ] && [ -x "$SOUL_RT" ]; then add interprete UNKNOWN "runtime de Soul: existe y es ejecutable, pero no se ha ejecutado (si sirve para el núcleo se decide en S1)"; return; fi
   if ! command -v python3 >/dev/null 2>&1; then add interprete FAIL "no hay python3 ni runtime de Soul"; return; fi
   if is_shim python3; then add interprete UNKNOWN "python3 es el atajo de las Command Line Tools sin instalar: ejecutarlo abriría el instalador"; return; fi
   local v maj min
@@ -103,6 +106,7 @@ probe_service() {
   if [ -d "$la" ] && [ -w "$la" ]; then :
   elif [ ! -e "$la" ] && [ -d "$HOME/Library" ] && [ -w "$HOME/Library" ]; then :
   else add servicio_escritura FAIL "no puedo escribir en $la"; return; fi
+  [ -d "$la" ] || la="$la (no existe todavía; se podría crear)"
   plist="$tmp/ejemplo.plist"
   printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' \
     '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
@@ -117,22 +121,40 @@ probe_service() {
   active_cycle "$tmp" "$uid"
 }
 
+xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+
+# Limpieza del ciclo activo. También la ejecuta el trap, por si la sonda muere entre bootstrap y bootout.
+ACT_PLIST=""; ACT_LABEL=""; ACT_UID=""; ACT_DIR=""
+cleanup() {
+  [ -n "$ACT_LABEL" ] && launchctl bootout "gui/$ACT_UID/$ACT_LABEL" >/dev/null 2>&1
+  [ -n "$ACT_PLIST" ] && rm -f "$ACT_PLIST"
+  [ -n "$ACT_DIR" ] && rmdir "$ACT_DIR" 2>/dev/null
+  ACT_LABEL=""; ACT_PLIST=""; ACT_DIR=""
+}
+cleanup_all() { cleanup; [ -n "$TMP_PROBE" ] && rm -rf "$TMP_PROBE"; }
+
 active_cycle() {
-  local tmp="$1" uid="$2" label="local.pulse.probe.$$" marker plist="$HOME/Library/LaunchAgents/local.pulse.probe.$$.plist" i=0 err
+  local tmp="$1" uid="$2" label="local.pulse.probe.$$" marker plist la="$HOME/Library/LaunchAgents" i=0 err
+  plist="$la/local.pulse.probe.$$.plist"
   marker="$tmp/marca"
-  mkdir -p "$HOME/Library/LaunchAgents" 2>/dev/null
+  if [ ! -d "$la" ]; then mkdir -p "$la" 2>/dev/null && ACT_DIR="$la"; fi
+  ACT_PLIST="$plist"; ACT_UID="$uid"
   printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' \
     '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
     "<plist version=\"1.0\"><dict><key>Label</key><string>$label</string>" \
-    "<key>ProgramArguments</key><array><string>/usr/bin/touch</string><string>$marker</string></array>" \
-    '<key>RunAtLoad</key><true/></dict></plist>' > "$plist"
-  if ! err="$(launchctl bootstrap "gui/$uid" "$plist" 2>&1)"; then
-    rm -f "$plist"; add servicio_carga FAIL "launchctl bootstrap rechazado: $err"; return
+    "<key>ProgramArguments</key><array><string>/usr/bin/touch</string><string>$(xml_escape "$marker")</string></array>" \
+    '<key>RunAtLoad</key><true/></dict></plist>' > "$plist" 2>/dev/null || { cleanup; add servicio_carga UNKNOWN "no pude escribir el plist de prueba"; return; }
+  if ! plutil -lint "$plist" >/dev/null 2>&1; then
+    cleanup; add servicio_carga UNKNOWN "el plist de prueba no pasa plutil -lint (fallo de la sonda, no de la política)"; return
   fi
+  if ! err="$(launchctl bootstrap "gui/$uid" "$plist" 2>&1)"; then
+    cleanup; add servicio_carga FAIL "launchctl bootstrap rechazado: $err"; return
+  fi
+  ACT_LABEL="$label"
   while [ $i -lt 10 ] && [ ! -e "$marker" ]; do sleep 1; i=$((i + 1)); done
-  launchctl bootout "gui/$uid/$label" >/dev/null 2>&1; rm -f "$plist"
+  cleanup
   if [ -e "$marker" ]; then add servicio_carga PASS "servicio de usuario cargado, ejecutado y descargado sin sudo"
-  else add servicio_carga FAIL "cargó pero no se ejecutó en 10 s"; fi
+  else add servicio_carga UNKNOWN "cargó pero no se ejecutó en 10 s (¿consentimiento pendiente en Ajustes del Sistema?): no es un rechazo de la política"; fi
 }
 
 probe_lock() {
@@ -142,8 +164,9 @@ probe_lock() {
 }
 
 probe_real() {
-  TMP_PROBE="$(mktemp -d "${TMPDIR:-/tmp}/pulse-probe.XXXXXX")" || { echo "sin directorio temporal" >&2; exit 64; }
-  trap 'rm -rf "$TMP_PROBE"' EXIT
+  TMP_PROBE="$(mktemp -d "${TMPDIR:-/tmp}/pulse-probe.XXXXXX")" || { echo "VEREDICTO sin datos suficientes: no pude crear un directorio temporal" >&2; exit 2; }
+  trap cleanup_all EXIT
+  trap 'cleanup_all; exit 130' INT TERM HUP
   probe_python; probe_git; probe_service "$TMP_PROBE"; probe_lock "$TMP_PROBE"
   if command -v gh >/dev/null 2>&1 || command -v az >/dev/null 2>&1; then add forge_cli PASS "gh o az presente"; else add forge_cli FAIL "ni gh ni az"; fi
   if command -v claude >/dev/null 2>&1 || command -v opencode >/dev/null 2>&1 || command -v codex >/dev/null 2>&1; then add motor PASS "hay un motor de inferencia en PATH"; else add motor FAIL "ninguno (válido: equivale a observar)"; fi

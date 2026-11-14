@@ -173,7 +173,7 @@ function modo(){
  o.textContent=ef===m.value?"Modo: "+ef+".":"Elegiste "+m.value+", pero ahora mismo actúo en modo observar: no hay ningún motor de inferencia permitido. Cuando lo haya, pasa solo a "+m.value+".";
 }
 function show(k){
- if(!states[k])k="manana";
+ if(!Object.hasOwn(states,k))k="manana";
  [...tabs.children].forEach(b=>b.setAttribute("aria-selected",b.dataset.k===k));
  main.innerHTML=states[k].h;
  main.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>answer(b));
