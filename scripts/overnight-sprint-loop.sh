@@ -13,6 +13,8 @@ set -uo pipefail
 #   - Time-box per task: AGENT_TASK_TIMEOUT_MINUTES (default: 15)
 #   - Audit log: output/agent-runs/<sprint-id>-audit.log
 #   - stdlib-only bash; no external deps in the orchestrator
+#   - SE-472: before EACH task, check_authority (scripts/lib/overnight-authority.sh) verifies the
+#     operator grant; not valid → no new task starts, pending tasks → suspended (fail-closed)
 #   - The loop manages state only; actual agent execution is done by the caller hook
 #
 # Ref: SE-226, docs/rules/domain/autonomous-safety.md
@@ -23,6 +25,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_DIR="${SAVIA_WORKSPACE_DIR:-${CLAUDE_PROJECT_DIR:-${OPENCODE_PROJECT_DIR:-$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || dirname "$SCRIPT_DIR")}}}"
 AGENT_RUNS_DIR="$WORKSPACE_DIR/output/agent-runs"
 STATE_SCRIPT="$SCRIPT_DIR/overnight-sprint-state.sh"
+# SE-472: vigencia de la autoridad antes de cada tarea (check_authority)
+# shellcheck source=scripts/lib/overnight-authority.sh
+source "$SCRIPT_DIR/lib/overnight-authority.sh"
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
 MAX_CONSECUTIVE_FAILURES="${AGENT_MAX_CONSECUTIVE_FAILURES:-3}"
@@ -226,11 +231,16 @@ run_loop() {
   started_at="$(_now)"
   _audit "$sprint_id" "LOOP_START sprint_id=$sprint_id max_tasks=$MAX_TASKS dry_run=$DRY_RUN"
   _log "Loop started: sprint=$sprint_id max_tasks=$MAX_TASKS timeout=${TASK_TIMEOUT_MIN}m dry_run=$DRY_RUN"
+  if authority_check_disabled; then
+    _audit "$sprint_id" "grant-check disabled"
+    _log "control de autoridad desactivado (decisión explícita de la operadora)"
+  fi
 
   local tasks_run=0
   local tasks_done=0
   local tasks_failed=0
   local consecutive_failures=0
+  local tasks_suspended=0
 
   while true; do
     # Check task budget
@@ -254,6 +264,20 @@ run_loop() {
     if [[ -z "$pending_ids" ]]; then
       _log "No pending tasks remaining — loop complete"
       _audit "$sprint_id" "LOOP_STOP reason=no_pending_tasks done=$tasks_done failed=$tasks_failed"
+      break
+    fi
+
+    # SE-472: la autoridad se comprueba antes de CADA tarea. Fail-closed: caducada,
+    # revocada, ausente o ilegible = no arranca nada nuevo; las pendientes quedan
+    # suspendidas con el motivo. La tarea en curso no se mata (ya terminó o agotó su time-box).
+    if ! check_authority; then
+      local n_suspended
+      n_suspended="$(printf '%s\n' "$pending_ids" | grep -c .)"
+      _log "ABORT: $AUTHORITY_REASON — $n_suspended tarea(s) suspendida(s), no arranca ninguna nueva"
+      bash "$STATE_SCRIPT" suspend --reason "$AUTHORITY_REASON" >/dev/null 2>&1
+      _audit "$sprint_id" "AUTHORITY_SUSPENDED reason=$AUTHORITY_REASON suspended=$n_suspended scope=${OVERNIGHT_GRANT_SCOPE:-$OVERNIGHT_GRANT_SCOPE_DEFAULT}"
+      _audit "$sprint_id" "LOOP_STOP reason=$AUTHORITY_REASON tasks_run=$tasks_run done=$tasks_done failed=$tasks_failed"
+      tasks_suspended=$(( tasks_suspended + n_suspended ))
       break
     fi
 
@@ -349,6 +373,8 @@ run_loop() {
   _audit "$sprint_id" "LOOP_END started_at=$started_at ended_at=$ended_at done=$tasks_done failed=$tasks_failed"
 
   _log "Loop ended: done=$tasks_done failed=$tasks_failed"
+  authority_check_disabled && echo "control de autoridad desactivado"
+  [[ "$tasks_suspended" -gt 0 ]] && echo "$tasks_suspended tareas suspendidas por vigencia"
   _coherence_gate "$sprint_id"
 
   # Final status summary to stdout
