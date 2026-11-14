@@ -13,9 +13,12 @@ lectores (`effective`, `accept_exit`, ...) lo leen como la opción desconfiada.
 ejecuta ni lo pasa a un shell. La lista de bloqueo de metacaracteres es una
 defensa en profundidad, NO sustituye a pasar el valor entre comillas si un
 invocador futuro lo usara en una orden. Un `patron` es un subconjunto lineal de
-regex (literales, `.`, clases `[...]`, ancla `^`): sin grupos ni cuantificadores,
-para que ningún dato pueda colgar al invocador (ReDoS). Los valores `si`/`no`
-van entre comillas en YAML 1.1; se acepta también el booleano que PyYAML produce.
+regex: empieza por `^` (inicio de CADA línea, se aplica con re.MULTILINE) y solo
+admite literales, `.` y clases positivas `[...]`; sin grupos, cuantificadores,
+clases negadas ni caracteres de control. Así ningún intento cruza un salto de
+línea y el coste es lineal en la salida (sin ReDoS ni O(n·m)). El cargador no
+convierte booleanos YAML 1.1: `no` sin comillas es el texto `no`, y `yes`, `on`,
+`off`, `true`, `false` quedan como texto y se rechazan como valor no permitido.
 """
 import re
 import sys
@@ -41,8 +44,10 @@ SCAN_MAX = 64_000_000  # tope duro: por encima la regla es inaplicable (rechazo)
 TOP_KEYS = {"ficha", "usa", "runtime"}
 # metacaracteres de shell/sustitución: se rechazan en rc_deteccion (AC-S1i)
 SHELL_META = re.compile(r"[;$`'\"|&<>\n\r\\]")
-# patrón acotado: solo literales, `.`, clases y ancla inicial; sin grupos ni cuantificadores
-PATRON_PROHIBIDO = re.compile(r"[(){}*+?]")
+# patrón acotado: ancla `^` inicial, literales, `.` y clases positivas; sin grupos,
+# cuantificadores ni clases negadas (una clase negada podría casar un salto de línea)
+PATRON_PROHIBIDO = re.compile(r"[(){}*+?]|\[\^")
+CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
 def _err(ficha, campo, msg):
@@ -62,30 +67,24 @@ def _check_deteccion(ficha, det):
         out.append(_err(ficha, "rc_deteccion.valor", f"supera {DET_MAX_LEN} caracteres"))
     if SHELL_META.search(val):
         out.append(_err(ficha, "rc_deteccion.valor", "contiene metacaracteres de shell"))
+    elif CONTROL.search(val):
+        out.append(_err(ficha, "rc_deteccion.valor", "contiene caracteres de control"))
     elif det["tipo"] == "patron":
         if PATRON_PROHIBIDO.search(val):
-            return out + [_err(ficha, "rc_deteccion.valor", "patrón con grupos o cuantificadores no permitido (solo literales, '.', clases, '^')")]
+            return out + [_err(ficha, "rc_deteccion.valor", "patrón con grupos, cuantificadores o clases negadas no permitido (solo '^', literales, '.', clases positivas)")]
+        if not val.startswith("^"):
+            return out + [_err(ficha, "rc_deteccion.valor", "un patrón debe empezar por '^' (inicio de línea); para buscar en cualquier sitio usa tipo literal")]
         try:
-            re.compile(val)
+            re.compile(val, re.MULTILINE)
         except re.error as e:
             out.append(_err(ficha, "rc_deteccion.valor", f"patrón inválido: {e}"))
     return out
-
-
-def _norm(v):
-    """YAML 1.1 lee `si`/`no` sin comillas como booleano: se normaliza a texto."""
-    if v is True:
-        return "si"
-    if v is False:
-        return "no"
-    return v
 
 
 def validate_runtime(ficha, rt):
     """Errores (lista de str) de un bloque runtime. Vacía = válido."""
     if not isinstance(rt, dict):
         return [_err(ficha, "runtime", "bloque ausente o no es un mapa")]
-    rt = {k: (_norm(v) if k in FIELDS else v) for k, v in rt.items()}
     errs = [_err(ficha, k, "campo desconocido") for k in rt if k not in ALLOWED_KEYS]
     measured = []
     for campo, (allowed, _) in FIELDS.items():
@@ -119,20 +118,26 @@ def validate_runtime(ficha, rt):
 
 
 class _UniqueLoader(yaml.SafeLoader):
-    """safe_load que rechaza claves duplicadas (la última ganaría en silencio)."""
+    """safe_load que rechaza claves duplicadas (la última ganaría en silencio) y
+    deja los booleanos YAML 1.1 como el texto escrito (`no` = "no", `yes` = "yes")."""
 
 
 def _no_dup_mapping(loader, node, deep=False):
     seen = set()
     for k, _ in node.value:
         key = loader.construct_object(k, deep=True)
-        if key in seen:
+        try:
+            dup = key in seen
+        except TypeError:
+            raise yaml.YAMLError(f"clave no admitida (no es un escalar): {key!r}") from None
+        if dup:
             raise yaml.YAMLError(f"clave duplicada {key!r}")
         seen.add(key)
     return yaml.SafeLoader.construct_mapping(loader, node, deep)
 
 
 _UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_dup_mapping)
+_UniqueLoader.add_constructor("tag:yaml.org,2002:bool", lambda loader, node: loader.construct_scalar(node))
 
 
 def load_fichas(directory):
@@ -147,6 +152,9 @@ def load_fichas(directory):
             doc = yaml.load(f.read_text(encoding="utf-8"), Loader=_UniqueLoader)  # noqa: S506 (SafeLoader)
         except (yaml.YAMLError, OSError, UnicodeError) as e:
             errs.append(f"{f.name}: ilegible: {e}")
+            continue
+        except RecursionError:
+            errs.append(f"{f.name}: ilegible: anidamiento demasiado profundo")
             continue
         if not isinstance(doc, dict) or not isinstance(doc.get("ficha"), str) or not doc["ficha"]:
             errs.append(f"{f.name}: ficha: id obligatorio")
@@ -185,7 +193,7 @@ def validate_all(fichas):
 # --- lectores: aplican D1 (no_medido = opción desconfiada) -------------------
 
 def effective(rt, campo):
-    v = _norm(rt.get(campo, NM))
+    v = rt.get(campo, NM)
     return FIELDS[campo][1] if v == NM or v not in FIELDS[campo][0] else v
 
 
@@ -198,7 +206,7 @@ def _scan(det, output):
     try:
         if det["tipo"] == "literal":
             return det["valor"] in output
-        return re.search(det["valor"], output) is not None
+        return re.search(det["valor"], output, re.MULTILINE) is not None
     except re.error:
         return None
 
@@ -209,12 +217,16 @@ def detect_failure(det, output):
     return _scan(det, output) is True
 
 
-def accept_exit(rt, rc, postcondition_ok, output=""):
-    """(aceptado, motivo). Fail-closed: un 0 solo se acepta con ficha `fiable`
-    o con la postcondición del trabajo cumplida (True explícito) y sin que una
-    regla de detección presente la contradiga ni deje de poder aplicarse."""
+def accept_exit(rt, rc, postcondition_ok, output=None):
+    """(aceptado, motivo). Fail-closed: un 0 solo se acepta con una ficha válida
+    (`validate_runtime` sin errores) y, además, con `fiable` o con la postcondición
+    del trabajo cumplida (True explícito), sin que una regla de detección presente
+    la contradiga ni deje de poder aplicarse. Si hay regla y no se pasa `output`
+    (None por defecto), la regla es inaplicable y se rechaza."""
     if type(rc) is not int or rc != 0:
         return False, "rc distinto de 0 (o no entero)"
+    if validate_runtime("ficha", rt):
+        return False, "ficha inválida: pasa antes por validate_runtime"
     if "rc_deteccion" in rt and effective(rt, "rc_en_error") == "fiable":
         return False, "ficha incoherente: rc_deteccion con rc_en_error fiable"
     if effective(rt, "rc_en_error") == "fiable":
