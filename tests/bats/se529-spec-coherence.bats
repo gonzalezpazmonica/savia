@@ -75,7 +75,7 @@ PY
   [[ "$output" == *"marcado como cumplido"* ]]
 }
 
-@test "status APPROVED con el prototipo sin confirmar falla" {
+@test "status APPROVED sin aprobación verificable falla" {
   mutate "$MS" "status: PROPOSED" "status: APPROVED"
   run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
   [ "$status" -eq 1 ]
@@ -179,11 +179,61 @@ PY
   [[ "$output" == *"Q2 registrada"* ]]
 }
 
-@test "confirmación del prototipo pendiente: spec que la marca respondida falla" {
-  mutate "$MS" "- respuesta: pendiente. La spec no pasa a APPROVED ni S1 se pone en curso" "- respuesta: aprobada. La spec no pasa a APPROVED ni S1 se pone en curso"
+@test "prototipo confirmado: spec que lo vuelve a marcar pendiente falla" {
+  mutate "$MS" "### Confirmación del prototipo
+
+- fecha: 2026-11-14" "### Confirmación del prototipo
+
+- fecha: pendiente"
   run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"confirmación del prototipo pendiente"* ]]
+  [[ "$output" == *"confirmación del prototipo sin fecha"* ]]
+}
+
+@test "prototipo confirmado con respuesta vacía falla" {
+  python3 -I - "$MS" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+i = s.index("### Confirmación del prototipo")
+j = s.index("- respuesta:", i)
+k = s.index("\n", j)
+open(p, "w", encoding="utf-8").write(s[:j] + "- respuesta: «»" + s[k:])
+PY
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"confirmación del prototipo sin respuesta literal"* ]]
+}
+
+@test "prototipo confirmado con fecha anterior a la decisión falla" {
+  mutate "$MS" "### Confirmación del prototipo
+
+- fecha: 2026-11-14" "### Confirmación del prototipo
+
+- fecha: 2026-11-13"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"confirmación del prototipo sin fecha"* ]]
+}
+
+@test "S0 con la línea del prototipo en pendiente falla" {
+  python3 -I - "$MS" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s = re.sub(r"^- prototipo: .*$", "- prototipo: pendiente", s, count=1, flags=re.M)
+open(p, "w", encoding="utf-8").write(s)
+PY
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"S0 conserva un campo pendiente"* ]]
+}
+
+@test "la spec con la frase «prototipo pendiente» falla" {
+  printf '\nEl prototipo pendiente de confirmar.\n' >> "$MS"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"prototipo pendiente"* ]]
 }
 
 @test "confirmación de las escenas sin fecha falla" {

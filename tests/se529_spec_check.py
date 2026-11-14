@@ -36,10 +36,11 @@ def main():
     if not fm:
         err("sin frontmatter")
     else:
-        # APPROVED exige una aprobación verificable y el prototipo confirmado (SE-505);
-        # mientras la confirmación del prototipo siga pendiente, el estado correcto es PROPOSED.
+        # APPROVED exige una aprobación verificable en la PR (SE-505, SE-488); el prototipo
+        # ya está confirmado (2026-11-14) pero la aprobación solo consta como registro de la
+        # orquestadora: el estado correcto sigue siendo PROPOSED.
         if not re.search(r"^status:\s*PROPOSED\s*$", fm.group(1), re.M):
-            err("frontmatter: status debe ser PROPOSED mientras el prototipo siga sin confirmar")
+            err("frontmatter: status debe ser PROPOSED mientras la aprobación no conste de forma verificable")
         if not re.search(r"^risk:\s*L2\s*$", fm.group(1), re.M):
             err("frontmatter: risk L2 (tier 2) ausente")
 
@@ -108,9 +109,20 @@ def main():
         err("confirmación de las escenas sin fecha")
     if not re.search(r"^- respuesta: «[^»\s][^»]*»", body, re.M):
         err("confirmación de las escenas sin respuesta literal")
-    # La confirmación del prototipo sigue pendiente: S1 no arranca sin ella (SE-505).
-    if not re.search(r"^- respuesta: pendiente", text, re.M):
-        err("falta frase obligatoria (confirmación del prototipo pendiente): - respuesta: pendiente")
+    # Confirmación del prototipo (2026-11-14): fecha real y respuesta entre «…», no vacía,
+    # y ningún «pendiente» residual en el slice S0 (SE-505).
+    s0 = re.search(r"^## Slice S0\b.*?(?=^## )", text, re.M | re.S)
+    s0b = s0.group(0) if s0 else ""
+    pc = re.search(r"^### Confirmación del prototipo\n(.*?)(?=^#{1,3} )", s0b + "\n## ", re.M | re.S)
+    pb = pc.group(1) if pc else ""
+    if not re.search(r"^- fecha: 2026-11-1[4-9]\s*$", pb, re.M):
+        err("confirmación del prototipo sin fecha")
+    if not re.search(r"^- respuesta: «[^»\s][^»]*»", pb, re.M):
+        err("confirmación del prototipo sin respuesta literal")
+    if re.search(r"^- (?:prototipo|fecha|respuesta): pendiente", s0b, re.M):
+        err("S0 conserva un campo pendiente (prototipo o confirmación)")
+    if "prototipo pendiente" in text.lower():
+        err("la spec aún dice «prototipo pendiente»")
     # Coherencia del estado en planning y roadmap (fuente: la spec, aquí PROPOSED).
     plan_path = os.path.join(root, "docs/propuestas/planning.d/SE-529.json")
     try:

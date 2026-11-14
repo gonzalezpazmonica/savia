@@ -81,14 +81,16 @@ Antes y después, en llano.
 
 ## Slice S0 — Medición y prototipo (primero, sin cambiar comportamiento)
 
-- prototipo: pendiente. No existe todavía un prototipo propio (pantalla o salida real del aviso) que la operadora haya visto; las escenas y el texto de los avisos son otro artefacto y no lo sustituyen.
+- prototipo: el bloque «Memoria tras compactar» tal como figura en «Texto que verá la persona» (cabecera con el proyecto, línea «Fijado», línea «Esta sesión» y línea de «y N más») y el aviso de «No he podido leer la conversación antes de compactar», es decir, los textos que la operadora confirmó el 2026-11-13. Es texto, no una pantalla nueva: la persona lo ve en su conversación tras compactar.
 
 ### Confirmación del prototipo
 
-- fecha: pendiente
-- respuesta: pendiente. La spec no pasa a APPROVED ni S1 se pone en curso sin ella (SE-505). La confirmación del 2026-11-13 de arriba cubre las escenas y el texto de los avisos; la del prototipo se pide a la persona tras ver el aviso funcionando con datos reales, una vez medido en S0 qué llega al modelo.
+- fecha: 2026-11-14
+- respuesta: «los textos que confirmó el 2026-11-13 sean el prototipo de SE-529». Registro de la orquestadora, no texto literal de la operadora: decisión que ella tomó el 2026-11-14 por pregunta interactiva, transmitida en el encargo de esta PR, sin enlace verificable todavía. Sustituye el criterio anterior de esta spec, que pedía ver el aviso funcionando con datos reales antes de confirmar. Lo que sigue sin existir es el aviso funcionando con datos reales; eso lo producen S1 y S2, y la medición de S0 sigue siendo previa a ellos.
 
-El prototipo de esta spec es la lista de escenas anterior y el texto de los avisos de S1/S2 (ver «Texto que verá la persona»). S0 es la medición; su salida es `docs/evidence/SE-529-S0-forma-y-linea-base.md` más los fixtures de S3. Nada del contenido de una conversación entra en el repo.
+La spec sigue en PROPOSED: falta que la aprobación (no el prototipo) conste de forma verificable en la PR (SE-488).
+
+El prototipo de esta spec son los textos citados arriba. S0 es la medición; su salida es `docs/evidence/SE-529-S0-forma-y-linea-base.md` más los fixtures de S3. Nada del contenido de una conversación entra en el repo.
 
 **S0.1 Forma de las cargas.** Un colector de un solo uso, opt-in por variable de entorno y fuera de `settings.json`, registra por evento **solo la forma**: nombres de campo, tipo, longitud en bytes y presencia de ruta. Eventos: `PreCompact`, `PostCompact` y `SessionStart` con origen `compact`, en Claude Code y en OpenCode (`experimental.session.compacting`, `session.compacted`). Para cada celda (evento × frontend): «entregado / no entregado», campos, tamaño, y si hay un campo con el resumen compactado. Para `transcript_path` o equivalente: existe, ruta relativa a qué base, formato (líneas JSON), tipos de línea y tamaño típico. Cualquier valor de texto se sustituye por su longitud.
 
@@ -227,4 +229,4 @@ Cerradas por la operadora el 2026-11-13 (pregunta interactiva, «Confirmo todo c
 
 ## Aprobación
 
-En PROPOSED. La operadora confirmó escenas y decisiones 10 a 12 el 2026-11-13 (registro de la orquestadora, sin enlace verificable). Pasa a APPROVED cuando la aprobación conste en la PR por una vía verificable y el prototipo de S0 esté confirmado (SE-505). Ningún slice empieza sin aprobación; S0 puede aprobarse sola (no cambia comportamiento).
+En PROPOSED. La operadora confirmó escenas y decisiones 10 a 12 el 2026-11-13 y, el 2026-11-14, que esos mismos textos son el prototipo de S0 (ambos registros de la orquestadora, sin enlace verificable). Pasa a APPROVED cuando la aprobación conste en la PR por una vía verificable (SE-488). Ningún slice empieza sin aprobación; S0 puede aprobarse sola (no cambia comportamiento).
