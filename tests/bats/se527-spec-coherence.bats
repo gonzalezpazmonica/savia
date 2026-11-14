@@ -11,7 +11,9 @@ STATE="$REPO_ROOT/docs/propuestas/planning.d/SE-527.json"
 
 check() {  # check <fichero>: devuelve 0 si la spec es coherente
   local f="$1"
-  grep -q '^status: PROPOSED$' "$f" || { echo "status != PROPOSED"; return 1; }
+  grep -q '^status: APPROVED$' "$f" || { echo "status != APPROVED"; return 1; }
+  grep -q '^approved_at: 2026-11-13$' "$f" || { echo "falta approved_at"; return 1; }
+  grep -qE '^    value: "APPROVED"$' "$f" || { echo "falta timeline APPROVED"; return 1; }
   grep -q '^human_surface: false$' "$f" || { echo "human_surface"; return 1; }
   for n in 1 2 3 4; do
     grep -q "^### S$n — " "$f" || { echo "falta slice S$n"; return 1; }
@@ -43,12 +45,13 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   grep -q '^## OpenCode Implementation Plan$' "$f" || { echo "falta plan OpenCode"; return 1; }
 }
 
-check_planning() {  # check_planning <json>: 0 si es SE-527 PROPOSED, título 14 de 90 y evidencia existente
+check_planning() {  # check_planning <json>: 0 si es SE-527 APPROVED, título 14 de 90 y evidencia existente
   python3 -I -c "
 import json,os,sys
 d=json.load(open(sys.argv[1]))
-assert d['id']=='SE-527' and d['status']=='PROPOSED', d
+assert d['id']=='SE-527' and d['status']=='APPROVED', d
 assert '14 de 90' in d['title'], d['title']
+assert d.get('approval','').strip(), 'falta approval'
 assert os.path.exists(os.path.join(sys.argv[2], d['evidence'])), d['evidence']
 " "$1" "$REPO_ROOT"
 }
@@ -115,7 +118,31 @@ PY2
   [[ "$output" == *"falta aviso de contexto"* ]]
 }
 
-@test "planning: SE-527 PROPOSED apunta a la spec existente" {
+@test "negativo: sin approved_at falla" {
+  mutate 'approved_at: 2026-11-13' 'x_removed: 1'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"falta approved_at"* ]]
+}
+
+@test "negativo: sin entrada APPROVED en timeline falla" {
+  mutate '    value: "APPROVED"' '    value: "OTRO"'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"falta timeline APPROVED"* ]]
+}
+
+@test "negativo: planning sin approval falla" {
+  python3 -I -c "
+import json,sys
+d=json.load(open(sys.argv[1])); d.pop('approval',None)
+json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
+  run check_planning "$BATS_TEST_TMPDIR/s.json"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"falta approval"* ]]
+}
+
+@test "planning: SE-527 APPROVED apunta a la spec existente" {
   run check_planning "$STATE"
   [ "$status" -eq 0 ]
 }
@@ -144,13 +171,13 @@ json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
   : > "$M"
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"status != PROPOSED"* ]]
+  [[ "$output" == *"status != APPROVED"* ]]
 }
 
 @test "edge: nonexistent spec falla" {
   run check "$BATS_TEST_TMPDIR/no-existe.md"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"status != PROPOSED"* ]]
+  [[ "$output" == *"status != APPROVED"* ]]
 }
 
 @test "edge: boundary, solo 3 de 4 slices con tier 4 falla (zero tolerancia)" {
@@ -191,11 +218,11 @@ json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
   [[ "$output" == *"suma de netos"* ]]
 }
 
-@test "negativo: status APPROVED en la spec falla (sin confirmación de la operadora)" {
-  mutate 'status: PROPOSED' 'status: APPROVED'
+@test "negativo: status PROPOSED en la spec falla (ya aprobada por la operadora)" {
+  mutate 'status: APPROVED' 'status: PROPOSED'
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"status != PROPOSED"* ]]
+  [[ "$output" == *"status != APPROVED"* ]]
 }
 
 @test "negativo: una cifra desfasada (suma de netos) falla" {
@@ -240,10 +267,10 @@ json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
   [[ "$output" == *"19 de 90"* ]]
 }
 
-@test "negativo: planning APPROVED falla" {
+@test "negativo: planning PROPOSED falla" {
   python3 -I -c "
 import json,sys
-d=json.load(open(sys.argv[1])); d['status']='APPROVED'
+d=json.load(open(sys.argv[1])); d['status']='PROPOSED'
 json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
   run check_planning "$BATS_TEST_TMPDIR/s.json"
   [ "$status" -ne 0 ]

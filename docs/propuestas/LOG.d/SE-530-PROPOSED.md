@@ -1,0 +1,3 @@
+## 2026-11-13 SE-530 PROPOSED
+
+Hecho verificado: un trabajo declarado por su ejecutor no es «terminado» hasta que lo confirma una comprobación independiente (pruebas que no escribió él, una revisora distinta o la persona). Tres estados (declarado, verificado, refutado) y tres slices: S1 mide y distingue desde el primer día (decisión de la operadora: aplicar desde ya, sin sombra), S2 regla en el recibo con fallo cerrado, S3 evento en Pulse tras SE-518. H9 se prerregistra en S1 antes de medir. Solo spec: ningún script, hook ni esquema se toca. Escenas pendientes de confirmar; sigue PROPOSED hasta que la operadora lo confirme en la PR.
