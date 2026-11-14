@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Filtro de clase de origen para resultados de memoria (SE-352).
 
-Entrada sin origin o desconocida = untrusted (fail-safe). Un resultado que no se puede
-resolver contra el almacén también cuenta como untrusted.
+Entrada sin origin o desconocida = untrusted (fail-safe). Si el resultado trae su propio
+`origin` (vector, grep) se usa ese; si no (grafo), se resuelve contra el almacén por
+topic_key/título y una clave no resoluble cuenta como untrusted.
 
 Usage: memory-origin.py filter --store PATH --min-origin owner|agent|untrusted|system < results.json
 """
@@ -39,6 +40,12 @@ def filter_origin(results, store, min_origin):
     by_topic, by_title = _origin_maps(store)
     kept = []
     for r in results:
+        if r.get("valid_to"):  # revisión superseded: nunca pasa el filtro
+            continue
+        if "origin" in r:  # el resultado trae el origen de su propia línea: ese manda
+            if ORIGIN_RANK.get(r["origin"] or "untrusted", 2) >= need:
+                kept.append(r)
+            continue
         cands = [m[k] for m, k in ((by_topic, r.get("topic_key", "")), (by_title, r.get("title", ""))) if k in m]
         # Si topic y título resuelven distinto, el menor rango manda (fail-closed).
         o = min(cands, key=lambda x: ORIGIN_RANK.get(x, 2)) if cands else "untrusted"

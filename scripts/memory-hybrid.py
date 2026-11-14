@@ -56,7 +56,7 @@ def _domain_filter(query):
     domains = mod.top_domains(query)
     return (set(domains[:2]) if domains else None), mod
 
-def _run_grep(query, top, store, df=None, dmod=None):
+def _run_grep(query, top, store, df=None, dmod=None, min_origin=None):
     results = []
     if not os.path.exists(store): return results
     ql = query.lower()
@@ -70,8 +70,10 @@ def _run_grep(query, top, store, df=None, dmod=None):
                 results.append({"source": "grep", "title": e.get("title", ""),
                     "score": 0.3, "topic_key": e.get("topic_key", ""),
                     "type": e.get("type", ""), "ts": e.get("ts", ""),
-                    "sector": e.get("sector", "semantic")})
+                    "sector": e.get("sector", "semantic"), "origin": e.get("origin") or "untrusted"})
             except json.JSONDecodeError: continue
+    # SE-352: filtrar antes del recorte a top; si no, untrusted recientes tapan owner antiguos.
+    if min_origin: results = _origin_mod().filter_origin(results, store, min_origin)
     return results[-top:]
 
 def _origin_mod():
@@ -96,13 +98,13 @@ def cmd_search(query, top, store, mode, min_origin=None):
     if mode in ("hybrid", "vector"): vec = _run_vector(query, top, store)
     if mode in ("hybrid", "graph"): graph = _run_graph(query, top, store)
     if mode == "naive" or (mode == "hybrid" and not vec and not graph):
-        grep = _run_grep(query, top, store, df, dmod)
+        grep = _run_grep(query, top, store, df, dmod, min_origin)
     if mode == "hybrid" and (vec or graph):
-        grep = _run_grep(query, top, store, df, dmod)
-    # SE-352: el filtro va antes de dedup/top para no perder candidatos válidos.
+        grep = _run_grep(query, top, store, df, dmod, min_origin)
+    # SE-352: grep ya viene filtrado; vector y grafo, antes de dedup/top.
     if min_origin:
         fo = _origin_mod().filter_origin
-        vec, graph, grep = (fo(x, store, min_origin) for x in (vec, graph, grep))
+        vec, graph = fo(vec, store, min_origin), fo(graph, store, min_origin)
     results = _dedup(vec, graph, grep, top)
     if not results:
         print(json.dumps({"results": [], "mode": mode, "fallback": True})); return

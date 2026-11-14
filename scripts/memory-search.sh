@@ -45,18 +45,20 @@ print(f'  (hybrid: {src.get(\"vector\",0)} vec + {src.get(\"graph\",0)} graph + 
     fi
     # Vector-only search (legacy path)
     if [[ "$mode" == "vector" || "$mode" == "auto" ]]; then
-        local idx="${STORE_FILE%.jsonl}-index.idx"
+        local idx="${STORE_FILE%.jsonl}-index.idx" vec_filtered=false vec_filter_failed=false
         local idx_faiss="${STORE_FILE%.jsonl}-index.faiss"
         [[ -f "$idx_faiss" ]] && idx="$idx_faiss"
         if [[ -n "$MEMORY_PYTHON" && -f "$idx" ]]; then
-            local vec_result vec_filtered=false
+            local vec_result vec_ok_py="import sys,json; d=json.load(sys.stdin); exit(0 if not d.get('fallback') and d.get('results') else 1)"
             vec_result=$("$MEMORY_PYTHON" "$SCRIPT_DIR/memory-vector.py" search "$query" --top 10 --store "$STORE_FILE" 2>/dev/null) || true
-            # SE-352: mismo filtro que hybrid; si no puede aplicarse, el resultado se descarta (fail-closed).
-            if [[ -n "$min_origin" && -n "$vec_result" ]]; then
-                vec_result=$(echo "$vec_result" | "$MEMORY_PYTHON" "$SCRIPT_DIR/memory-origin.py" filter --store "$STORE_FILE" --min-origin "$min_origin" 2>/dev/null) || vec_result=""
-                vec_filtered=true
+            # SE-352: mismo filtro que hybrid, solo sobre un resultado vectorial válido.
+            # Filtro fallido = resultado descartado y error (fail-closed); 0 tras filtrar ≠ índice ausente.
+            if [[ -n "$min_origin" && -n "$vec_result" ]] && echo "$vec_result" | "$MEMORY_PYTHON" -c "$vec_ok_py" 2>/dev/null; then
+                if vec_result=$(echo "$vec_result" | "$MEMORY_PYTHON" "$SCRIPT_DIR/memory-origin.py" filter --store "$STORE_FILE" --min-origin "$min_origin" 2>/dev/null); then
+                    vec_filtered=true
+                else vec_result=""; vec_filter_failed=true; fi
             fi
-            if [[ -n "$vec_result" ]] && echo "$vec_result" | "$MEMORY_PYTHON" -c "import sys,json; d=json.load(sys.stdin); exit(0 if not d.get('fallback') and d.get('results') else 1)" 2>/dev/null; then
+            if [[ -n "$vec_result" ]] && echo "$vec_result" | "$MEMORY_PYTHON" -c "$vec_ok_py" 2>/dev/null; then
                 echo "$vec_result" | "$MEMORY_PYTHON" -c "
 import sys, json
 d = json.load(sys.stdin)
@@ -68,7 +70,8 @@ for r in d['results']:
             fi
         fi
         # Índice presente pero el filtro de origen lo dejó sin resultados: no es «índice ausente».
-        [[ "$mode" == "vector" && "${vec_filtered:-false}" == "true" ]] && { echo "No se encontraron resultados"; return 0; }
+        [[ "$mode" == "vector" && "$vec_filter_failed" == "true" ]] && { echo "Error: no se pudo aplicar --min-origin al resultado vectorial (fail-closed)." >&2; return 1; }
+        [[ "$mode" == "vector" && "$vec_filtered" == "true" ]] && { echo "No se encontraron resultados"; return 0; }
         [[ "$mode" == "vector" ]] && { echo "Vector index not available. Run: bash scripts/memory-store.sh rebuild-index"; return 1; }
     fi
 
@@ -103,7 +106,7 @@ for r in d['results']:
             line_origin=$(echo "$line" | grep -o '"origin":"[^"]*"' | cut -d'"' -f4 || echo "untrusted")
             [[ -z "$line_origin" ]] && line_origin="untrusted"
             local origin_rank line_rank
-            case "$min_origin" in owner) origin_rank=4 ;; agent) origin_rank=3 ;; untrusted) origin_rank=2 ;; *) origin_rank=2 ;; esac
+            case "$min_origin" in owner) origin_rank=4 ;; agent) origin_rank=3 ;; untrusted) origin_rank=2 ;; system) origin_rank=1 ;; *) origin_rank=2 ;; esac
             case "$line_origin" in owner) line_rank=4 ;; agent) line_rank=3 ;; untrusted) line_rank=2 ;; system) line_rank=1 ;; *) line_rank=2 ;; esac
             [[ $line_rank -lt $origin_rank ]] && continue
         fi
