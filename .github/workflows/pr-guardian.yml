@@ -5,6 +5,13 @@ on:
     branches: [main]
     # reopened: al reabrir una PR el check obligatorio debe volver a informarse.
     types: [opened, synchronize, edited, reopened]
+  # Cola de fusión: «PR Guardian» es obligatorio y tiene que informarse sobre el commit de grupo. En
+  # merge_group no hay PR en el evento: los gates que leen título, cuerpo, ficheros o autor de la PR
+  # (1, 2, 5, 8, 8b, 9 y la exención de dependabot) se saltan con `if:` porque ya pasaron sobre la PR
+  # concreta antes de entrar en la cola. Los gates que leen el diff (3, 4, 6, 7) se vuelven a ejecutar
+  # sobre el resultado combinado (origin/main...HEAD), que es lo que de verdad se fusiona.
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
@@ -28,7 +35,7 @@ jobs:
       # `uses:` en workflows. Fail-closed: cualquier error → no exenta.
       - name: "Dependabot exemption (Gate 1 + Gate 8)"
         id: deps_exempt
-        if: github.event.pull_request.user.login == 'dependabot[bot]'
+        if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -49,7 +56,8 @@ jobs:
 
       # ─── Gate 1: PR Description Quality ───
       - name: "Gate 1: PR Description Quality"
-        if: steps.deps_exempt.outputs.exempt != 'true'
+        # Lee el cuerpo de la PR: solo existe en pull_request (ya validado antes de entrar en la cola).
+        if: github.event_name == 'pull_request' && steps.deps_exempt.outputs.exempt != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -98,6 +106,8 @@ jobs:
 
       # ─── Gate 2: Conventional Commits (PR title) ───
       - name: "Gate 2: Conventional Commits"
+        # Lee el título de la PR: solo existe en pull_request.
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -234,6 +244,10 @@ jobs:
 
       # ─── Gate 5: Gitleaks Secret Scanning ───
       - name: "Gate 5: Gitleaks Secret Scanning"
+        # gitleaks-action v3 sale con error en eventos que no sean push/pull_request/workflow_dispatch/schedule.
+        # En la cola los commits son los mismos ya escaneados en la PR (el escaneo usa --no-merges); tras la
+        # fusión, confidentiality-main vuelve a revisar main.
+        if: github.event_name == 'pull_request'
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -438,7 +452,8 @@ jobs:
 
       # ─── Gate 8: CHANGELOG Required for Code Changes ───
       - name: "Gate 8: CHANGELOG Required"
-        if: steps.deps_exempt.outputs.exempt != 'true'
+        # Lee título y ficheros de la PR por la API de pulls: solo en pull_request.
+        if: github.event_name == 'pull_request' && steps.deps_exempt.outputs.exempt != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -522,6 +537,8 @@ jobs:
 
       # ─── Gate 8b: Spec Archive Required for feat(seXXX) PRs ───
       - name: "Gate 8b: Spec Archive Required"
+        # Lee título y ficheros de la PR: solo en pull_request.
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -553,7 +570,7 @@ jobs:
 
       # ─── Gate 9: PR Digest for Maintainer ───
       - name: "Gate 9: PR Digest"
-        if: github.event.action == 'opened'
+        if: github.event_name == 'pull_request' && github.event.action == 'opened'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
