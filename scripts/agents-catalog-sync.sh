@@ -100,10 +100,10 @@ generate_table() {
 # en «Dominios especializados», nunca se pierde.
 classify_agent() {
   case "$1" in
-    *-orchestrator|configurator|fix-assigner|reconciler|commit-guardian) echo "1|Metaorquestación (orquestadores y despacho)" ;;
+    *-orchestrator|fix-assigner|reconciler|commit-guardian) echo "1|Metaorquestación (orquestadores y despacho)" ;;
     *-judge|*-validator|feasibility-probe) echo "2|Tribunales y verificación" ;;
     model-upgrade-auditor|drift-auditor) echo "3|Investigación y mejora continua" ;;
-    *-digest|context-dome-manager|memory-agent|meeting-*|tabular-analyst|code-twin-agent) echo "4|Conocimiento" ;;
+    *-digest|context-dome-manager|memory-agent|meeting-*|code-twin-agent) echo "4|Conocimiento" ;;
     *-developer|architect|diagram-architect|code-reviewer|test-*|frontend-test-runner|web-e2e-tester|visual-qa-agent|security-*|pentester|confidentiality-auditor|infrastructure-agent|sdd-spec-writer|tech-writer) echo "5|Desarrollo y seguridad" ;;
     azure-devops-operator|business-analyst) echo "6|Proyectos (dominio de gestión de proyectos)" ;;
     *) echo "7|Dominios especializados" ;;

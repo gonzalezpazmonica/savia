@@ -3,7 +3,7 @@
 | Area | What it does |
 |---|---|
 | Project management | Sprints, burndown, capacity, dailies, retros, KPIs. Excel and PowerPoint reports. Monte Carlo forecasting. Billing. |
-| Spec-Driven Development | Tasks become executable specs. 90 agents implement in 16 languages (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) in isolated worktrees. Automated code review + human review, including review by a sole operator. Compatible with `github/spec-kit`. |
+| Spec-Driven Development | Tasks become executable specs. 86 agents implement in 16 languages (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) in isolated worktrees. Automated code review + human review, including review by a sole operator. Compatible with `github/spec-kit`. |
 | Security | SAST against OWASP Top 10, Red Team / Blue Team / Auditor pipeline, dynamic pentesting, SBOM, sector compliance (12 sectors). Savia Shield: local data classification with on-premise LLM, reversible masking, cryptographic PR signing. |
 | Code Review Court | 5 specialized judges (correctness, architecture, security, cognitive, spec) review in parallel with 0-100 scoring and a 400 LOC gate. |
 | Inference sovereignty | Anthropic API by default. Automatic fallback to local Ollama (Gemma 4) on network error, HTTP 5xx, HTTP 429, or timeout. Integrated circuit breaker. |

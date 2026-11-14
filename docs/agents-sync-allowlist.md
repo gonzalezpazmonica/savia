@@ -20,10 +20,7 @@ Verificación automática: `bash scripts/agents-catalog-sync.sh --check`
 | `archive-digest` | .opencode only | Subagente OpenCode-specific — digest de ficheros comprimidos vía markitdown, solo usado desde OpenCode |
 | `authority-claim-judge` | .opencode only | Juez del Recommendation Tribunal — invocado solo por tribunal-orchestrator vía Task tool, no necesita par en .claude |
 | `code-twin-agent` | .opencode only | Agente especializado en consultar Application Code Twin — feature OpenCode exclusiva (SPEC-190) |
-| `configurator` | .opencode only | Dispatcher central de intents — invocado internamente, no hay surface en Claude Code shell |
 | `criterion-simulation-judge` | .opencode only | Juez SPEC-194 — solo ejecuta como subagente del tribunal, no como agente directo |
-| `fiction-framing-judge` | .opencode only | Juez de Recommendation Tribunal (SPEC-193) — subagente interno |
-| `structural-framing-judge` | .opencode only | Juez de Recommendation Tribunal — subagente interno |
 
 ## Subagentes `decision-trees/` (`.opencode/agents/decision-trees/`)
 

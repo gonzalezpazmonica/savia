@@ -4,7 +4,7 @@ set -uo pipefail
 #
 # Verifies that every judge agent in .opencode/agents/ has a row
 # in config/judge-routing.yaml. Fails CI if any judge is missing.
-# Orphans with mode: disabled are valid (documented decision).
+# Every routing row must point to an existing agent file (stale row = error).
 #
 # Usage: bash scripts/judge-routing-verify.sh [--strict]
 #   --strict: also fail if any judge has mode=on-demand without rationale
@@ -79,29 +79,16 @@ for routed in "${routed_agents[@]}"; do
     [[ "$agent" == "$routed" ]] && found=true && break
   done
   if ! $found; then
-    yellow "STALE ROW: $routed in routing but no agent file in $AGENTS_DIR"
-    warnings=$((warnings + 1))
-  fi
-done
-
-echo ""
-
-# Check 3: no orphan judges (agents without any invoker)
-# Orphans are judges with mode=on-demand and no known invoker script/command
-orphans=("fiction-framing-judge" "structural-framing-judge")
-for orphan in "${orphans[@]}"; do
-  mode=$(grep -A10 "agent: $orphan" "$ROUTING" 2>/dev/null | grep 'mode:' | head -1 | awk '{print $2}')
-  if [[ "$mode" == "disabled" ]]; then
-    green "ORPHAN RESOLVED: $orphan is tombstoned (mode: disabled)"
-  elif [[ "$mode" == "auto" ]]; then
-    green "ORPHAN RESOLVED: $orphan is auto-wired"
-  else
-    red "ORPHAN UNRESOLVED: $orphan has mode='$mode' — must be auto or disabled per SE-273"
+    # SE-527 S1: a row without an agent file is a dangling reference, not a warning.
+    red "STALE ROW: $routed in routing but no agent file in $AGENTS_DIR"
     errors=$((errors + 1))
   fi
 done
 
 echo ""
+
+# Check 3: retired (SE-527 S1). The two tombstoned framing judges were retired
+# with their rows; any disabled row left behind is now caught by Check 2.
 
 # Check 4 (strict mode): every on-demand judge has a rationale
 if [[ "$STRICT" == "--strict" ]]; then

@@ -4,7 +4,7 @@
 pm-workspace/
 ├── .claude/
 │   ├── commands/       ← 567 comandi
-│   ├── agents/         ← 90 agenti specializzati (7 con decision trees: SPEC-147)
+│   ├── agents/         ← 86 agenti specializzati (7 con decision trees: SPEC-147)
 │   ├── skills/         ← 139 skill di dominio
 │   ├── hooks/          ← 135 hook deterministici
 │   └── rules/          ← regole di contesto e linguaggio

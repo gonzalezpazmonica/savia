@@ -19,7 +19,7 @@ import sys
 SKIP_DIRS = {".git", "node_modules", "__pycache__", "output", "target", ".venv"}
 HISTORY_PREFIX = (
     "CHANGELOG", "docs/specs-archive/", "docs/specs/", "docs/propuestas/", "docs/evidence/",
-    "tests/evals/se511-d4/", "tests/evals/se527-s1/", "tests/se527_retired_refs.py",
+    "docs/ROADMAP.md", "tests/evals/se511-d4/", "tests/evals/se527-s1/", "tests/se527_retired_refs.py",
     "tests/bats/test-se527-s1-retire-unused.bats", "tests/bats/se527-spec-coherence.bats",
 )
 HISTORY_RE = re.compile(r"^projects/[^/]+/specs/")

@@ -85,7 +85,6 @@ the Stop hook `agents-md-auto-regenerate.sh` whenever an agent file changes.
 | compliance-judge | heavy | L1 | — | Truth Tribunal judge — PII, N1-N4b levels, format rules, confidentiality |
 | concession-judge | mid | L1 | — | Recommendation Tribunal judge — detects position changes without new evidence (SPEC-192) |
 | confidentiality-auditor | heavy | L1 | — | Audita cumplimiento de confidencialidad en PRs de pm-workspace (repo publico). Descubre dinamicamente datos sensibles... |
-| configurator | fast | L1 | — | Centralizes workspace dispatch decisions: selects skills, agents, rules, and memory queries for each user intent. Emi... |
 | context-dome-manager | heavy | L4 | — | Arquitecto de conocimiento — disena, audita y evoluciona cupulas de contexto (SaviaVaults). Decide estructura, federa... |
 | correctness-judge | mid | L1 | — | Code Review Court judge — logic, tests, edge cases, error paths |
 | court-orchestrator | heavy | L4 | — | Convenes the Code Review Court, manages fix cycles, produces .review.crc |
@@ -98,7 +97,6 @@ the Stop hook `agents-md-auto-regenerate.sh` whenever an agent file changes.
 | expertise-asymmetry-judge | mid | L1 | — | 'Recommendation Tribunal judge — when draft falls in a domain the active user marks as `audit_level: blind`, force a ... |
 | factuality-judge | heavy | L1 | — | Truth Tribunal judge — factual accuracy of claims against verifiable sources |
 | feasibility-probe | mid | L3 | — | Validates spec feasibility by attempting a time-boxed prototype. Produces viability report with score, blocking secti... |
-| fiction-framing-judge | mid | L1 | — | Recommendation Tribunal judge — detects persona-shift plus content-equivalent framing over sensitive domain (SPEC-193) |
 | fix-assigner | mid | L2 | — | Creates fix tasks from Court findings, assigns to dev agents, triggers re-review |
 | frontend-developer | mid | L3 | — | Implementación de código frontend (Angular y React) siguiendo specs SDD aprobadas. Usar PROACTIVELY cuando: se implem... |
 | frontend-test-runner | mid | L4 | — | Post-commit frontend test execution — unit, component, e2e, coverage |
@@ -138,9 +136,7 @@ the Stop hook `agents-md-auto-regenerate.sh` whenever an agent file changes.
 | social-networks | mid | L2 | — | Coordinador agnóstico de redes sociales (SE-385). Selecciona proveedor, comprueba credenciales y permisos (capability... |
 | source-traceability-judge | mid | L1 | — | Truth Tribunal judge — every claim must have a verifiable @ref citation |
 | spec-judge | mid | L1 | — | Code Review Court judge — implementation vs approved spec, acceptance criteria |
-| structural-framing-judge | mid | L1 | — | Recommendation Tribunal judge — detects output with manual/protocol form over CBRN or sensitive domain |
 | sycophancy-judge | mid | L1 | — | Recommendation Tribunal judge — detects empty social validation in conversational drafts (SPEC-192) |
-| tabular-analyst | mid | L2 | — | Analisis estadistico de datos tabulares. Usar PROACTIVELY cuando: se reciben datos en CSV, Excel, tablas markdown, o ... |
 | tech-writer | fast | L2 | — | Documentación técnica: README, CHANGELOG, comentarios XML en C#, docs de proyecto. Usar PROACTIVELY cuando: se actual... |
 | terraform-developer | mid | L3 | — | Implementación de código Terraform (IaC) siguiendo specs SDD aprobadas. CRÍTICO: NUNCA ejecutar terraform apply autom... |
 | test-architect | mid | L3 | — | Designs and generates the highest quality tests across all 16 language packs and 14 test types. Use PROACTIVELY when:... |

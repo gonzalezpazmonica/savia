@@ -111,11 +111,13 @@ mini_root() {
   mkdir -p "$TMP/r/config"
   cp -r "$REPO_ROOT/.opencode" "$TMP/r/.opencode"
   cp "$REPO_ROOT/config/judge-routing.yaml" "$TMP/r/config/"
-  printf '\n  - agent: fiction-framing-judge\n    mode: disabled\n    rationale: "sobrante"\n' >> "$TMP/r/config/judge-routing.yaml"
+  printf '\n  - agent: zz-retired-judge\n    mode: disabled\n    rationale: "sobrante"\n' >> "$TMP/r/config/judge-routing.yaml"
   PROJECT_ROOT="$TMP/r" run bash "$VERIFY"
   echo "$output"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"STALE ROW: fiction-framing-judge"* ]]
+  [[ "$output" == *"STALE ROW: zz-retired-judge"* ]]
+  # La fila sobrante es el único error (y no un aviso más otro error ajeno).
+  [[ "$output" =~ Errors:[[:space:]]+1$'\n' ]]
 }
 
 @test "routing negativo: un juez sin fila hace fallar el verificador" {

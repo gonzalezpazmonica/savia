@@ -219,8 +219,7 @@ def get_allowlist(agent_name, model, permission_level, description):
                 "sycophancy-judge", "concession-judge", "repetition-truth-judge",
                 "authority-claim-judge", "hallucination-fast-judge",
                 "memory-conflict-judge", "rule-violation-judge",
-                "expertise-asymmetry-judge", "fiction-framing-judge",
-                "structural-framing-judge"
+                "expertise-asymmetry-judge"
             ]
         elif 'dev' in agent_name:
             return [
@@ -242,8 +241,6 @@ def get_allowlist(agent_name, model, permission_level, description):
         return []
     elif is_digest and agent_name != 'archive-digest':
         return ["archive-digest"]
-    elif agent_name == 'configurator':
-        return []
     elif agent_name == 'memory-agent':
         return []
     elif agent_name == 'commit-guardian':

@@ -3,7 +3,7 @@
 | Arloa | Zer egiten duen |
 |---|---|
 | Proiektuen kudeaketa | Sprint-ak, burndown-a, ahalmena, dailyak, retroak, KPIak. Excel eta PowerPoint txostenak. Monte Carlo iragarpena. Fakturazioa. |
-| Spec-Driven Development | Zereginak spec exekutagarri bihurtzen dira. 90 agentek 16 hizkuntzatan inplementatzen dute (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) worktree isolatuetan. Kode berrikusketa automatikoa + giza berrikusketa derrigorrezkoa. `github/spec-kit` bateragarria. |
+| Spec-Driven Development | Zereginak spec exekutagarri bihurtzen dira. 86 agentek 16 hizkuntzatan inplementatzen dute (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) worktree isolatuetan. Kode berrikusketa automatikoa + giza berrikusketa derrigorrezkoa. `github/spec-kit` bateragarria. |
 | Segurtasuna | SAST OWASP Top 10-aren aurka, Red Team / Blue Team / Auditor pipeline-a, pentesting dinamikoa, SBOM, sektore-compliance (12 sektore). Savia Shield: datuen sailkapen lokala on-premise LLMarekin, maskaratze itzulgarria, PR sinadura kriptografikoa. |
 | Code Review Court | 5 epaile espezializatu (correctness, architecture, security, cognitive, spec) paraleloan berrikusten dute 0-100 puntuazioarekin eta 400 LOC gatearekin. |
 | Inferentzia subiranotasuna | Anthropic API lehenespenez. Ollama lokalera (Gemma 4) fallback automatikoa sare errorea, HTTP 5xx, HTTP 429 edo timeout kasuetan. Circuit breaker integratua. |
