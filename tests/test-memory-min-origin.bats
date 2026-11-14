@@ -132,6 +132,7 @@ PY
 @test "--min-origin sin valor al final falla sin bucle infinito" {
   run timeout 10 bash "$S" search zebra --min-origin
   [ "$status" -eq 1 ]
+  [[ "$output" == *"requiere un valor"* ]]
 }
 
 @test "vector con índice y filtro que deja 0 resultados: no dice índice ausente" {
