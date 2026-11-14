@@ -75,8 +75,10 @@ Las diez escenas confirmadas (E1–E10) se agrupan en cinco momentos para cumpli
 
 ## Slice S0 — Prototipo navegable
 
-- prototipo: `docs/specs/assets/SE-518-prototipo.html` (por construir en S0) — la tarjeta de la mañana (E1), la frase de fin de trabajo y la respuesta a «¿está funcionando?» (E2), la confirmación del freno (E3) y del volante (E4), el aviso de red (E5), la tarjeta de decisión (E7), la tarjeta de la instalación con el modo inicial elegido (E8) y el aviso de respaldo (E10), sobre datos de ejemplo, usable en el móvil. Incluye la salida de `pulse status` en texto.
+- prototipo: `docs/specs/assets/SE-518-prototipo.html` (estados `?s=manana|termina|freno|volante|red|decision|instalacion|respaldo|estado`) — la tarjeta de la mañana (E1), la frase de fin de trabajo y la respuesta a «¿está funcionando?» (E2), la confirmación del freno (E3) y del volante (E4), el aviso de red (E5), la tarjeta de decisión (E7), la tarjeta de la instalación con el modo inicial elegido (E8) y el aviso de respaldo (E10), sobre datos de ejemplo, usable en el móvil. Incluye la salida de `pulse status` en texto.
 - Además, S0 entrega tres medidas que deciden si el corte C sigue en pie: (a) sonda en una instalación macOS sin administrador: intérprete disponible (Python ≥ 3.9 o el runtime de Soul), LaunchAgent sin `sudo`, bloqueo de fichero sin `flock`; (b) qué modos permite la política de la organización, para informar la elección del operador (no cambia el defecto); (c) qué parte de la lógica del bucle actual es reutilizable como casos dorados del planificador.
+
+- medidas (entregadas, sin ejecutar en un Mac): `docs/specs/assets/SE-518-s0-medidas.md` y la sonda `scripts/pulse-probe-macos.sh`. Resultado: la lógica reutilizable del bucle actual es el 80 % de su batería de pruebas, por lo que C se sostiene; (a) y (b) quedan «sin datos» hasta correr la sonda con `--active` en el equipo de la organización. La decisión «C o basta A» es de la operadora.
 
 ### Confirmación del prototipo
 
