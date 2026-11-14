@@ -18,10 +18,15 @@ cmd_search() {
     done
     [[ -z "$query" ]] && { echo "Usage: search \"query\" [--type tipo] [--since DATE] [--mode hybrid|vector|graph|grep|auto]" >&2; return 1; }
 
+    # SE-352: valor inválido = error (fail-closed), no se degrada a "sin filtro" ni a untrusted.
+    case "$min_origin" in ""|owner|agent|untrusted|system) ;;
+        *) echo "Error: --min-origin '$min_origin' inválido. Válidos: owner|agent|untrusted|system." >&2; return 1;; esac
+    local origin_args=(); [[ -n "$min_origin" ]] && origin_args=(--min-origin "$min_origin")
+
     # SPEC-035: Hybrid search (vector + graph + grep combined)
     if [[ "$mode" == "hybrid" || "$mode" == "auto" ]] && [[ -n "$MEMORY_PYTHON" ]]; then
         local hybrid_result
-        hybrid_result=$("$MEMORY_PYTHON" "$SCRIPT_DIR/memory-hybrid.py" search "$query" --top 10 --store "$STORE_FILE" --mode hybrid 2>/dev/null) || true
+        hybrid_result=$("$MEMORY_PYTHON" "$SCRIPT_DIR/memory-hybrid.py" search "$query" --top 10 --store "$STORE_FILE" --mode hybrid "${origin_args[@]}" 2>/dev/null) || true
         if [[ -n "$hybrid_result" ]] && echo "$hybrid_result" | "$MEMORY_PYTHON" -c "import sys,json; d=json.load(sys.stdin); exit(0 if d.get('results') else 1)" 2>/dev/null; then
             echo "$hybrid_result" | "$MEMORY_PYTHON" -c "
 import sys, json
@@ -44,6 +49,10 @@ print(f'  (hybrid: {src.get(\"vector\",0)} vec + {src.get(\"graph\",0)} graph + 
         if [[ -n "$MEMORY_PYTHON" && -f "$idx" ]]; then
             local vec_result
             vec_result=$("$MEMORY_PYTHON" "$SCRIPT_DIR/memory-vector.py" search "$query" --top 10 --store "$STORE_FILE" 2>/dev/null) || true
+            # SE-352: mismo filtro que hybrid; si no puede aplicarse, el resultado se descarta (fail-closed).
+            if [[ -n "$min_origin" && -n "$vec_result" ]]; then
+                vec_result=$(echo "$vec_result" | "$MEMORY_PYTHON" "$SCRIPT_DIR/memory-hybrid.py" filter --store "$STORE_FILE" --min-origin "$min_origin" 2>/dev/null) || vec_result=""
+            fi
             if [[ -n "$vec_result" ]] && echo "$vec_result" | "$MEMORY_PYTHON" -c "import sys,json; d=json.load(sys.stdin); exit(0 if not d.get('fallback') and d.get('results') else 1)" 2>/dev/null; then
                 echo "$vec_result" | "$MEMORY_PYTHON" -c "
 import sys, json
