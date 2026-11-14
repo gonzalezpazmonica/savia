@@ -219,4 +219,5 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-515 [APPROVED] Aprendizaje aplicado: de la lección recuperada a la obligación comprobada — evidencia: docs/specs/SE-515-aprendizaje-aplicado-obligacion-comprobada.spec.md
 - SE-517 [APPROVED] Motor de Space con suscripción ChatGPT (OAuth) — evidencia: docs/specs/SE-517-space-motor-suscripcion-chatgpt-oauth.spec.md
 - SE-518 [APPROVED] Pulse: el latido de la planta de trabajo — evidencia: docs/specs/SE-518-pulse-latido.spec.md
+- SE-530 [APPROVED] Hecho verificado: ningún trabajo se da por bueno por su propia palabra — evidencia: docs/specs/SE-530-hecho-verificado.spec.md
 - SE-531 [APPROVED] Ficha de harness ejecutable: capacidades del runtime y supervisión del proceso hijo — evidencia: docs/specs/SE-531-ficha-de-harness-ejecutable.spec.md
