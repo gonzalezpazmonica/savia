@@ -1322,7 +1322,7 @@ output/skill-quality/             (SE-278 — eval reports + cache)
 | SE-248 | #891 | KG Topology Analysis (Forman-Ricci + Leiden) |
 | SE-252 | #893 | Bus Factor Shield (context domes, 93 BATS) |
 | SE-255 | #896 | Constitución operativa (criterio, relación, lealtad, 35 BATS) |
-| SE-256 | — | Patrones engram: save-nudge, conflictos, principal (10 BATS) |
+| SE-256 | — | Patrones engram: S1 y S2 archivados (sin consumidor), S3 principal implementado sin invocador (5 BATS) |
 | SE-257 | — | Consolidación: CRITERIO 33 entradas, memoria canonica, CI timeouts |
 | SE-095/096/097-SC | — | SaviaClaw heartbeat + cron + streaming (en saviaclaw_headless.py) |
 
