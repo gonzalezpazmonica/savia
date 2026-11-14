@@ -16,10 +16,15 @@ const projectStore = useProjectStore()
 onMounted(async () => {
   // SE-528 Q5: un enlace antiguo con la credencial en la dirección lleva al
   // formulario con una línea que dice por qué; la credencial se quita del historial.
-  if (stripLegacyCredentialFromUrl()) auth.notice = i18n.global.t('auth.legacyLink')
+  // Con enlace antiguo no se restaura la sesión: siempre se ve el formulario y su aviso.
+  const legacyLink = stripLegacyCredentialFromUrl()
+  if (legacyLink) {
+    auth.notice = i18n.global.t('auth.legacyLink')
+    auth.setConnected(false)
+  }
   // Tras recargar solo sobrevive la sesión por cookie; el puente la confirma.
   const hadSession = auth.hasCookie
-  if (!auth.isLoggedIn && hadSession) {
+  if (!legacyLink && !auth.isLoggedIn && hadSession) {
     if (await auth.restore()) {
       try {
         const slug = auth.username.replace(/^@/, '')

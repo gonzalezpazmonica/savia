@@ -45,8 +45,26 @@ export function stripLegacyCredentialFromUrl(): boolean {
   return true
 }
 
-/** Modo de sesión que devuelve POST /auth/login del puente. */
-export function sessionModeFromLogin(body: unknown): SessionMode {
+/**
+ * True si la página y el puente son https y del mismo host. La cookie del
+ * puente es SameSite=Strict: entre sitios distintos el navegador no la envía.
+ * Sin lista de sufijos públicos se exige el mismo nombre (conservador).
+ */
+export function sameSiteHttps(serverUrl: string, pageHref: string): boolean {
+  try {
+    const a = new URL(serverUrl)
+    const b = new URL(pageHref)
+    return a.protocol === 'https:' && b.protocol === 'https:'
+      && a.hostname.toLowerCase() === b.hostname.toLowerCase()
+  } catch { return false }
+}
+
+/**
+ * Modo de sesión tras POST /auth/login. Cookie solo si el puente la emitió Y
+ * la página es del mismo sitio; si no, el token vive en la memoria de la pestaña.
+ */
+export function sessionModeFromLogin(body: unknown, serverUrl: string,
+                                     pageHref: string = window.location.href): SessionMode {
   const session = (body as { session?: string } | null)?.session
-  return session === 'cookie' ? 'cookie' : 'memory'
+  return session === 'cookie' && sameSiteHttps(serverUrl, pageHref) ? 'cookie' : 'memory'
 }

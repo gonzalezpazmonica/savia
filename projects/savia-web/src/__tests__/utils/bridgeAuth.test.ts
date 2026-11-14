@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '../../stores/auth'
-import { authHeaders, hasLegacyCredentialInUrl, stripLegacyCredentialFromUrl } from '../../utils/bridgeAuth'
+import { authHeaders, hasLegacyCredentialInUrl, sameSiteHttps, sessionModeFromLogin, stripLegacyCredentialFromUrl } from '../../utils/bridgeAuth'
 
 const TOKEN = 'secret-token-abc'
 
@@ -127,5 +127,20 @@ describe('SE-528 sesión web', () => {
     expect(window.location.search).toBe('?project=alpha')
     expect(window.location.hash).toBe('#top')
     expect(stripLegacyCredentialFromUrl()).toBe(false)
+  })
+})
+
+describe('SE-528 mismo sitio para la cookie del puente', () => {
+  it('cookie solo con https y el mismo host en página y puente', () => {
+    const cookie = { session: 'cookie' }
+    expect(sessionModeFromLogin(cookie, 'https://localhost:8922', 'https://localhost:5173/')).toBe('cookie')
+    expect(sessionModeFromLogin(cookie, 'https://localhost:8922', 'https://127.0.0.1:5173/')).toBe('memory')
+    expect(sessionModeFromLogin(cookie, 'https://localhost:8922', 'http://localhost:5173/')).toBe('memory')
+    expect(sessionModeFromLogin({ session: 'none' }, 'https://localhost:8922', 'https://localhost:5173/')).toBe('memory')
+  })
+
+  it('URL inválida no es mismo sitio', () => {
+    expect(sameSiteHttps('no es url', 'https://localhost/')).toBe(false)
+    expect(sameSiteHttps('https://[::1]:8922', 'https://[::1]:5173/')).toBe(true)
   })
 })

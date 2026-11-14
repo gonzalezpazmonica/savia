@@ -55,12 +55,13 @@ async function connect() {
     }
 
     // SE-528: el puente emite la sesión opaca (cookie HttpOnly) si hay TLS y
-    // mismo sitio; si no, el token vive solo en la memoria de la pestaña.
+    // mismo sitio; la web lo comprueba también. Si no, el token vive solo en la
+    // memoria de la pestaña.
     mode = 'memory'
     try {
       const loginRes = await timedFetch(`${serverUrl.value}/auth/login`,
         bridgeInit(token.value, { method: 'POST' }))
-      if (loginRes.ok) mode = sessionModeFromLogin(await loginRes.json())
+      if (loginRes.ok) mode = sessionModeFromLogin(await loginRes.json(), serverUrl.value)
     } catch { /* sin sesión por cookie: modo memoria */ }
 
     if (member) {

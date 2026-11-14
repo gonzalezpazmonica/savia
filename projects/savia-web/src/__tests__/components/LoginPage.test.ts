@@ -74,7 +74,19 @@ describe('LoginPage — SE-528 sesión del puente', () => {
     return { auth, loginCall }
   }
 
+  function setPage(url: string) {
+    (window as unknown as { happyDOM: { setURL(u: string): void } }).happyDOM.setURL(url)
+  }
+
+  it('web en otro sitio: aunque el puente diga cookie, el token queda en memoria', async () => {
+    setPage('https://127.0.0.1:5173/')  // puente por defecto en https://localhost:8922
+    const { auth } = await connectWith({ status: 'ok', session: 'cookie' })
+    expect(auth.sessionMode).toBe('memory')
+    expect(auth.token).toBe('tok-secret')
+  })
+
   it('con sesión por cookie pide /auth/login con credenciales y no conserva el token', async () => {
+    setPage('https://localhost:5173/')
     const { auth, loginCall } = await connectWith({ status: 'ok', session: 'cookie' })
     expect(loginCall[0]).toMatch(/\/auth\/login$/)
     expect(loginCall[1].method).toBe('POST')
