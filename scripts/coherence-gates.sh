@@ -47,7 +47,7 @@ run_gate constitutional-coverage python3 "$ROOT/scripts/constitutional-coverage.
 # efecto (hook de .claude/settings.json, fichero de hook registrado o workflow de
 # CI; evaluador único: frontend-probe.sh --wired). Si no, DECLARED (WARN).
 CLOSURE_DECLARED=0
-for t in grounding-verify.sh validate-handoff.sh validate-handoff-integrity.sh checkpoint.sh effect-reservation.sh debt-burn-down.sh planning-transition.sh report-benchmark.sh; do
+for t in grounding-verify.sh validate-handoff.sh validate-handoff-integrity.sh checkpoint.sh debt-burn-down.sh planning-transition.sh report-benchmark.sh; do
   if [[ ! -x "$ROOT/scripts/$t" && ! -x "$ROOT/tests/self-evolution/$t" ]]; then
     echo "WARN coherence/closure-$t: ausente o no ejecutable"; FAILED=1; CLOSURE_DECLARED=1; continue
   fi
