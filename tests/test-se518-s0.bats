@@ -320,15 +320,28 @@ correr_mac() {  # correr_mac [opciones de la sonda]
   [ "$status" -eq 1 ]
 }
 
-@test "sonda real simulada: sin python3 ni runtime de Soul falla; con runtime de Soul pasa" {
+@test "sonda real simulada: sin python3 ni runtime de Soul falla; con runtime de Soul y sin python3 es UNKNOWN" {
   PY=ninguno montar_mac; correr_mac --active
   [[ "$output" == *"CHECK interprete FAIL"* ]]
   [ "$status" -eq 1 ]
   printf '#!/bin/sh\nexit 0\n' > "$BATS_TEST_TMPDIR/soul-rt"; chmod +x "$BATS_TEST_TMPDIR/soul-rt"
   correr_mac --active --soul-runtime "$BATS_TEST_TMPDIR/soul-rt"
-  [[ "$output" == *"CHECK interprete UNKNOWN runtime de Soul: existe y es ejecutable, pero no se ha ejecutado"* ]]
+  [[ "$output" == *"CHECK interprete UNKNOWN sin python3; runtime de Soul: existe y es ejecutable, pero no se ha ejecutado"* ]]
   [ "$status" -eq 2 ]
   [[ "$output" != *"MODO observar PERMITIDO"* ]]
+}
+
+@test "sonda real simulada: un python3 válido decide aunque se pase --soul-runtime (el runtime es solo respaldo)" {
+  montar_mac
+  printf '#!/bin/sh\nexit 0\n' > "$BATS_TEST_TMPDIR/soul-rt"; chmod +x "$BATS_TEST_TMPDIR/soul-rt"
+  correr_mac --active --soul-runtime "$BATS_TEST_TMPDIR/soul-rt"
+  [[ "$output" == *"CHECK interprete PASS python 3.11"* ]]
+  [ "$status" -eq 0 ]
+  PY=3.8 montar_mac; correr_mac --active --soul-runtime "$BATS_TEST_TMPDIR/soul-rt"
+  [[ "$output" == *"CHECK interprete UNKNOWN python 3.8 < 3.9; runtime de Soul"* ]]
+  [ "$status" -eq 2 ]
+  PY=3.8 montar_mac; correr_mac --active
+  [[ "$output" == *"CHECK interprete FAIL python 3.8 < 3.9"* ]]
 }
 
 @test "sonda real simulada --active: servicio cargado, ejecutado y descargado, con todo presente" {
@@ -419,7 +432,8 @@ correr_mac() {  # correr_mac [opciones de la sonda]
   while [ ! -s "$BATS_TEST_TMPDIR/launchctl.log" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
   grep -q '^bootstrap ' "$BATS_TEST_TMPDIR/launchctl.log"
   kill -TERM "$pid"
-  wait "$pid" || true
+  local rc=0; wait "$pid" || rc=$?
+  [ "$rc" -eq 143 ]
   grep -q '^bootout gui/.*/local.pulse.probe' "$BATS_TEST_TMPDIR/launchctl.log"
   [ -z "$(ls "$BATS_TEST_TMPDIR/casa/Library/LaunchAgents")" ]
   [ -z "$(ls -d "$BATS_TEST_TMPDIR"/pulse-probe.* 2>/dev/null)" ]
@@ -466,6 +480,17 @@ correr_mac() {  # correr_mac [opciones de la sonda]
   [ "$status" -eq 2 ]
 }
 
+@test "sonda real --active: no pisa un plist preexistente ni sigue un enlace simbólico en su ruta" {
+  montar_mac
+  local la="$BATS_TEST_TMPDIR/casa/Library/LaunchAgents" objetivo="$BATS_TEST_TMPDIR/objetivo-ajeno"
+  echo intacto > "$objetivo"
+  HOME="$BATS_TEST_TMPDIR/casa" PATH="$MACPATH" TMPDIR="$BATS_TEST_TMPDIR" run "$BASH" -c \
+    '/usr/bin/ln -s "$1" "$HOME/Library/LaunchAgents/local.pulse.probe.$$.plist"; exec "$2" "$3" --active' _ "$objetivo" "$BASH" "$BATS_TEST_DIRNAME/../$PROBE"
+  [ "$(cat "$objetivo")" = intacto ]
+  [[ "$output" == *"CHECK servicio_carga UNKNOWN ya existe"* ]]
+  [ "$status" -eq 2 ]
+}
+
 @test "prototipo: la pestaña se valida con claves propias del objeto, no heredadas" {
   grep -q 'Object.hasOwn(states,k)' "$PROTO"
 }
@@ -503,7 +528,7 @@ PY
 
 # ── Medidas ──────────────────────────────────────────────────────────────────
 
-@test "medidas: las tres clases suman 120 y lo reutilizable es 96 (80 %)" {
+@test "medidas: coherencia aritmética del documento (62+34+24=120, 96 = 80 %); no verifica la medida en sí" {
   run python3 - "$MED" <<'PY'
 import re, sys
 t = open(sys.argv[1], encoding="utf-8").read()
@@ -526,8 +551,11 @@ PY
 }
 
 @test "medidas: declaran lo no medido y no presentan (a) ni (b) como resueltos" {
-  run grep -c -E 'no ejecutada en un Mac|No se ha ejecutado nada en un Mac|No se ha medido la política de ninguna organización|sin datos' "$MED"
-  [ "$output" -ge 4 ]
+  local f
+  for f in 'no ejecutada en un Mac' 'No se ha medido la política de ninguna organización' 'sin datos'; do
+    run grep -c -F "$f" "$MED"
+    [ "$output" -ge 1 ] || { echo "falta: $f"; return 1; }
+  done
   run grep -E 'decisión «C o basta A» es de la operadora' "$MED"
   [ "$status" -eq 0 ]
   run grep -iE 'viable en macOS|probado en macOS|verificado en macOS' "$MED"
@@ -540,12 +568,11 @@ PY
   [ "$status" -eq 1 ]
 }
 
-@test "spec: la confirmación del prototipo está registrada con fecha y respuesta literal" {
+@test "spec: la confirmación del prototipo sigue pendiente hasta que la operadora la registre ella (no la autora)" {
   run grep -A4 '^### Confirmación del prototipo' "$SPEC"
-  [[ "$output" == *"- prototipo: "* ]]
-  [[ "$output" == *"fecha: 2026-11-14"* ]]
-  [[ "$output" == *"respuesta: «Confirmo el prototipo y la C»"* ]]
-  [[ "$output" != *"pendiente"* ]]
+  [[ "$output" == *"- fecha: pendiente"* ]]
+  [[ "$output" == *"- respuesta: pendiente."* ]]
+  [[ "$output" != *"Confirmo"* ]]
   run grep -E '^status: APPROVED$' "$SPEC"
   [ "$status" -eq 0 ]
 }

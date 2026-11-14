@@ -82,9 +82,8 @@ Las diez escenas confirmadas (E1–E10) se agrupan en cinco momentos para cumpli
 
 ### Confirmación del prototipo
 
-- prototipo: `docs/specs/assets/SE-518-prototipo.html`, visto por la operadora publicado como página privada.
-- fecha: 2026-11-14
-- respuesta: «Confirmo el prototipo y la C». Registro de la orquestadora de la respuesta de la operadora a una pregunta interactiva el 2026-11-14; no es texto de la operadora más allá de esas palabras. Confirma el prototipo de S0 y la decisión «seguir con C (contratos primero)», que se apoya en la reutilización del 80 % del bucle (medidas de S0).
+- fecha: pendiente
+- respuesta: pendiente. La escribe la operadora en su propio commit o comentario, con enlace a su respuesta. S1 no se pone en curso sin ella (SE-505).
 
 ## Problema
 

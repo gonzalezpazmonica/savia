@@ -15,7 +15,7 @@
 # Escenarios: ok-activo, pasivo, python-viejo, shim-clt, sin-motor, bloquea-servicio, sin-forge
 # Salida: líneas «CHECK nombre ESTADO detalle», «MODO m ESTADO motivo» y «VEREDICTO ...».
 # Salida de proceso: 0 observar PERMITIDO · 1 observar NO_PERMITIDO · 2 NO_DETERMINADO ·
-#                    3 NO_APLICA (no es macOS) · 64 uso incorrecto.
+#                    3 NO_APLICA (no es macOS) · 64 uso incorrecto · 129/130/143 interrumpida (HUP/INT/TERM, con limpieza).
 #   (un fallo del entorno de la sonda, como no poder crear el directorio temporal, sale con 2.)
 # Fail-closed: un dato que no se puede observar es UNKNOWN y nunca cuenta como PASS.
 set -uo pipefail
@@ -85,14 +85,22 @@ SHIM_DIR="${PULSE_PROBE_SHIM_DIR:-/usr/bin}"
 is_shim() { case "$(command -v "$1" 2>/dev/null)" in "$SHIM_DIR/$1") ! clt_ok ;; *) return 1 ;; esac; }
 
 probe_python() {
-  if [ -n "$SOUL_RT" ] && [ -x "$SOUL_RT" ]; then add interprete UNKNOWN "runtime de Soul: existe y es ejecutable, pero no se ha ejecutado (si sirve para el núcleo se decide en S1)"; return; fi
-  if ! command -v python3 >/dev/null 2>&1; then add interprete FAIL "no hay python3 ni runtime de Soul"; return; fi
+  local soul_ok=0
+  [ -n "$SOUL_RT" ] && [ -x "$SOUL_RT" ] && soul_ok=1
+  # El runtime de Soul es respaldo: python3 válido decide primero (la spec dice «Python >= 3.9 o el runtime de Soul»).
+  if ! command -v python3 >/dev/null 2>&1; then
+    if [ "$soul_ok" -eq 1 ]; then add interprete UNKNOWN "sin python3; runtime de Soul: existe y es ejecutable, pero no se ha ejecutado (si sirve para el núcleo se decide en S1)"
+    else add interprete FAIL "no hay python3 ni runtime de Soul"; fi
+    return
+  fi
   if is_shim python3; then add interprete UNKNOWN "python3 es el atajo de las Command Line Tools sin instalar: ejecutarlo abriría el instalador"; return; fi
   local v maj min
   v="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null)" || v=""
   case "$v" in [0-9]*.[0-9]*) ;; *) add interprete UNKNOWN "no pude leer la versión de python3"; return ;; esac
   maj="${v%%.*}"; min="${v##*.}"
-  if [ "$maj" -gt 3 ] || { [ "$maj" -eq 3 ] && [ "$min" -ge 9 ]; }; then add interprete PASS "python $v"; else add interprete FAIL "python $v < 3.9"; fi
+  if [ "$maj" -gt 3 ] || { [ "$maj" -eq 3 ] && [ "$min" -ge 9 ]; }; then add interprete PASS "python $v"
+  elif [ "$soul_ok" -eq 1 ]; then add interprete UNKNOWN "python $v < 3.9; runtime de Soul: existe y es ejecutable, pero no se ha ejecutado (se decide en S1)"
+  else add interprete FAIL "python $v < 3.9"; fi
 }
 
 probe_git() {
@@ -139,18 +147,19 @@ active_cycle() {
   marker="$tmp/marca"
   if [ ! -d "$la" ]; then mkdir -p "$la" 2>/dev/null && ACT_DIR="$la"; fi
   ACT_PLIST="$plist"; ACT_UID="$uid"
-  printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' \
+  if [ -e "$plist" ] || [ -L "$plist" ]; then ACT_PLIST=""; cleanup; add servicio_carga UNKNOWN "ya existe $plist: no lo piso"; return; fi
+  ( set -C; printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' \
     '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
     "<plist version=\"1.0\"><dict><key>Label</key><string>$label</string>" \
     "<key>ProgramArguments</key><array><string>/usr/bin/touch</string><string>$(xml_escape "$marker")</string></array>" \
-    '<key>RunAtLoad</key><true/></dict></plist>' > "$plist" 2>/dev/null || { cleanup; add servicio_carga UNKNOWN "no pude escribir el plist de prueba"; return; }
+    '<key>RunAtLoad</key><true/></dict></plist>' > "$plist" ) 2>/dev/null || { cleanup; add servicio_carga UNKNOWN "no pude escribir el plist de prueba"; return; }
   if ! plutil -lint "$plist" >/dev/null 2>&1; then
     cleanup; add servicio_carga UNKNOWN "el plist de prueba no pasa plutil -lint (fallo de la sonda, no de la política)"; return
   fi
+  ACT_LABEL="$label"  # antes de bootstrap: una señal durante la orden también descarga
   if ! err="$(launchctl bootstrap "gui/$uid" "$plist" 2>&1)"; then
     cleanup; add servicio_carga FAIL "launchctl bootstrap rechazado: $err"; return
   fi
-  ACT_LABEL="$label"
   while [ $i -lt 10 ] && [ ! -e "$marker" ]; do sleep 1; i=$((i + 1)); done
   cleanup
   if [ -e "$marker" ]; then add servicio_carga PASS "servicio de usuario cargado, ejecutado y descargado sin sudo"
@@ -166,7 +175,9 @@ probe_lock() {
 probe_real() {
   TMP_PROBE="$(mktemp -d "${TMPDIR:-/tmp}/pulse-probe.XXXXXX")" || { echo "VEREDICTO sin datos suficientes: no pude crear un directorio temporal" >&2; exit 2; }
   trap cleanup_all EXIT
-  trap 'cleanup_all; exit 130' INT TERM HUP
+  trap 'cleanup_all; exit 130' INT
+  trap 'cleanup_all; exit 143' TERM
+  trap 'cleanup_all; exit 129' HUP
   probe_python; probe_git; probe_service "$TMP_PROBE"; probe_lock "$TMP_PROBE"
   if command -v gh >/dev/null 2>&1 || command -v az >/dev/null 2>&1; then add forge_cli PASS "gh o az presente"; else add forge_cli FAIL "ni gh ni az"; fi
   if command -v claude >/dev/null 2>&1 || command -v opencode >/dev/null 2>&1 || command -v codex >/dev/null 2>&1; then add motor PASS "hay un motor de inferencia en PATH"; else add motor FAIL "ninguno (válido: equivale a observar)"; fi
