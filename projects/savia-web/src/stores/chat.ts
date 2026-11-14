@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { bridgeInit } from '../utils/bridgeAuth'
 import { ref, watch } from 'vue'
 import { useAuthStore } from './auth'
 import type { ChatMessage, PermissionInfo } from '../types/chat'
@@ -155,11 +156,9 @@ export const useChatStore = defineStore('chat', () => {
 
   async function loadSessions() {
     const auth = useAuthStore()
-    if (!auth.serverUrl || !auth.token) return
+    if (!auth.serverUrl || !auth.isLoggedIn) return
     try {
-      const res = await fetch(`${auth.serverUrl}/sessions`, {
-        headers: { 'Authorization': `Bearer ${auth.token}` },
-      })
+      const res = await fetch(`${auth.serverUrl}/sessions`, bridgeInit(auth.token))
       if (res.ok) {
         const data = await res.json()
         const remote = Array.isArray(data) ? data : (data.sessions ?? [])

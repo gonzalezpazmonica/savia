@@ -1,0 +1,10 @@
+{
+  "id": "SE-528",
+  "status": "APPROVED",
+  "priority": "P1",
+  "phase": "A",
+  "title": "Tres arreglos de seguridad: web, puente y cúpulas",
+  "evidence": "docs/specs/SE-528-seguridad-web-puente-cupulas.spec.md",
+  "note": "Auditoría interna 2026-11-13: saneado y sesión en la web, autenticación del puente y clave de grants. Cuatro slices S1-S4. Q1-Q3 decididas por la operadora el 2026-11-13 (corte inmediato de los canales no admitidos, modo abierto solo en bucle local, sesiones web piden el token una vez). El detalle operativo es privado. Escenas y decisiones Q4-Q6 confirmadas por la operadora el 2026-11-13 (pregunta interactiva): sin sesión por cookie recargar pide pegar el token, un acceso antiguo no admitido lleva al formulario con una línea que dice por qué, y la propuesta va por rama nueva sin el historial de la anterior. Prototipo S0 pendiente: ningún slice arranca sin su confirmación (SE-505).",
+  "approval": "operadora, pregunta interactiva 2026-11-13 («Confirmo todo como está»); se formaliza al fusionar (SE-488)"
+}

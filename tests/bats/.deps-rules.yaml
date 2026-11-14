@@ -11,6 +11,7 @@ rules:
       - test-se-099-agents-split.bats
       - test-se253-agent-sync.bats
       - test-se253-dispatcher.bats
+      - test-se532-agent-catalog.bats
 
   - dir: ".opencode/skills/"
     tests:
@@ -54,3 +55,17 @@ rules:
   - file: "config/contract-digests.json"
     tests:
       - test-contract-pin.bats
+
+  # SE-532 S1: el validador del catálogo se re-ejecuta cuando cambia lo que valida.
+  - file: "config/agent-frontmatter.schema.json"
+    tests:
+      - test-se532-agent-catalog.bats
+  - file: "config/judge-routing.yaml"
+    tests:
+      - test-se532-agent-catalog.bats
+  - file: ".opencode/protected-jobs.yaml"
+    tests:
+      - test-se532-agent-catalog.bats
+  - dir: "contracts/capabilities/"
+    tests:
+      - test-se532-agent-catalog.bats
