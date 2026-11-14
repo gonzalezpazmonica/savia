@@ -2,71 +2,111 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { TeamMember } from '../types/bridge'
 
-const COOKIE_NAME = 'savia_session'
+import { bridgeInit, type SessionMode } from '../utils/bridgeAuth'
+
+// SE-528: el token nunca se guarda en el navegador. Solo se conserva lo no
+// secreto (dirección del puente, usuario y modo de sesión). La sesión por
+// cookie la emite el puente con HttpOnly: esta página no puede leerla.
+const LEGACY_COOKIE = 'savia_session'
 const CONN_COOKIE = 'savia_connection'
 
-function readCookie(): { serverUrl: string; username: string; token: string } | null {
-  const match = document.cookie.split('; ').find(c => c.startsWith(`${COOKIE_NAME}=`))
-  if (!match) return null
-  try { return JSON.parse(decodeURIComponent(match.split('=').slice(1).join('='))) }
-  catch { return null }
-}
+interface ConnInfo { serverUrl?: string; username?: string; mode?: SessionMode; token?: string }
 
-function writeCookie(serverUrl: string, username: string, token: string) {
-  const val = JSON.stringify({ serverUrl, username, token })
-  document.cookie = `${COOKIE_NAME}=${encodeURIComponent(val)}; path=/; SameSite=Lax`
-}
-
-function readConnCookie(): { serverUrl: string; token: string } | null {
+function readConnCookie(): ConnInfo | null {
   const match = document.cookie.split('; ').find(c => c.startsWith(`${CONN_COOKIE}=`))
   if (!match) return null
   try { return JSON.parse(decodeURIComponent(match.split('=').slice(1).join('='))) }
   catch { return null }
 }
 
-function writeConnCookie(serverUrl: string, token: string) {
-  const val = JSON.stringify({ serverUrl, token })
-  document.cookie = `${CONN_COOKIE}=${encodeURIComponent(val)}; path=/; max-age=31536000; SameSite=Lax`
+function readLegacyCookie(): ConnInfo | null {
+  const match = document.cookie.split('; ').find(c => c.startsWith(`${LEGACY_COOKIE}=`))
+  if (!match) return null
+  try { return JSON.parse(decodeURIComponent(match.split('=').slice(1).join('='))) }
+  catch { return null }
 }
 
-function clearCookie() {
-  document.cookie = `${COOKIE_NAME}=; path=/; max-age=0`
+function writeConnCookie(serverUrl: string, username: string, mode: SessionMode) {
+  const val = JSON.stringify({ serverUrl, username, mode })
+  document.cookie = `${CONN_COOKIE}=${encodeURIComponent(val)}; path=/; max-age=31536000; SameSite=Strict`
+}
+
+/** Q3: borra la sesión antigua que guardaba el token en una cookie legible. */
+function purgeLegacyToken(): ConnInfo {
+  const legacy = readLegacyCookie()
+  const conn = readConnCookie()
+  const info: ConnInfo = {
+    serverUrl: conn?.serverUrl || legacy?.serverUrl,
+    username: conn?.username || legacy?.username,
+    mode: conn?.token || legacy ? '' : conn?.mode || '',
+  }
+  if (legacy) document.cookie = `${LEGACY_COOKIE}=; path=/; max-age=0`
+  if (conn?.token || legacy) writeConnCookie(info.serverUrl || '', info.username || '', '')
+  return info
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  const saved = readCookie()
-  const conn = readConnCookie()
-  const serverUrl = ref(saved?.serverUrl || conn?.serverUrl || 'https://localhost:8922')
-  const username = ref(saved?.username || '')
-  const token = ref(saved?.token || conn?.token || '')
+  const saved = purgeLegacyToken()
+  const serverUrl = ref(saved.serverUrl || 'https://localhost:8922')
+  const username = ref(saved.username || '')
+  // Solo en memoria de la pestaña (modo sin sesión por cookie).
+  const token = ref('')
+  const sessionMode = ref<SessionMode>(saved.mode || '')
   const connected = ref(false)
   const profile = ref<TeamMember | null>(null)
   const role = ref<'admin' | 'user'>('user')
+  // Línea que explica por qué se vuelve al formulario (Q5).
+  const notice = ref('')
 
   const profileName = computed(() => profile.value?.name || username.value || '')
-  const isLoggedIn = computed(() => connected.value && !!token.value && !!username.value)
+  const isLoggedIn = computed(() => connected.value && !!username.value
+    && (!!token.value || sessionMode.value === 'cookie'))
   const isAdmin = computed(() => role.value === 'admin')
-  const hasCookie = computed(() => !!readCookie())
+  const hasCookie = computed(() => sessionMode.value === 'cookie')
 
-  function login(url: string, user: string, tok: string, member: TeamMember | null) {
+  function login(url: string, user: string, tok: string, member: TeamMember | null,
+                 mode: SessionMode = 'memory') {
     serverUrl.value = url
     username.value = user
-    token.value = tok
+    sessionMode.value = mode === 'cookie' ? 'cookie' : 'memory'
+    // Con sesión por cookie el cliente no conserva el token tras el login.
+    token.value = sessionMode.value === 'cookie' ? '' : tok
     profile.value = member
     connected.value = true
-    writeCookie(url, user, tok)
+    notice.value = ''
+    writeConnCookie(url, user, sessionMode.value === 'cookie' ? 'cookie' : '')
   }
 
+  /** Tras recargar: solo la sesión por cookie sobrevive; se comprueba en el puente. */
+  async function restore(): Promise<boolean> {
+    if (sessionMode.value !== 'cookie' || !username.value) {
+      sessionMode.value = ''
+      return false
+    }
+    try {
+      const res = await fetch(`${serverUrl.value}/auth/session`, bridgeInit(''))
+      if (res.ok) { connected.value = true; return true }
+    } catch { /* puente inalcanzable: formulario */ }
+    sessionMode.value = ''
+    connected.value = false
+    writeConnCookie(serverUrl.value, username.value, '')
+    return false
+  }
 
   function setProfile(member: TeamMember) { profile.value = member }
   function setConnected(ok: boolean) { connected.value = ok }
 
-  function logout() {
+  async function logout() {
+    if (sessionMode.value === 'cookie') {
+      try { await fetch(`${serverUrl.value}/auth/logout`, bridgeInit('', { method: 'POST' })) }
+      catch { /* la cookie caduca sola */ }
+    }
     connected.value = false
     token.value = ''
     username.value = ''
     profile.value = null
-    clearCookie()
+    sessionMode.value = ''
+    writeConnCookie(serverUrl.value, '', '')
   }
 
   // Legacy compat — useBridge reads these
@@ -78,12 +118,12 @@ export const useAuthStore = defineStore('auth', () => {
     const proto = tls ? 'https' : 'http'
     serverUrl.value = `${proto}://${h}:${p}`
     token.value = t
-    writeConnCookie(serverUrl.value, t)
+    writeConnCookie(serverUrl.value, username.value, sessionMode.value)
   }
 
   return {
     serverUrl, username, token, connected, profile, profileName, role,
-    isLoggedIn, isAdmin, hasCookie, host, port, useTls,
-    login, logout, setProfile, setConnected, save,
+    isLoggedIn, isAdmin, hasCookie, host, port, useTls, sessionMode, notice,
+    login, logout, restore, setProfile, setConnected, save,
   }
 })

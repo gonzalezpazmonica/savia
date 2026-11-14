@@ -16,7 +16,7 @@ export function useBridge() {
 
   async function get<T>(path: string): Promise<T | null> {
     try {
-      const res = await fetch(`${baseUrl()}${path}`, { headers: headers() })
+      const res = await fetch(`${baseUrl()}${path}`, { headers: headers(), credentials: 'include' })
       if (!res.ok) return null
       return await res.json() as T
     } catch {
@@ -27,7 +27,7 @@ export function useBridge() {
   async function post<T>(path: string, body: unknown): Promise<T | null> {
     try {
       const res = await fetch(`${baseUrl()}${path}`, {
-        method: 'POST', headers: headers(), body: JSON.stringify(body)
+        method: 'POST', headers: headers(), credentials: 'include', body: JSON.stringify(body)
       })
       if (!res.ok) return null
       return await res.json() as T
@@ -38,7 +38,7 @@ export function useBridge() {
 
   async function healthCheck(): Promise<boolean> {
     try {
-      const res = await fetch(`${baseUrl()}/dashboard`, { headers: headers() })
+      const res = await fetch(`${baseUrl()}/dashboard`, { headers: headers(), credentials: 'include' })
       return res.ok
     } catch {
       return false

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, watch } from 'vue'
 import { Copy, Eye, Code } from 'lucide-vue-next'
-import { marked } from 'marked'
+import { renderSafeMarkdown } from '../../utils/safeMarkdown'
 import hljs from 'highlight.js/lib/core'
 import javascript from 'highlight.js/lib/languages/javascript'
 import typescript from 'highlight.js/lib/languages/typescript'
@@ -39,28 +39,30 @@ const editContent = ref('')
 const isMarkdown = computed(() => props.filename.endsWith('.md'))
 const lineCount = computed(() => props.content.split('\n').length)
 
-// Configure marked for LinkedIn-style rendering with syntax highlighting
-const renderer = new marked.Renderer()
-renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
-  const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
-  const highlighted = language !== 'plaintext'
-    ? hljs.highlight(text, { language }).value
-    : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const lines = text.split('\n').length
-  const lineNums = lines > 5
-    ? `<span class="code-lines">${Array.from({ length: lines }, (_, i) => i + 1).join('\n')}</span>`
-    : ''
-  return `<div class="code-block-wrap"><div class="code-block-header"><span class="code-lang">${lang || ''}</span><button class="code-copy-btn" onclick="navigator.clipboard.writeText(this.closest('.code-block-wrap').querySelector('code').textContent).then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)})">Copy</button></div><pre><code class="hljs language-${language}">${lineNums}${highlighted}</code></pre></div>`
+// Resaltado de código: hljs devuelve HTML ya escapado (null = texto plano).
+function highlightCode(code: string, lang: string): string | null {
+  return hljs.getLanguage(lang) ? hljs.highlight(code, { language: lang }).value : null
 }
-renderer.link = ({ href, text }: { href: string; text: string }) => {
-  const isExternal = href.startsWith('http')
-  const target = isExternal ? ' target="_blank" rel="noopener"' : ''
-  return `<a href="${href}"${target}>${text}</a>`
+
+// Botón Copy de los bloques de código: un único listener delegado (sin onclick en línea).
+async function onViewerClick(e: MouseEvent) {
+  const btn = (e.target as HTMLElement | null)?.closest?.('.code-copy-btn') as HTMLElement | null
+  if (!btn) return
+  const code = btn.closest('.code-block-wrap')?.querySelector('code')?.textContent ?? ''
+  // Sin portapapeles (contexto no seguro) o con permiso denegado: no se anuncia copiado.
+  if (!(await writeClipboard(code))) return
+  btn.textContent = 'Copied!'
+  setTimeout(() => { btn.textContent = 'Copy' }, 1500)
 }
-renderer.image = ({ href, text }: { href: string; text: string }) => {
-  return `<img src="${href}" alt="${text}" loading="lazy" style="cursor:pointer" onclick="window.open(this.src,'_blank')" />`
+
+async function writeClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
 }
-marked.setOptions({ gfm: true, breaks: false, renderer })
 
 const frontmatter = computed(() => {
   if (!isMarkdown.value || !props.content.startsWith('---')) return null
@@ -81,13 +83,13 @@ const markdownBody = computed(() => {
     const end = body.indexOf('---', 3)
     if (end > 0) body = body.slice(end + 3).trim()
   }
-  return marked.parse(body) as string
+  return renderSafeMarkdown(body, { highlight: highlightCode })
 })
 
 const lines = computed(() => props.content.split('\n'))
 
 async function copyToClipboard() {
-  await navigator.clipboard.writeText(props.content)
+  if (!(await writeClipboard(props.content))) return
   copied.value = true
   setTimeout(() => { copied.value = false }, 1500)
 }
@@ -197,7 +199,7 @@ function insertLine(prefix: string) {
     </div>
 
     <!-- Rendered markdown (LinkedIn-style) -->
-    <div v-if="!editing && isMarkdown && showRendered" class="viewer-markdown" v-html="markdownBody" />
+    <div v-if="!editing && isMarkdown && showRendered" class="viewer-markdown" v-html="markdownBody" @click="onViewerClick" />
 
     <!-- Raw code view -->
     <div v-if="!editing && !(isMarkdown && showRendered)" class="viewer-code">

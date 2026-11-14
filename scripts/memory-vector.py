@@ -93,6 +93,22 @@ def _load_jsonl(store: str) -> list[dict]:
     return entries
 
 
+def _result(i: int, entry: dict, score: float) -> dict:
+    """Resultado de búsqueda. Lleva el origen y valid_to de la propia línea (SE-352):
+    el filtro de origen no debe deducirlos por topic_key, que comparten las revisiones."""
+    return {
+        "rank": i + 1,
+        "score": score,
+        "title": entry.get("title", ""),
+        "type": entry.get("type", ""),
+        "topic_key": entry.get("topic_key", ""),
+        "content": entry.get("content", "")[:200],
+        "ts": entry.get("ts", ""),
+        "origin": entry.get("origin") or "untrusted",
+        "valid_to": entry.get("valid_to"),
+    }
+
+
 def _compose_text(entry: dict) -> str:
     """Compose indexable text from entry fields."""
     parts = [
@@ -237,19 +253,8 @@ def cmd_search(store: str, query: str, top_k: int = 10) -> None:
         except Exception:
             pass  # Fallback to vector order
 
-    results = []
-    for i, c in enumerate(candidates[:top_k]):
-        entry = c["entry"]
-        score = c.get("rerank_score", c["vector_score"])
-        results.append({
-            "rank": i + 1,
-            "score": score,
-            "title": entry.get("title", ""),
-            "type": entry.get("type", ""),
-            "topic_key": entry.get("topic_key", ""),
-            "content": entry.get("content", "")[:200],
-            "ts": entry.get("ts", ""),
-        })
+    results = [_result(i, c["entry"], c.get("rerank_score", c["vector_score"]))
+               for i, c in enumerate(candidates[:top_k])]
 
     print(json.dumps({"fallback": False, "reranked": reranked, "results": results}, indent=2))
 

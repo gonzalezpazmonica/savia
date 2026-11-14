@@ -45,6 +45,17 @@ SESSION_HOT="$HOME/.claude/projects/$PROJ_SLUG/memory/session-hot.md"
 
 project=$(detect_project)
 
+# S4: carga del evento por stdin (si hay); guarda el resumen compactado una sola vez.
+status_line=""
+if [[ ! -t 0 ]]; then
+    payload=$(timeout 3 head -c 4194304 2>/dev/null || true)
+    # Sin sustitución de patrones sobre la carga: es cuadrática en bash con 4 MB. El guardador
+    # calla ante una carga en blanco.
+    if [[ -n "$payload" ]] && command -v python3 >/dev/null 2>&1; then
+        status_line=$(printf '%s' "$payload" | timeout 8 python3 -I "$(dirname "$0")/compaction-summary-save.py" --project "$project" 2>/dev/null || true)
+    fi
+fi
+
 command -v python3 >/dev/null 2>&1 || exit 0
 
 block=$(python3 -I - "$store_file" "$project" "$MAX_BYTES" "$SESSION_HOT" <<'PY'
@@ -182,10 +193,12 @@ PY
 py_rc=$?
 
 if [[ $py_rc -ne 0 || -z "$block" ]]; then
-    exit 0   # nada que emitir (o fallo del ayudante): session-hot.md no se vacía
+    [[ -n "$status_line" ]] && printf '%s\n' "$status_line"
+    exit 0   # nada más que emitir (o fallo del ayudante): session-hot.md no se vacía
 fi
 
 if printf '%s\n' "$block"; then
+    [[ -n "$status_line" ]] && printf '%s\n' "$status_line"
     # Emitido bien: ahora sí se consume session-hot.md.
     [[ -n "$SESSION_HOT" ]] && : > "$SESSION_HOT"
 fi
