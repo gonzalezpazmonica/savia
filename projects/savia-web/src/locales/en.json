@@ -1,4 +1,8 @@
 {
+  "auth": {
+    "legacyLink": "This link used an old access method that no longer works: the token no longer travels in the address. Paste it here once.",
+    "sessionExpired": "Your session expired or was closed. Paste your token again."
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
