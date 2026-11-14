@@ -337,6 +337,32 @@ OPEN_MODE_WARNING = (
     "AVISO DE SEGURIDAD: puente SIN AUTENTICACIÓN. Solo escucha en bucle local "
     "y solo acepta Host y Origin de bucle local. No lo expongas.")
 
+# --- TLS obligatorio fuera de bucle local (SE-528 S2b) ------------------------
+
+def is_loopback_listen(host: str, resolver=None) -> bool:
+    """True si todas las direcciones de escucha de ``host`` son de bucle local.
+
+    Fallo cerrado: un nombre que no resuelve, ``0.0.0.0`` o ``::`` no lo son.
+    """
+    return open_mode_listen_address(host, resolver or socket.getaddrinfo) is not None
+
+
+def tls_refusal_message(host: str, reason: str, config_dir: str) -> str:
+    return (
+        f"SE-528: no se pudo preparar TLS ({reason}) y el puente escucha en "
+        f"{host!r}, fuera de bucle local: no arranca sin cifrar. Para arreglarlo: "
+        f"instala openssl para que el puente genere su certificado en {config_dir}, "
+        f"o coloca ahí cert.pem y key.pem válidos; o escucha solo en esta máquina "
+        f"con --host 127.0.0.1. Si de verdad quieres HTTP sin cifrar en red "
+        f"(desaconsejado), pídelo de forma explícita con --no-tls.")
+
+
+TLS_LOOPBACK_WARNING = (
+    "AVISO DE SEGURIDAD: TLS no disponible; el puente arranca SIN CIFRAR solo "
+    "porque escucha en bucle local. Instala openssl o coloca cert.pem y key.pem "
+    "antes de escuchar en otra dirección.")
+
+
 FAIL_CLOSED_MESSAGE = (
     "SE-528: el puente no tiene token configurado y el modo abierto no está "
     "pedido; se rechaza la petición. Configura el token (fichero auth_token o "

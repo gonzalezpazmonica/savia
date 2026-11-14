@@ -54,6 +54,9 @@ Authentication (SE-528 S2):
     (?token=, ?access_token=, ...) responde 401 sin transición. Con cookie, las
     escrituras exigen Origin de la lista (--allowed-origin). Host contra
     --allowed-host. --no-auth solo en bucle local. Sin TLS no hay cookie.
+    Si TLS falla (sin openssl o certificado que no carga) y la escucha no es de
+    bucle local, el puente no arranca (código 2); en bucle local arranca en
+    HTTP con aviso SECURITY. --no-tls explícito no cambia.
     La cookie (SameSite=Strict) solo se emite si el Origin del login es https
     y del mismo host que el puente; entre sitios distintos la web usa el token
     en memoria. Con sesión por cookie, fija --allowed-origin: sin lista, otra
@@ -3974,6 +3977,45 @@ def _allowed_hosts_for(listen: str, open_mode: bool, extra) -> frozenset:
     return frozenset(names)
 
 
+def prepare_tls(no_tls: bool, loader=None):
+    """Certificado y contexto TLS: ``(ssl_context, huella, error)``.
+
+    Con ``--no-tls`` no se intenta nada y no es error. Cualquier fallo al
+    obtener o cargar el certificado devuelve el motivo en ``error``; la
+    decisión de arrancar la toma ``enforce_tls_policy`` (SE-528 S2b).
+    """
+    if no_tls:
+        return None, None, None
+    try:
+        cert_path, key_path, fingerprint = (loader or get_or_create_tls_cert)()
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        # M3 FIX: Set minimum TLS version to 1.2 and restrict cipher suite
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        ctx.set_ciphers('ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:ECDHE+AES256:AES256:!aNULL:!eNULL:!MD5:!DSS')
+        ctx.load_cert_chain(cert_path, key_path)
+    except (OSError, ssl.SSLError, subprocess.CalledProcessError, ValueError, TypeError) as e:
+        return None, None, f"{type(e).__name__}: {e}"
+    return ctx, fingerprint, None
+
+
+def enforce_tls_policy(listen_host: str, no_tls: bool, tls_error) -> None:
+    """Sin TLS por fallo, solo en bucle local (SE-528 S2b).
+
+    Fuera de bucle local sale con código 2 antes de abrir ningún puerto. En
+    bucle local sigue en HTTP con aviso SECURITY. ``--no-tls`` explícito es el
+    modo sin sesión por cookie de la spec y no pasa por aquí.
+    """
+    if no_tls or not tls_error:
+        return
+    if not bridge_auth.is_loopback_listen(listen_host):
+        msg = bridge_auth.tls_refusal_message(listen_host, tls_error, str(CONFIG_DIR))
+        print(msg, file=sys.stderr)
+        log(msg, "SECURITY")
+        sys.exit(2)
+    print(bridge_auth.TLS_LOOPBACK_WARNING, file=sys.stderr)
+    log(f"{bridge_auth.TLS_LOOPBACK_WARNING} Motivo: {tls_error}", "SECURITY")
+
+
 class _ThreadingHTTPServerV6(http.server.ThreadingHTTPServer):
     address_family = socket.AF_INET6
 
@@ -4022,7 +4064,9 @@ def main():
 
     Exit Codes:
         0: Normal exit (server stopped)
-        1: Error (missing/unverified adapter, TLS error, port in use, etc.)
+        1: Error (missing/unverified adapter, port in use, etc.)
+        2: Arranque negado (SE-528): --no-auth fuera de bucle local, o TLS
+           fallido escuchando fuera de bucle local (sin --no-tls explícito)
 
     Example Usage:
         python3 savia-bridge.py                              # Default: HTTPS on 0.0.0.0:8922
@@ -4055,14 +4099,8 @@ def main():
         sys.exit(0)
 
     # Setup TLS
-    use_tls = not args.no_tls
-    cert_fingerprint = None
-    if use_tls:
-        try:
-            cert_path, key_path, cert_fingerprint = get_or_create_tls_cert()
-        except FileNotFoundError:
-            log("Could not generate TLS certificate. Running without TLS.", "WARN")
-            use_tls = False
+    ssl_context, cert_fingerprint, tls_error = prepare_tls(args.no_tls)
+    use_tls = ssl_context is not None
 
     if args.print_fingerprint:
         if cert_fingerprint:
@@ -4070,6 +4108,9 @@ def main():
         else:
             print("(no TLS)")
         sys.exit(0)
+
+    # SE-528 S2b: fuera de bucle local no se arranca sin cifrar por un fallo.
+    enforce_tls_policy(listen_host, args.no_tls, tls_error)
 
     # Verify only the explicitly selected CLI adapter.
     try:
@@ -4116,11 +4157,6 @@ def main():
 
     protocol = "HTTP"
     if use_tls:
-        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        # M3 FIX: Set minimum TLS version to 1.2 and restrict cipher suite
-        ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
-        ssl_context.set_ciphers('ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:ECDHE+AES256:AES256:!aNULL:!eNULL:!MD5:!DSS')
-        ssl_context.load_cert_chain(cert_path, key_path)
         server.socket = ssl_context.wrap_socket(server.socket, server_side=True)
         protocol = "HTTPS"
 
