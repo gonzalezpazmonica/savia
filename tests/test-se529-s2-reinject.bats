@@ -35,7 +35,8 @@ rows = []
 def add(proj, i, tier, typ="discovery"):
     rows.append({"ts": "2026-10-%02dT%02d:00:00Z" % (1 + len(rows) // 24 % 28, len(rows) % 24),
                  "type": typ, "title": "%s-titular-%03d" % (proj, i), "content": "x",
-                 "project": proj, "importance_tier": tier, "topic_key": "t/%s/%d" % (proj, i)})
+                 "project": proj, "importance_tier": tier, "topic_key": "t/%s/%d" % (proj, i),
+                 "origin": "agent"})
 for i in range(na): add("alpha", i, "B")
 for i in range(nb): add("beta", i, "B")
 for i in range(ng): add("gamma", i, "B")
@@ -46,14 +47,16 @@ PY
 }
 
 run_post() { cd "$WORK" && run bash "$POST"; }
+# Bytes reales de stdout (run y $(...) recortan el salto final).
+post_bytes() { (cd "$WORK" && bash "$POST" > "$TMP/stdout.bin" 2>/dev/null); wc -c < "$TMP/stdout.bin"; }
 
 # ── AC-8: 500 entradas, 3 proyectos ──
 
 @test "AC-8: 500 entradas de 3 proyectos: salida <= 4096 B, solo del proyecto activo" {
     gen_store 200 200 100 5
+    [ "$(post_bytes)" -le 4096 ]
     run_post
     [ "$status" -eq 0 ]
-    [ "$(printf '%s' "$output" | wc -c)" -le 4096 ]
     [[ "$output" == *"Memoria tras compactar (proyecto: alpha)"* ]]
     [[ "$output" != *"beta-titular"* ]]
     [[ "$output" != *"gamma-titular"* ]]
@@ -82,7 +85,7 @@ run_post() { cd "$WORK" && run bash "$POST"; }
     gen_store 100 0 0 40
     SAVIA_REINJECT_MAX_BYTES=300 run_post
     [ "$status" -eq 0 ]
-    [ "$(printf '%s' "$output" | wc -c)" -le 300 ]
+    [ "$(SAVIA_REINJECT_MAX_BYTES=300 post_bytes)" -le 300 ]
     n=$(printf '%s\n' "$output" | grep -oE '\(y [0-9]+ más' | grep -oE '[0-9]+')
     shown=$(printf '%s\n' "$output" | grep -oE 'alpha-titular-[0-9]+' | sort -u | wc -l)
     [ "$n" -gt 0 ]
@@ -91,13 +94,12 @@ run_post() { cd "$WORK" && run bash "$POST"; }
 
 @test "AC-8 límite: tope = tamaño exacto cabe; un byte menos muestra menos" {
     gen_store 20 0 0 6
-    run_post
-    full=$(printf '%s' "$output" | wc -c)
+    full=$(post_bytes)   # bytes reales, salto final incluido
+    [ "$(SAVIA_REINJECT_MAX_BYTES=$full post_bytes)" -eq "$full" ]
     SAVIA_REINJECT_MAX_BYTES=$full run_post
-    [ "$(printf '%s' "$output" | wc -c)" -eq "$full" ]
     [[ "$output" != *"(y "* ]]
+    [ "$(SAVIA_REINJECT_MAX_BYTES=$((full - 1)) post_bytes)" -le $((full - 1)) ]
     SAVIA_REINJECT_MAX_BYTES=$((full - 1)) run_post
-    [ "$(printf '%s' "$output" | wc -c)" -le $((full - 1)) ]
     [[ "$output" == *"(y "* ]]
 }
 
@@ -138,9 +140,9 @@ run_post() { cd "$WORK" && run bash "$POST"; }
 @test "AC-9: entrada sin proyecto no fijada no entra; fijada sí; fijada de otro proyecto nunca" {
     cat > "$STORE" <<'EOF'
 {"ts":"2026-10-01T00:00:00Z","type":"discovery","title":"sinproy-suelta","project":"null","importance_tier":"B"}
-{"ts":"2026-10-02T00:00:00Z","type":"decision","title":"sinproy-fijada","project":"null","importance_tier":"A"}
-{"ts":"2026-10-03T00:00:00Z","type":"decision","title":"beta-fijada","project":"beta","importance_tier":"A"}
-{"ts":"2026-10-04T00:00:00Z","type":"decision","title":"alpha-fijada","project":"alpha","importance_tier":"A"}
+{"ts":"2026-10-02T00:00:00Z","type":"decision","title":"sinproy-fijada","project":"null","importance_tier":"A","origin":"agent"}
+{"ts":"2026-10-03T00:00:00Z","type":"decision","title":"beta-fijada","project":"beta","importance_tier":"A","origin":"agent"}
+{"ts":"2026-10-04T00:00:00Z","type":"decision","title":"alpha-fijada","project":"alpha","importance_tier":"A","origin":"agent"}
 EOF
     # Relleno B: A queda en 3 de 15 (20 %), por debajo del 30 %, así que tier A basta.
     for i in $(seq 1 11); do
@@ -155,7 +157,7 @@ EOF
 
 @test "AC-9: líneas corruptas del almacén se ignoran, sin fallar" {
     printf 'no es json\n{"title":\n' > "$STORE"
-    printf '{"ts":"2026-10-04T00:00:00Z","type":"decision","title":"alpha-ok","project":"alpha","importance_tier":"A"}\n' >> "$STORE"
+    printf '{"ts":"2026-10-04T00:00:00Z","type":"decision","title":"alpha-ok","project":"alpha","importance_tier":"A","origin":"agent"}\n' >> "$STORE"
     run_post
     [ "$status" -eq 0 ]
     [[ "$output" == "Memoria tras compactar (proyecto: alpha)"* ]]
@@ -167,8 +169,8 @@ EOF
 import json, sys
 rows = []
 for i in range(6):  # 6 de 8 son A (75 %): umbral estricto
-    rows.append({"ts": "2026-10-0%dT00:00:00Z" % (i + 1), "type": "decision", "title": "dec-A-%d" % i, "project": "alpha", "importance_tier": "A"})
-rows.append({"ts": "2026-10-07T00:00:00Z", "type": "feedback", "title": "fb-A", "project": "alpha", "importance_tier": "A"})
+    rows.append({"ts": "2026-10-0%dT00:00:00Z" % (i + 1), "type": "decision", "title": "dec-A-%d" % i, "project": "alpha", "importance_tier": "A", "origin": "agent"})
+rows.append({"ts": "2026-10-07T00:00:00Z", "type": "feedback", "title": "fb-A", "project": "alpha", "importance_tier": "A", "origin": "owner"})
 rows.append({"ts": "2026-10-08T00:00:00Z", "type": "discovery", "title": "disc-B", "project": "alpha", "importance_tier": "B"})
 open(sys.argv[1], "w").write("".join(json.dumps(r) + "\n" for r in rows))
 PY
@@ -187,7 +189,7 @@ open(sys.argv[1], "w").write("".join(json.dumps(r, ensure_ascii=False, separator
 PY
     SAVIA_REINJECT_MAX_BYTES=200 run_post
     [ "$status" -eq 0 ]
-    [ "$(printf '%s' "$output" | wc -c)" -le 200 ]
+    [ "$(SAVIA_REINJECT_MAX_BYTES=200 post_bytes)" -le 200 ]
     printf '%s' "$output" | iconv -f UTF-8 -t UTF-8 >/dev/null
     [[ "$output" == "Memoria tras compactar (proyecto: alpha)"* ]]
     [[ "$output" == *"ñandú-ü-日本語-"* ]]
@@ -212,12 +214,66 @@ PY
     grep -q redis-marca "$SESSION_HOT"
 }
 
+@test "session-hot: NO se vacía si escribir en stdout falla tras generar el bloque (/dev/full)" {
+    gen_store 3 0 0
+    printf 'Decisions: usar redis-marca\n' > "$SESSION_HOT"
+    cd "$WORK"
+    run bash -c "bash '$POST' > /dev/full 2>/dev/null; echo rc=\$?"
+    [ "$output" = "rc=0" ]
+    grep -q redis-marca "$SESSION_HOT"
+}
+
+@test "session-hot: si la línea de sesión no cabe, salen las fijadas y session-hot se conserva" {
+    gen_store 10 0 0 3   # 3 A de 13 (23 %): fijadas por tier A
+    python3 -c 'print("Decisions: " + "larga-marca " * 100)' > "$SESSION_HOT"
+    SAVIA_REINJECT_MAX_BYTES=300 run_post
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Fijado: "*"alpha-titular-90"* ]]
+    [[ "$output" != *"Esta sesión"* ]]
+    grep -q larga-marca "$SESSION_HOT"
+}
+
 @test "session-hot: sin nada que emitir (tope diminuto) no se vacía" {
     printf 'Decisions: usar redis-marca\n' > "$SESSION_HOT"
     SAVIA_REINJECT_MAX_BYTES=10 run_post
     [ "$status" -eq 0 ]
     [ -z "$output" ]
     [ -s "$SESSION_HOT" ]
+}
+
+# ── origen y sustitución ──
+
+@test "SE-352: untrusted, system o sin origen nunca son «Fijado»; sin proyecto ni se reinyectan" {
+    cat > "$STORE" <<'EOF'
+{"ts":"2026-10-01T00:00:00Z","type":"decision","title":"inyec-nulo","project":"null","importance_tier":"A","origin":"untrusted"}
+{"ts":"2026-10-02T00:00:00Z","type":"decision","title":"sistema-nulo","project":"null","importance_tier":"A","origin":"system"}
+{"ts":"2026-10-03T00:00:00Z","type":"decision","title":"sinorigen-nulo","project":"null","importance_tier":"A"}
+{"ts":"2026-10-04T00:00:00Z","type":"decision","title":"inyec-alpha","project":"alpha","importance_tier":"A","origin":"untrusted"}
+{"ts":"2026-10-05T00:00:00Z","type":"decision","title":"buena-alpha","project":"alpha","importance_tier":"A","origin":"owner"}
+EOF
+    for i in $(seq 1 10); do
+        printf '{"ts":"2026-09-%02dT00:00:00Z","type":"discovery","title":"alpha-relleno-%d","project":"alpha","importance_tier":"B","origin":"agent"}\n' "$i" "$i" >> "$STORE"
+    done
+    run_post
+    fij=$(printf '%s\n' "$output" | grep '^Fijado:')
+    [[ "$fij" == *"buena-alpha"* ]]
+    [[ "$fij" != *"inyec-alpha"* ]]
+    [[ "$output" != *"inyec-nulo"* ]]
+    [[ "$output" != *"sistema-nulo"* ]]
+    [[ "$output" != *"sinorigen-nulo"* ]]
+}
+
+@test "SPEC-034: una entrada sustituida (valid_to / superseded_by) no se reinyecta" {
+    cat > "$STORE" <<'EOF'
+{"ts":"2026-10-01T00:00:00Z","type":"decision","title":"vieja-decision","project":"alpha","importance_tier":"A","origin":"owner","topic_key":"decision/x","valid_to":"2026-10-02T00:00:00Z","superseded_by":"decision/y"}
+{"ts":"2026-10-01T01:00:00Z","type":"decision","title":"otra-vieja","project":"alpha","importance_tier":"B","origin":"owner","superseded_by":"decision/z"}
+{"ts":"2026-10-02T00:00:00Z","type":"decision","title":"nueva-decision","project":"alpha","importance_tier":"A","origin":"owner","topic_key":"decision/y"}
+EOF
+    run_post
+    [[ "$output" == *"nueva-decision"* ]]
+    [[ "$output" != *"vieja-decision"* ]]
+    [[ "$output" != *"otra-vieja"* ]]
+    [[ "$output" != *"(y "* ]]
 }
 
 # ── AC-10: --max-bytes ──
@@ -260,6 +316,22 @@ PY
     run bash "$MS" context --max-bytes abc
     [ "$status" -ne 0 ]
     [[ "$output" == *"entero"* ]]
+}
+
+@test "AC-10: --max-bytes sin valor (último argumento) falla sin emitir" {
+    ms_store
+    run bash -c "bash '$MS' context --max-bytes 2>'$TMP/err.txt' >'$TMP/out.txt'; echo rc=\$?"
+    [ "$output" != "rc=0" ]
+    [ ! -s "$TMP/out.txt" ]
+    grep -q "entero" "$TMP/err.txt"
+}
+
+@test "AC-10: con entrada vacía --max-bytes no avisa de «menor que la primera línea»" {
+    run bash -c "source '$MS'; printf '' | _cap_bytes 5 2>&1 >/dev/null"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    run bash -c "source '$MS'; printf 'linea-larga\n' | _cap_bytes 5 2>&1 >/dev/null"
+    [[ "$output" == *"menor que la primera línea"* ]]
 }
 
 @test "AC-10: search --max-bytes recorta también la búsqueda" {
