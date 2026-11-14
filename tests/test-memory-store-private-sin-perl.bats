@@ -17,6 +17,7 @@ sin_perl() {
 }
 
 @test "R06 contraste: con perl disponible se usa la ruta de perl y se conserva el texto público" {
+    command -v perl >/dev/null || skip "sin perl en este runner: el contraste solo aplica con perl"
     printf 'a <private>S1</private> b' > "$BATS_TEST_TMPDIR/in"
     run bash -c 'source "$1"; redact_private < "$2"' _ "$SCRIPT" "$BATS_TEST_TMPDIR/in"
     # La ruta de perl conserva el texto público alrededor del bloque; la de sin perl descarta todo.

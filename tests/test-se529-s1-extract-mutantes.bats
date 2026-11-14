@@ -36,15 +36,20 @@ saved_hot() { [ -f "$HOT" ] && grep -q "$1" "$HOT"; }
 
 # --- E02: propietario del fichero --------------------------------------------------------------
 # No hace falta ser otro usuario: un python3 de prueba (solo para el extractor del hook) devuelve
-# getuid()+1, así que el fichero, que es de quien ejecuta, parece ajeno.
-shim_uid() {
+# getuid()+<desfase>, así que con desfase 1 el fichero, que es de quien ejecuta, parece ajeno.
+# Acoplamiento deliberado: el shim reconoce el extractor por el literal «STORE_SCRIPT, MAX_BYTES» de
+# su código. Si ese literal cambia, el shim deja de interceptar, no se crea $T/shim.hit y los tests
+# E02 fallan en voz alta (no en silencio).
+shim_uid() { # shim_uid [desfase=1]
     mkdir -p "$T/shim"
     local real; real="$(command -v python3)"
+    local off="${1:-1}"
     cat > "$T/shim/python3" <<SHIM
 #!/bin/bash
 if [[ "\$1" == "-I" && "\$2" == "-c" && "\$3" == *"STORE_SCRIPT, MAX_BYTES"* ]]; then
+    : > "$T/shim.hit"
     code="\$3"; shift 3
-    exec "$real" -I -c "import os; _g = os.getuid; os.getuid = lambda: _g() + 1
+    exec "$real" -I -c "import os; _g = os.getuid; os.getuid = lambda: _g() + $off
 \$code" "\$@"
 fi
 exec "$real" "\$@"
@@ -57,16 +62,18 @@ SHIM
     turn user "Vamos con PROP_AJENO para el almacén" > "$TR"
     PATH="$T/shim:$PATH" run_hook "$TR"
     [ "$status" -eq 0 ]
+    [ -f "$T/shim.hit" ]
     [[ "$output" == *"No he podido leer la conversación"*"no es de la persona que ejecuta el hook"* ]]
     [ ! -f "$HOT" ]
     [ ! -s "$STORE" ]
 }
 
-@test "E02 control positivo: el mismo fichero con propietario propio sí se extrae" {
-    shim_uid
+@test "E02 control positivo: por el mismo shim, con propietario propio (desfase 0), sí se extrae" {
+    shim_uid 0
     turn user "Vamos con PROP_PROPIO para el almacén" > "$TR"
-    run_hook "$TR"
+    PATH="$T/shim:$PATH" run_hook "$TR"
     [ "$status" -eq 0 ]
+    [ -f "$T/shim.hit" ]
     [[ "$output" == *"guardados"* ]]
     saved_hot PROP_PROPIO
 }
@@ -178,6 +185,8 @@ sys.stdout.write(data)' "$1" > "$TR"
         turn user $'Vamos con plan <PRIVATE>EPSILON_PRIV\nsegunda línea</Private> y seguimos con OTRA_PUBLICA'
     } > "$TR"
     run_hook "$TR"
+    [ "$status" -eq 0 ]
+    saved_hot OTRA_PUBLICA
     not_saved EPSILON_PRIV
     not_saved "segunda línea"
 }
@@ -189,6 +198,7 @@ sys.stdout.write(data)' "$1" > "$TR"
     } > "$TR"
     run_hook "$TR"
     [ "$status" -eq 0 ]
+    saved_hot PUBLICA_ANTERIOR
     not_saved ZETA_SIN_CIERRE
 }
 

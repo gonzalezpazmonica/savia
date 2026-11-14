@@ -3,7 +3,8 @@
 # independiente del 2026-11-14. Cada test indica el mutante que mata. Fixtures sintéticos.
 # El directorio temporal es el de bats (BATS_TEST_TMPDIR): no hay borrado recursivo en este fichero.
 
-REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)}"
+# Ruta fija desde el propio fichero: una variable de entorno no puede desviar la suite a otro script.
+REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 
 setup() {
     TMP="$BATS_TEST_TMPDIR"
@@ -14,7 +15,7 @@ setup() {
     unset SAVIA_REINJECT_MAX_BYTES
     mkdir -p "$TMP/output" "$CLAUDE_PROJECT_DIR" "$HOME"
     STORE="$TMP/output/.memory-store.jsonl"
-    POST="${POST_COMPACTION_SCRIPT:-$REPO_ROOT/scripts/post-compaction.sh}"
+    POST="$REPO_ROOT/scripts/post-compaction.sh"
     MS="$REPO_ROOT/scripts/memory-store.sh"
     SAVER="$REPO_ROOT/scripts/compaction-summary-save.py"
     WORK="$TMP/work"; mkdir -p "$WORK"
@@ -84,7 +85,8 @@ line_of() { printf '%s\n' "$output" | grep "^$1"; }
     [[ "$output" != *V1* && "$output" != *V2* && "$output" != *V3* ]]
     reciente=$(line_of 'Reciente:')
     [[ "$reciente" == *AD1* ]]
-    ! printf '%s\n' "$output" | grep -q '^Fijado:'
+    fijados=$(printf '%s\n' "$output" | awk '/^Fijado:/ {c++} END {print c+0}')
+    [ "$fijados" -eq 0 ]
 }
 
 # --- I07: igualdad exacta en bytes de --max-bytes ----------------------------------------------

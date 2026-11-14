@@ -166,7 +166,8 @@ print(",".join(path), json.dumps(v, sort_keys=True))' "$SAVIA_COMPACT_SHAPE_LOG"
     payload_depth 8 '{"k6": {"k7": 1}}' | record
     run leaf_shape
     [ "$output" = 'k0,k1,k2,k3,k4,k5 {"t": "deep"}' ]
-    ! grep -q '"k6"\|"k7"' "$SAVIA_COMPACT_SHAPE_LOG"
+    run grep -q '"k6"\|"k7"' "$SAVIA_COMPACT_SHAPE_LOG"
+    [ "$status" -eq 1 ]
 }
 
 @test "B06 un escalar en profundidad 6 sigue registrándose (el corte es solo para contenedores)" {
@@ -205,6 +206,8 @@ import json
 d = {"f%03d" % i: i for i in range(10)}
 d["texto libre SECRETO-B07"] = 1
 print(json.dumps(d))' | record
-    ! grep -q "SECRETO-B07" "$SAVIA_COMPACT_SHAPE_LOG"
+    # `run` + estado explícito: un `! grep` a mitad de test no dispara errexit y sería inerte.
+    run grep -q "SECRETO-B07" "$SAVIA_COMPACT_SHAPE_LOG"
+    [ "$status" -eq 1 ]
     grep -q '<key>' "$SAVIA_COMPACT_SHAPE_LOG"
 }
