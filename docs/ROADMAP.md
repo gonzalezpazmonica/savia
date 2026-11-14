@@ -75,7 +75,7 @@ cada slice de SE-515 a partir de S1 necesita su propia aprobación:
 
 | Spec | Qué es | Primer paso |
 |---|---|---|
-| SE-513 | Admisión duradera de cambios de intención y comprobación previa | Sondas de durabilidad y tabla de soporte por harness |
+| SE-513 | Admisión duradera de cambios de intención y comprobación previa (RETIRADA 2026-11-14) | Sondas de durabilidad y tabla de soporte por harness |
 | SE-514 | Atención humana: una sola cola de preguntas, con su porqué | Escenas confirmadas y medición de partida |
 | SE-515 | Aprendizaje aplicado: de la lección recuperada a la obligación comprobada | Auditoría de solo lectura y línea base |
 
@@ -415,7 +415,7 @@ Era exprés (1 día). Trigger: tras Era 186 hook ratchet closure, audit profunda
 - OK **SE-072** Verified Memory Axiom — IMPLEMENTED batch 57
 - **SE-073** Memory Index Cap Tiered — **IMPLEMENTED** (M 4h)
 - **SE-074** Parallel spec execution — **IMPLEMENTED** (M 8h Slice 1 + S 3h Slice 1.5 + S 4h Slice 2 + M 6h Slice 3 = L 21h)
-- **SE-075** Voicebox adoption — Slices 1+2 IMPLEMENTED 2026-04-27 (task-queue.py + savia-voice-chunk.sh + sentence-splitter.py, BATS 53/53 certified); Slice 3 (Kokoro 82M CPU) DEFERRED — requires explicit user authorization for ~500MB model download
+- **SE-075** Voicebox adoption — Slices 1+2 IMPLEMENTED 2026-04-27 (task-queue.py + savia-voice-chunk.sh + sentence-splitter.py, BATS 53/53 certified; task-queue.py retirado el 2026-11-14 por no tener consumidor); Slice 3 (Kokoro 82M CPU) DEFERRED — requires explicit user authorization for ~500MB model download
 - **SE-076** QueryWeaver patterns — IMPLEMENTED 2026-04-27 (3 slices: episodic memory + AzDo schema graph + LLM healer; AC-08/09/12 follow-up evolutivo)
 
 **Era 189 — OpenCode Sovereignty (CLOSED 2026-04-26)**:
@@ -635,8 +635,8 @@ Post-auditoria de alineacion OpenCode (inicio de sesion 2026-05-02). 4 gaps dete
 
 ### Sinergias documentadas
 
-- SE-074 + SE-075 Slice 1: orquestador paralelo usa cola serial intra-worktree (`task_queue.py`) — CERRADO en Era 188
-- SE-075 Slice 1 + SE-076 Slice 3: healer async usa `task_queue` para reintentos — CERRADO en Era 188
+- SE-074 + SE-075 Slice 1: orquestador paralelo usa cola serial intra-worktree (`task_queue.py`) — CERRADO en Era 188; la cola se retiró el 2026-11-14: el orquestador nunca la llamó
+- SE-075 Slice 1 + SE-076 Slice 3: healer async usa `task_queue` para reintentos — CERRADO en Era 188; la cola se retiró el 2026-11-14: el healer nunca la llamó
 - SE-076 Slice 1 + SPEC-027: episodes extienden el grafo Phase 1 ya existente — CERRADO en Era 188
 - **SPEC-SCM-COVERAGE + SPEC-SCM-FRESHCHECK + SE-084**: SCM 100% coverage + check mode funcional → auditor de skills puede validar consistencia SCM como parte del gate G14
 - **SPEC-OPC-AGENTSYNC + SPEC-OPC-CROSS-AUDIT**: sync script arregla el gap actual, cross-audit previene recurrencia
