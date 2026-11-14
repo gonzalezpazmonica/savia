@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# telemetry-issues.sh — SE-334 S2: agrupa eventos por fingerprint en issues.
+# telemetry-issues.sh — SE-534 S2: agrupa eventos por fingerprint en issues.
 #
 # Lee telemetry-events.jsonl (eventos con fingerprint.hash adjunto vía
 # telemetry-fingerprint.py), agrupa y escribe/actualiza

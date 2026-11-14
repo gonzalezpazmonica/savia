@@ -1,0 +1,9 @@
+{
+  "id": "SE-534",
+  "status": "DEFERRED",
+  "priority": "P3",
+  "phase": "C",
+  "title": "Telemetry Intelligence: fingerprint, issues y alertas (antes SE-334 duplicado)",
+  "evidence": "docs/specs/SE-534-telemetry-intelligence.spec.md; S1+S2 en main (PR #982)",
+  "note": "Renumerada desde SE-334 (había dos). Decisión de la operadora 2026-11-14: sin consumidor; no se cablea; revisar 2027-02-14 si hay errores repetidos (solo 27 fallos de despacho en 98 días). Registro necesario para el gate de planning-state; el estado lo confirma la orquestadora."
+}

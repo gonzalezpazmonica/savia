@@ -107,7 +107,6 @@ done
 # repository history but do not permit another file to reuse those IDs.
 declare -A ACCEPTED_DUPLICATES=(
   [SE-260]="docs/specs/SE-260-blast-radius.spec.md|docs/specs/SE-260-gentle-patterns.spec.md"
-  [SE-334]="docs/specs/SE-334-telemetry-intelligence.spec.md|docs/specs/SE-334-vaults-scl-criteria-hardening.spec.md"
   [SE-348]="docs/propuestas/SE-348-resiliencia-baseline-capas.md|docs/specs/SE-348-integridad-savia.spec.md"
 )
 

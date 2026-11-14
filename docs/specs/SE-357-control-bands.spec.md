@@ -24,7 +24,7 @@ determinista vigila métricas (CI failure rate, 5xx rate, PR cycle time) con
 reglas Western Electric sobre una ventana rodante; la detección **nunca usa
 modelo**. Al cruzar el band, el agente se invoca de forma headless y solo puede
 actuar por rutas gateadas. Savia ya tiene: telemetría local (`telemetry-events.jsonl`,
-SE-334), ledger de runs (SE-349), sesión nocturna autónoma (overnight-sprint).
+SE-534), ledger de runs (SE-349), sesión nocturna autónoma (overnight-sprint).
 **Lo que falta**: el mecanismo de detección determinista con tiers por σ y la
 conversión del hallazgo en `intent.md` para re-entrar al pipeline.
 
@@ -86,7 +86,7 @@ dismiss (dismiss tunca los bands).
 ### Bindings touched
 - `scripts/control-band-detect.sh` (nuevo), `scripts/control-band-agent.sh` (nuevo)
 - `control-bands.yaml` (nuevo), `intent/` (nuevo)
-- `scripts/telemetry-events.jsonl` reader (reutiliza SE-334)
+- `scripts/telemetry-events.jsonl` reader (reutiliza SE-534)
 
 ### Verification protocol
 ```bash
@@ -99,4 +99,4 @@ bash scripts/control-band-detect.sh --metric ci_test_failure_rate --dry-run
 
 ## Referencias
 - Anthropic: claude.com/blog/the-ai-native-sdlc-playbook (Stage 6, closing the loop)
-- Savia: SE-334 (telemetría), SE-349 (ledger runs), `autonomous-safety.md`, CRIT-001
+- Savia: SE-534 (telemetría), SE-349 (ledger runs), `autonomous-safety.md`, CRIT-001
