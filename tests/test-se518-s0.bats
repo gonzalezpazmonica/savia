@@ -540,10 +540,12 @@ PY
   [ "$status" -eq 1 ]
 }
 
-@test "spec: la confirmación del prototipo sigue pendiente (la da la operadora)" {
-  run grep -A3 '^### Confirmación del prototipo' "$SPEC"
-  [[ "$output" == *"fecha: pendiente"* ]]
-  [[ "$output" == *"respuesta: pendiente"* ]]
+@test "spec: la confirmación del prototipo está registrada con fecha y respuesta literal" {
+  run grep -A4 '^### Confirmación del prototipo' "$SPEC"
+  [[ "$output" == *"- prototipo: "* ]]
+  [[ "$output" == *"fecha: 2026-11-14"* ]]
+  [[ "$output" == *"respuesta: «Confirmo el prototipo y la C»"* ]]
+  [[ "$output" != *"pendiente"* ]]
   run grep -E '^status: APPROVED$' "$SPEC"
   [ "$status" -eq 0 ]
 }
