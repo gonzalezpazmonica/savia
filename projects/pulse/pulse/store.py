@@ -29,7 +29,7 @@ class PulseError(Exception):
 
 
 class EntradaInvalida(PulseError):
-    """Argumento fuera de contrato (salida 2)."""
+    """Argumento o dato fuera de contrato (salida 2). Nunca se escribe nada."""
 
 
 def now():
@@ -112,7 +112,7 @@ def read_json(path, schema_name):
         return estado, raw
     try:
         data = json.loads(raw.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError):
+    except (ValueError, UnicodeDecodeError, RecursionError):
         return FALLIDA, "no es JSON válido"
     errors = schema.validate(data, schema.load_schema(schema_name))
     if errors:
@@ -138,7 +138,7 @@ def read_jsonl(path, schema_name):
             continue
         try:
             rec = json.loads(line.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError):
+        except (ValueError, UnicodeDecodeError, RecursionError):
             rejected.append("línea %d: no es JSON válido" % n)
             continue
         errors = schema.validate(rec, sch)
@@ -149,11 +149,15 @@ def read_jsonl(path, schema_name):
     return OK, records, rejected
 
 
-def _lock(root, timeout=10.0):
-    """Cerrojo exclusivo de escritor en `<root>/.lock` (fcntl; el SO lo libera si el proceso muere)."""
+def _lock(root, timeout=10.0, name=".lock", ocupado="otro proceso de Pulse tiene el cerrojo; no se ha escrito nada"):
+    """Cerrojo exclusivo en `<root>/<name>` (fcntl; el SO lo libera si el proceso muere).
+
+    `.lock` es el de escritor: se coge solo lo que dura leer y escribir, nunca
+    alrededor de algo lento (notificar, lanzar procesos).
+    """
     import fcntl
     ensure_dir(root)
-    fd = os.open(os.path.join(root, ".lock"), os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    fd = os.open(os.path.join(root, name), os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
     deadline = time.monotonic() + timeout
     try:
         while True:
@@ -162,7 +166,7 @@ def _lock(root, timeout=10.0):
                 break
             except OSError:
                 if time.monotonic() >= deadline:
-                    raise PulseError("otro proceso de Pulse tiene el cerrojo; no se ha escrito nada")
+                    raise PulseError(ocupado)
                 time.sleep(0.05)
         yield
     finally:
@@ -176,7 +180,7 @@ def write_json_atomic(root, name, data, schema_name):
     """Valida y sustituye el fichero de forma atómica (0600). Un dato inválido no se escribe."""
     errors = schema.validate(data, schema.load_schema(schema_name))
     if errors:
-        raise PulseError("contrato inválido, no se escribe: " + errors[0])
+        raise EntradaInvalida("contrato inválido, no se escribe: " + errors[0])
     ensure_dir(root)
     fd, tmp = tempfile.mkstemp(prefix="." + name + ".", dir=root)
     try:
@@ -196,7 +200,7 @@ def append_jsonl(root, name, record, schema_name):
     """Valida y añade una línea (solo añadir, 0600). Un registro inválido no se escribe."""
     errors = schema.validate(record, schema.load_schema(schema_name))
     if errors:
-        raise PulseError("contrato inválido, no se escribe: " + errors[0])
+        raise EntradaInvalida("contrato inválido, no se escribe: " + errors[0])
     ensure_dir(root)
     line = (json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
     if len(line) > MAX_LINE_BYTES:

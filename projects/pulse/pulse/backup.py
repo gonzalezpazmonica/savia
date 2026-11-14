@@ -82,19 +82,33 @@ def pendientes(root, ahora=None, incluir_respaldo=False):
             if store.parse_ts(p["caduca"]) > ahora and p["id"] not in acusados and p["id"] not in por_respaldo]
 
 
+DELIVER_LOCK = ".deliver.lock"
+
+
 def entregar(root, max_validez=MAX_VALIDEZ_DEFECTO, maximo=MAX_POR_PASADA, notificador=notificar_so):
-    """Una pasada de respaldo. Devuelve {'soul': bool, 'motivo': str, 'avisados': [ids]}."""
+    """Una pasada de respaldo. Devuelve {'soul': bool, 'motivo': str, 'avisados': [ids]}.
+
+    El notificador puede tardar (hasta 10 s por aviso): nunca se llama con el
+    cerrojo de escritor cogido, para no bloquear el fin de un trabajo. «Una vez»
+    lo garantiza el cerrojo propio de la pasada (una sola pasada a la vez) más
+    volver a comprobar `pendientes` con el cerrojo de escritor antes de anotar.
+    """
     vigente, motivo = presencia(root, max_validez)
     if vigente:
         return {"soul": True, "motivo": motivo, "avisados": []}
     avisados = []
-    with store.lock(root):
+    with store.lock(root, timeout=0, name=DELIVER_LOCK,
+                    ocupado="otra pasada de respaldo está en curso; no se avisa dos veces"):
         for pet in pendientes(root)[:maximo]:
+            with store.lock(root):
+                if pet["id"] not in {p["id"] for p in pendientes(root)}:
+                    continue  # acusada o caducada entretanto
             texto = "%s: %s" % (MARCA, pet["que"])
             ok = notificador("Savia", texto)
             ev = events._event("aviso_respaldo", pet["nivel"], entrega="respaldo", ref=pet["id"],
                                texto=_limpio(texto, 300), canal_so="ok" if ok else "no_disponible")
-            store.append_jsonl(root, events.EVENTS, ev, "evento")
+            with store.lock(root):
+                store.append_jsonl(root, events.EVENTS, ev, "evento")
             avisados.append(pet["id"])
     return {"soul": False, "motivo": motivo, "avisados": avisados}
 

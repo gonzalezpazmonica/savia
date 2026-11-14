@@ -1,0 +1,10 @@
+# Defensa (revisión #1576): si PULSE_DATA_DIR apunta dentro del repo, el estado
+# del operador no se versiona. Pulse nunca escribe estos nombres en el repo por sí mismo.
+eventos.jsonl
+peticiones.json
+latido.json
+presencia.json
+acuses.jsonl
+.lock
+.deliver.lock
+.*.json.*

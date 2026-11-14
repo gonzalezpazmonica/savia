@@ -4,7 +4,9 @@ Los esquemas de `schemas/` son la única fuente de verdad del contrato: los lee
 este validador y puede leerlos Soul. Fail-closed: una palabra clave que el
 validador no soporta lanza `SchemaNoSoportado`; nunca se ignora en silencio.
 """
+import datetime as dt
 import json
+import math
 import os
 import re
 
@@ -13,8 +15,9 @@ SCHEMAS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 _ANNOTATIONS = {"title", "description"}
 _SUPPORTED = _ANNOTATIONS | {
     "type", "required", "properties", "enum", "const", "pattern", "minLength",
-    "maxLength", "minimum", "maximum", "items", "maxItems", "allOf", "if", "then",
+    "maxLength", "minimum", "maximum", "items", "maxItems", "allOf", "if", "then", "format",
 }
+_FORMATS = {"date-time": "%Y-%m-%dT%H:%M:%SZ"}  # UTC con segundos: la única forma del contrato
 
 
 class SchemaNoSoportado(Exception):
@@ -37,8 +40,8 @@ def _type_ok(value, tname):
         return isinstance(value, bool)
     if tname == "integer":
         return isinstance(value, int) and not isinstance(value, bool)
-    if tname == "number":
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if tname == "number":  # NaN e infinito no son números del contrato
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
     raise SchemaNoSoportado("tipo " + repr(tname))
 
 
@@ -48,6 +51,8 @@ def validate(value, schema, path="$"):
     if unknown:
         raise SchemaNoSoportado("palabras clave no soportadas: " + ", ".join(sorted(unknown)))
     errors = []
+    if "format" in schema and schema["format"] not in _FORMATS:
+        raise SchemaNoSoportado("formato " + repr(schema["format"]))
     if "type" in schema and not _type_ok(value, schema["type"]):
         return [path + ": se esperaba " + schema["type"]]
     if "const" in schema and (value != schema["const"] or type(value) is not type(schema["const"])):
@@ -61,6 +66,11 @@ def validate(value, schema, path="$"):
             errors.append(path + ": demasiado corto")
         if "maxLength" in schema and len(value) > schema["maxLength"]:
             errors.append(path + ": demasiado largo")
+        if "format" in schema:
+            try:  # la forma la mira el patrón; aquí, que la fecha exista (no 2026-02-30)
+                dt.datetime.strptime(value, _FORMATS[schema["format"]])
+            except ValueError:
+                errors.append(path + ": fecha imposible")
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         if "minimum" in schema and value < schema["minimum"]:
             errors.append(path + ": por debajo del mínimo")

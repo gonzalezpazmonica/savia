@@ -508,7 +508,11 @@ class Estado(Base):
         r = self.cli("status", "--json")
         self.assertEqual(r.returncode, 0)
         json.loads(r.stdout)
-        for prohibido in (self.root, os.path.expanduser("~"), os.environ.get("USER", "\0")):
+        prohibidos = [self.root, self._tmp.name, os.path.expanduser("~")]
+        user = os.environ.get("USER", "")
+        if len(user) >= 4:  # un nombre corto («a») casaría con cualquier texto
+            prohibidos.append(user)
+        for prohibido in prohibidos:
             self.assertNotIn(prohibido, r.stdout)
 
     def test_sin_soul_pulse_funciona(self):
@@ -520,7 +524,8 @@ class Estado(Base):
     def test_latido_ttl_fuera_de_rango(self):
         self.assertEqual(self.cli("latido", "--pasada", "1", "--ttl", "5").returncode, 2)
         self.assertFalse(os.path.exists(os.path.join(self.root, "latido.json")))
-        self.assertEqual(self.cli("latido", "--pasada", "1", "--fuente-vencida", "a b").returncode, 1)
+        # dato fuera de contrato = entrada inválida (2), como el resto de rangos (revisión #1576)
+        self.assertEqual(self.cli("latido", "--pasada", "1", "--fuente-vencida", "a b").returncode, 2)
 
 
 class Respaldo(Base):
@@ -656,6 +661,174 @@ class Respaldo(Base):
         self.assertFalse(os.path.exists(marca))
 
 
+class Revision1576(Base):
+    """Hallazgos de la revisión independiente de la PR #1576."""
+
+    def fines(self, job="w1"):
+        return [e for e in self.ledger() if e["tipo"] == "job_finished" and e["job_id"] == job]
+
+    def ids_peticiones(self):
+        est, snap = store.read_json(os.path.join(self.root, "peticiones.json"), "peticiones")
+        self.assertEqual(est, store.OK)
+        return {p["id"] for p in snap["peticiones"]}
+
+    # P1-1: el respaldo no notifica con el cerrojo de escritor cogido
+    def test_respaldo_no_tiene_el_cerrojo_de_escritor_mientras_notifica(self):
+        self.publica(self.peticion("p1"))
+        pudo = []
+
+        def notif_lento(_t, _x):
+            try:
+                with store.lock(self.root, timeout=0.3):
+                    pudo.append(True)
+            except PulseError:
+                pudo.append(False)
+            return True
+        backup.entregar(self.root, notificador=notif_lento)
+        self.assertEqual(pudo, [True])
+
+    def test_fin_de_trabajo_durante_la_notificacion_se_registra(self):
+        events.job_start(self.root, "w1")
+        self.publica(self.peticion("p1"))
+        backup.entregar(self.root, notificador=lambda t, x: events.job_finish(self.root, "w1", 0) and True)
+        self.assertEqual(len(self.fines()), 1)
+
+    def test_dos_pasadas_a_la_vez_no_avisan_dos_veces(self):
+        self.publica(self.peticion("p1"))
+        avisos = []
+        with store.lock(self.root, name=backup.DELIVER_LOCK):
+            with self.assertRaises(PulseError):
+                backup.entregar(self.root, notificador=lambda t, x: avisos.append(x) or True)
+        self.assertEqual(avisos, [])
+        self.assertEqual(self.cli("deliver").returncode, 0)  # libre otra vez
+
+    def test_acusada_durante_la_pasada_no_se_avisa(self):
+        self.publica(self.peticion("p1"), self.peticion("p2"))
+        avisos = []
+
+        def notif(_t, x):
+            avisos.append(x)
+            self.write("acuses.jsonl", json.dumps({"schema_version": "1", "id": "p2", "canal": "soul",
+                                                   "at": ts()}) + "\n")
+            return True
+        backup.entregar(self.root, notificador=notif)
+        self.assertEqual(len(avisos), 1)
+        self.assertEqual([e["ref"] for e in self.ledger() if e["tipo"] == "aviso_respaldo"], ["p1"])
+
+    # P1-2: fin y petición juntos
+    def test_peticiones_ilegible_no_deja_fin_huerfano_y_el_reintento_completa(self):
+        events.job_start(self.root, "w1")
+        self.write("peticiones.json", "{roto")
+        with self.assertRaises(PulseError):
+            events.job_finish(self.root, "w1", 0)
+        self.assertEqual(self.fines(), [])  # nada anotado
+        os.unlink(os.path.join(self.root, "peticiones.json"))
+        _ev, nuevo = events.job_finish(self.root, "w1", 0)
+        self.assertTrue(nuevo)
+        self.assertEqual(self.ids_peticiones(), {"aviso-run-w1-1"})
+
+    def test_fin_anotado_sin_peticion_se_repara_al_reintentar(self):
+        events.job_start(self.root, "w1")
+        events.job_finish(self.root, "w1", 3)
+        os.unlink(os.path.join(self.root, "peticiones.json"))  # p. ej. el disco falló al escribirla
+        ev, nuevo = events.job_finish(self.root, "w1", 3)
+        self.assertFalse(nuevo)
+        self.assertEqual(len(self.fines()), 1)
+        self.assertEqual(self.ids_peticiones(), {"aviso-run-w1-1"})
+        _, snap = store.read_json(os.path.join(self.root, "peticiones.json"), "peticiones")
+        self.assertIn("código 3", snap["peticiones"][0]["por_que_ahora"])
+
+    def test_cli_peticiones_ilegible_dice_la_verdad(self):
+        self.write("peticiones.json", "{roto")
+        r = self.cli("run", "--job-id", "w1", "--", "true")
+        self.assertIn("no se registró el fin", r.stderr)
+        self.assertEqual(self.fines(), [])
+
+    # P2: fechas con forma válida pero imposibles, NaN, JSON muy anidado
+    def test_fechas_imposibles_son_fallida_y_no_revientan(self):
+        self.publica(self.peticion("p1", caduca="2026-02-30T00:00:00Z"))
+        self.assertEqual(store.read_json(os.path.join(self.root, "peticiones.json"), "peticiones")[0], store.FALLIDA)
+        for cmd in (("status",), ("status", "--json"), ("inbox",), ("deliver",)):
+            r = self.cli(*cmd)
+            self.assertEqual(r.returncode, 0, (cmd, r.stderr))
+            self.assertNotIn("Traceback", r.stderr)
+        self.assertIn("No puedo leer la lista de pendientes", self.cli("inbox").stdout)
+
+    def test_evento_con_fecha_imposible_se_rechaza_y_se_cuenta(self):
+        events.job_start(self.root, "w1")
+        with open(os.path.join(self.root, "eventos.jsonl"), "a") as fh:
+            fh.write(json.dumps({"schema_version": "1", "id": "ev-0123456789abcdef", "tipo": "job_started",
+                                 "at": "2026-13-45T10:00:00Z", "clase": "ninguna", "entrega": "ninguna",
+                                 "nivel": "N4", "job_id": "w2", "intento": 1}) + "\n")
+        est, evs, rej = events.read_ledger(self.root)
+        self.assertEqual((est, len(evs), len(rej)), (store.OK, 1, 1))
+        self.assertIn("fecha imposible", rej[0])
+        r = self.cli("status")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("1 líneas del registro de eventos son ilegibles", r.stdout)
+
+    def test_formato_desconocido_falla_cerrado(self):
+        with self.assertRaises(schema.SchemaNoSoportado):
+            schema.validate("x", {"type": "string", "format": "email"})
+        self.assertEqual(schema.validate("2026-02-28T23:59:59Z", {"type": "string", "format": "date-time"}), [])
+        self.assertEqual(len(schema.validate("2026-02-29T00:00:00Z", {"type": "string", "format": "date-time"})), 1)
+
+    def test_presencia_con_fecha_imposible_no_cuenta(self):
+        self.write("presencia.json", {"schema_version": "1", "at": ts(), "valid_until": "2026-11-31T00:00:00Z"})
+        self.assertFalse(backup.presencia(self.root)[0])
+
+    def test_duracion_nan_o_infinita_es_entrada_invalida(self):
+        for val in ("nan", "inf", "-inf"):
+            r = self.cli("latido", "--pasada", "1", "--duracion", val)
+            self.assertEqual(r.returncode, 2, val)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "latido.json")))
+        self.assertEqual(self.cli("latido", "--pasada", "1", "--duracion", "1.5").returncode, 0)
+
+    def test_latido_con_nan_en_disco_es_sin_senales(self):
+        self.write("latido.json", '{"schema_version": "1", "at": "%s", "valid_until": "%s", "pasada": 1, '
+                                  '"duracion_s": NaN, "fuentes_vencidas": []}' % (ts(-5), ts(100)))
+        r = self.cli("status")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("Pulse: sin señales", r.stdout)
+
+    def test_json_muy_anidado_es_fallida(self):
+        self.write("peticiones.json", "[" * 200000)
+        self.assertEqual(store.read_json(os.path.join(self.root, "peticiones.json"), "peticiones")[0], store.FALLIDA)
+        self.write("acuses.jsonl", "[" * 60000 + "\n")
+        est, recs, rej = store.read_jsonl(os.path.join(self.root, "acuses.jsonl"), "acuse")
+        self.assertEqual((est, recs, len(rej)), (store.OK, [], 1))
+
+    # P2: códigos de salida coherentes con el 2 documentado
+    def test_rangos_fuera_de_contrato_salen_con_2(self):
+        for args in (("job-start", "--job-id", "w1", "--intento", "0"),
+                     ("job-start", "--job-id", "w1", "--ttl", "5"),
+                     ("latido", "--pasada", "-1")):
+            self.assertEqual(self.cli(*args).returncode, 2, args)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "eventos.jsonl")))
+        self.assertFalse(os.path.exists(os.path.join(self.root, "latido.json")))
+
+    # P2: una señal antes de lanzar no mata a Pulse sin fin y no lanza la orden
+    def test_senal_antes_de_lanzar_deja_fin_y_no_lanza(self):
+        from pulse import cli
+        marca = os.path.join(self._tmp.name, "marca")
+        real = events.job_start
+
+        def start_y_senal(*a, **k):
+            ev = real(*a, **k)
+            os.kill(os.getpid(), signal.SIGTERM)
+            return ev
+        ns = cli._p().parse_args(["run", "--job-id", "w1", "--", "touch", marca])
+        events.job_start = start_y_senal
+        try:
+            rc = cli._run(self.root, ns)
+        finally:
+            events.job_start = real
+        self.assertEqual(rc, 143)
+        self.assertFalse(os.path.exists(marca))
+        self.assertEqual((self.fines()[0]["clase"], self.fines()[0]["resultado"]), ("entorno", "interrumpido"))
+        self.assertIs(signal.getsignal(signal.SIGTERM), signal.SIG_DFL)  # manejadores restaurados
+
+
 class Estaticas(unittest.TestCase):
     def test_el_codigo_no_tiene_red_ni_listener(self):
         # AC-16/AC-27 (parte S1): ningún módulo importa nada de red.
@@ -673,7 +846,7 @@ class Estaticas(unittest.TestCase):
 
     def test_solo_biblioteca_estandar(self):
         # D2: Python estándar >= 3.9 sin dependencias.
-        permitidos = {"argparse", "contextlib", "datetime", "fcntl", "json", "os", "re", "secrets", "shutil",
+        permitidos = {"argparse", "contextlib", "datetime", "fcntl", "json", "math", "os", "re", "secrets", "shutil",
                       "signal", "stat", "subprocess", "sys", "tempfile", "time"}
         for fname in os.listdir(os.path.join(PROJECT, "pulse")):
             if not fname.endswith(".py"):

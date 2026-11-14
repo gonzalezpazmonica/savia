@@ -5,10 +5,11 @@ código de salida o de una señal tipada que aporta el lanzador; nunca se lee de
 texto libre (F1). Ante un código no clasificable, `desconocida` (fail-closed).
 """
 import datetime as dt
+import math
 import re
 import secrets
 
-from . import SCHEMA_VERSION, store
+from . import SCHEMA_VERSION, schema, store
 from .store import EntradaInvalida, PulseError
 
 EVENTS = "eventos.jsonl"
@@ -131,31 +132,48 @@ def _resumen_fin(job_id, resultado, clase):
             "Revisa el motivo antes de relanzarlo.")
 
 
+def _peticion_fin(ev):
+    """La petición de aviso de un fin; se deriva solo del evento (determinista, regenerable)."""
+    que, nada = _resumen_fin(ev["job_id"], ev["resultado"], ev["clase"])
+    return {
+        "id": ev["peticion_id"], "fuente": "AVISO_RUN", "nivel": ev["nivel"],
+        "critica": ev["clase"] == "politica", "desde": ev["at"],
+        "que": que, "por_que_ahora": "El trabajo acaba de terminar (código %d)." % ev["rc"],
+        "si_no_contestas": nada, "si_aplazas": "No pasa nada: el aviso sigue en la cola.",
+        "caduca": store.fmt(store.parse_ts(ev["at"]) + dt.timedelta(hours=VENTANA_PETICION_H)),
+    }
+
+
 def job_finish(root, job_id, rc, clase=None, nivel="N4"):
-    """Registra el fin (código y clase) y la petición de aviso. Devuelve (evento, creado)."""
+    """Registra el fin (código y clase) y la petición de aviso. Devuelve (evento, creado).
+
+    Fin y petición van juntos: la instantánea de peticiones se lee y la petición se
+    valida ANTES de anotar el fin, así que si no se puede publicar la petición no se
+    anota nada. Si el fin ya constaba pero su petición falta (vigente), el reintento
+    la regenera.
+    """
     _check_job_id(job_id)
     clase, resultado = classify(rc, clase)
     with store.lock(root):
         j = _jobs(_locked_ledger(root)).get(job_id)
         if not j or not j["started"]:
             raise PulseError("fin sin inicio: el trabajo no consta como lanzado")
+        current = _peticiones_vigentes(root)
         if j["finished"]:
-            if j["finished"]["rc"] == rc:
-                return j["finished"], False
-            raise PulseError("el trabajo ya terminó con otro código; el primer resultado manda")
+            if j["finished"]["rc"] != rc:
+                raise PulseError("el trabajo ya terminó con otro código; el primer resultado manda")
+            pet = _peticion_fin(j["finished"])
+            if store.parse_ts(pet["caduca"]) > store.now() and pet["id"] not in {p["id"] for p in current}:
+                _write_peticiones(root, current, pet)
+            return j["finished"], False
         intento = j["started"]["intento"]
-        pid = "aviso-run-%s-%d" % (job_id, intento)
         ev = _event("job_finished", nivel, clase=clase, entrega="pendiente", job_id=job_id,
-                    intento=intento, rc=rc, resultado=resultado, peticion_id=pid)
+                    intento=intento, rc=rc, resultado=resultado,
+                    peticion_id="aviso-run-%s-%d" % (job_id, intento))
+        pet = _peticion_fin(ev)
+        _check_peticiones(current + [pet])
         store.append_jsonl(root, EVENTS, ev, "evento")
-        que, nada = _resumen_fin(job_id, resultado, clase)
-        _add_peticion(root, {
-            "id": pid, "fuente": "AVISO_RUN", "nivel": nivel,
-            "critica": clase == "politica", "desde": ev["at"],
-            "que": que, "por_que_ahora": "El trabajo acaba de terminar (código %d)." % rc,
-            "si_no_contestas": nada, "si_aplazas": "No pasa nada: el aviso sigue en la cola.",
-            "caduca": store.fmt(store.parse_ts(ev["at"]) + dt.timedelta(hours=VENTANA_PETICION_H)),
-        })
+        _write_peticiones(root, current, pet)
         return ev, True
 
 
@@ -169,22 +187,37 @@ def pr_event(root, tipo, propuesta, nivel="N4"):
         return ev
 
 
-def _add_peticion(root, pet):
-    """Instantánea de nivel: sustitución atómica, sin caducadas y sin duplicar el id. Llamar con el cerrojo."""
+def _peticiones_vigentes(root):
+    """Peticiones de la instantánea sin las caducadas. Ilegible o insegura: PulseError. Con el cerrojo."""
     estado, snap = store.read_json(root + "/" + PETICIONES, "peticiones")
     if estado == store.FALLIDA:
-        raise PulseError("peticiones.json ilegible; no se sobrescribe (" + snap + ")")
+        raise PulseError("peticiones.json ilegible; no se sobrescribe ni se anota el fin (" + snap + ")")
     current = snap["peticiones"] if estado == store.OK else []
     t = store.now()
-    keep = [p for p in current if store.parse_ts(p["caduca"]) > t and p["id"] != pet["id"]]
-    keep.append(pet)
-    store.write_json_atomic(root, PETICIONES, {
-        "schema_version": SCHEMA_VERSION, "at": store.fmt(t), "peticiones": keep}, "peticiones")
+    return [p for p in current if store.parse_ts(p["caduca"]) > t]
+
+
+def _snapshot(peticiones):
+    return {"schema_version": SCHEMA_VERSION, "at": store.fmt(store.now()), "peticiones": peticiones}
+
+
+def _check_peticiones(peticiones):
+    errors = schema.validate(_snapshot(peticiones), schema.load_schema("peticiones"))
+    if errors:
+        raise EntradaInvalida("petición fuera de contrato, no se anota nada: " + errors[0])
+
+
+def _write_peticiones(root, current, pet):
+    """Instantánea de nivel: sustitución atómica, sin duplicar el id. Llamar con el cerrojo."""
+    keep = [p for p in current if p["id"] != pet["id"]] + [pet]
+    store.write_json_atomic(root, PETICIONES, _snapshot(keep), "peticiones")
 
 
 def write_latido(root, pasada, ttl=180, duracion_s=None, fuentes_vencidas=()):
     if not isinstance(ttl, int) or isinstance(ttl, bool) or not 10 <= ttl <= 86400:
         raise EntradaInvalida("ttl fuera de rango (10–86400 s)")
+    if duracion_s is not None and not (isinstance(duracion_s, (int, float)) and math.isfinite(duracion_s)):
+        raise EntradaInvalida("duración no es un número finito")
     t = store.now()
     data = {"schema_version": SCHEMA_VERSION, "at": store.fmt(t),
             "valid_until": store.fmt(t + dt.timedelta(seconds=ttl)),

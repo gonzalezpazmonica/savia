@@ -1,4 +1,9 @@
-"""CLI de Pulse. Salidas: 0 bien, 1 rechazado por el estado, 2 entrada inválida."""
+"""CLI de Pulse. Salidas: 0 bien, 1 rechazado por el estado, 2 entrada inválida.
+
+Excepción: `pulse run` devuelve el código de la orden que lanza (su 1 o su 2 no se
+distinguen de los de Pulse por el código). Si Pulse rechaza antes de lanzar, no
+lanza nada y no hay `job_started` en el ledger: el ledger es lo que distingue.
+"""
 import argparse
 import json
 import os
@@ -67,31 +72,50 @@ def _p():
     return ap
 
 
-def _run(root, a):
-    if not a.argv or a.argv[0] != "--" or len(a.argv) < 2:
-        raise EntradaInvalida("uso: pulse run --job-id ID -- orden [args...]")
-    cmd = a.argv[1:]
-    # Fail-closed: sin inicio registrado no se lanza nada.
-    events.job_start(root, a.job_id, a.nivel, a.intento, a.ttl, a.propuesta, a.modelo)
-    env = dict(os.environ, PULSE_JOB_ID=a.job_id)
+def _lanzar(cmd, env, estado, forward):
+    """Lanza la orden y espera. Devuelve el código (128+n si murió por la señal n)."""
     try:
         proc = subprocess.Popen(cmd, env=env)
     except OSError as exc:
         print("no se pudo lanzar la orden: %s" % (exc.strerror or exc), file=sys.stderr)
-        rc = 127 if isinstance(exc, FileNotFoundError) else 126
-    else:
-        def forward(signum, _frame):
-            try:
-                proc.send_signal(signum)
-            except OSError:
-                pass
-        old = {s: signal.signal(s, forward) for s in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)}
+        return 127 if isinstance(exc, FileNotFoundError) else 126
+    estado["proc"] = proc
+    for signum in estado["pendientes"]:  # llegadas entre Popen y aquí
+        forward(signum, None)
+    code = proc.wait()
+    return 128 + (-code) if code < 0 else code
+
+
+def _run(root, a):
+    if not a.argv or a.argv[0] != "--" or len(a.argv) < 2:
+        raise EntradaInvalida("uso: pulse run --job-id ID -- orden [args...]")
+    cmd = a.argv[1:]
+    env = dict(os.environ, PULSE_JOB_ID=a.job_id)
+    # Los manejadores van antes del inicio y de lanzar: una señal en esa ventana no
+    # mata a Pulse sin dejar el fin. Si llega antes de lanzar, no se lanza.
+    estado = {"proc": None, "pendientes": []}
+
+    def forward(signum, _frame):
+        if estado["proc"] is None:
+            estado["pendientes"].append(signum)
+            return
         try:
-            code = proc.wait()
-        finally:
-            for s, h in old.items():
-                signal.signal(s, h)
-        rc = 128 + (-code) if code < 0 else code
+            estado["proc"].send_signal(signum)
+        except OSError:
+            pass
+
+    old = {s: signal.signal(s, forward) for s in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)}
+    try:
+        # Fail-closed: sin inicio registrado no se lanza nada.
+        events.job_start(root, a.job_id, a.nivel, a.intento, a.ttl, a.propuesta, a.modelo)
+        if estado["pendientes"]:
+            print("pulse: señal recibida antes de lanzar; no se lanza la orden", file=sys.stderr)
+            rc = 128 + estado["pendientes"][0]
+        else:
+            rc = _lanzar(cmd, env, estado, forward)
+    finally:
+        for s, h in old.items():
+            signal.signal(s, h)
     try:
         events.job_finish(root, a.job_id, min(rc, 255))
     except PulseError as exc:

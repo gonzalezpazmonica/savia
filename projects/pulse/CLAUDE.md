@@ -33,7 +33,9 @@ bin/pulse deliver                                      # una pasada del canal de
 bin/pulse status | inbox
 ```
 
-Salidas: 0 bien, 1 rechazado por el estado, 2 entrada inválida.
+Salidas: 0 bien, 1 rechazado por el estado, 2 entrada inválida (también un dato fuera de contrato, como un rango o una fecha imposible). Excepción: `pulse run` devuelve el código de la orden; si Pulse la rechaza antes de lanzarla, no hay `job_started` en el ledger.
+
+Cerrojos: `.lock` (escritor) solo dura lo que se tarda en leer y escribir; `deliver` notifica fuera de él y usa `.deliver.lock` para que dos pasadas no avisen dos veces. El fin de un trabajo y su petición van juntos: si `peticiones.json` es ilegible no se anota el fin, y un reintento regenera la petición que falte.
 
 ## Pruebas
 
