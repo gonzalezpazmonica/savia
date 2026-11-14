@@ -34,6 +34,16 @@ export class TokenError extends Error {
   }
 }
 
+/** SE-528 S3: la clave de firma no se puede usar; quien firma o verifica falla cerrado. */
+export class KeyUnavailableError extends Error {
+  readonly code = 'key_unavailable';
+  constructor(readonly sysCode: string, message: string) {
+    super(message);
+    this.name = 'KeyUnavailableError';
+  }
+}
+
+const KEY_BYTES = 32;
 const PREFIX = 'svt1';
 const MAX_CHARS = 4096;
 
@@ -50,20 +60,62 @@ export class TokenSigner {
 
   private get keyPath(): string { return path.join(this.dir, 'token.key'); }
 
+  /**
+   * SE-528 S3: la clave solo se crea si no existe (ENOENT). Cualquier otro fallo de lectura o una
+   * longitud inválida falla cerrado: se registra con el código del sistema y la clave no se toca.
+   */
   private key(): Buffer {
+    let k: Buffer;
     try {
-      const k = fs.readFileSync(this.keyPath);
-      if (k.length === 32) return k;
-    } catch { /* se crea */ }
-    return this.rotate();
+      k = fs.readFileSync(this.keyPath);
+    } catch (e) {
+      const sysCode = (e as NodeJS.ErrnoException | undefined)?.code;
+      if (sysCode === 'ENOENT') return this.create();
+      throw this.unavailable(typeof sysCode === 'string' && sysCode ? sysCode : 'UNKNOWN', 'no se puede leer');
+    }
+    if (k.length !== KEY_BYTES) throw this.unavailable('EINVAL', `longitud inválida (${k.length} bytes, se esperan ${KEY_BYTES})`);
+    return k;
   }
 
-  /** Clave nueva: todo lo emitido deja de valer. */
-  rotate(): Buffer {
+  private unavailable(sysCode: string, what: string): KeyUnavailableError {
+    const err = new KeyUnavailableError(sysCode, `${what} la clave de firma de autorizaciones (${sysCode}); `
+      + 'no se regenera sola: si la persona decide regenerarla, todo lo emitido deja de valer');
+    console.error(`SECURITY: ${err.message} [${this.keyPath}]`);
+    return err;
+  }
+
+  /**
+   * Primera creación: se escribe completa en un temporal y se enlaza con link(), que falla si la
+   * clave ya existe; así nunca se pisa una clave creada a la vez por otro proceso.
+   */
+  private create(): Buffer {
+    this.prepareDir();
+    const k = randomBytes(KEY_BYTES);
+    const tmp = `${this.keyPath}.new-${process.pid}-${randomBytes(4).toString('hex')}`;
+    try {
+      fs.writeFileSync(tmp, k, { mode: 0o600, flag: 'wx' });
+      fs.chmodSync(tmp, 0o600);
+      fs.linkSync(tmp, this.keyPath);
+    } catch (e) {
+      const sysCode = (e as NodeJS.ErrnoException | undefined)?.code;
+      if (sysCode === 'EEXIST') return this.key();
+      throw this.unavailable(typeof sysCode === 'string' && sysCode ? sysCode : 'UNKNOWN', 'no se puede crear');
+    } finally {
+      fs.rmSync(tmp, { force: true });
+    }
+    return k;
+  }
+
+  private prepareDir(): void {
     ensureSafeHome(path.dirname(this.dir));
     fs.mkdirSync(this.dir, { recursive: true, mode: 0o700 });
     fs.chmodSync(this.dir, 0o700);
-    const k = randomBytes(32);
+  }
+
+  /** Clave nueva por decisión explícita de la persona: todo lo emitido deja de valer. */
+  rotate(): Buffer {
+    this.prepareDir();
+    const k = randomBytes(KEY_BYTES);
     writeAtomic(this.keyPath, k);
     fs.chmodSync(this.keyPath, 0o600);
     return k;

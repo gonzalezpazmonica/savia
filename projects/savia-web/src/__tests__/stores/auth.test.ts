@@ -38,13 +38,14 @@ describe('useAuthStore', () => {
   })
 
   describe('login', () => {
-    it('sets connected, profile, and cookie', () => {
+    it('sets connected, profile, and a connection cookie without the token (SE-528)', () => {
       const auth = useAuthStore()
       auth.login('https://localhost:8922', '@alice', 'tok-abc', { slug: 'alice', name: 'Alice', role: 'PM' })
       expect(auth.connected).toBe(true)
       expect(auth.profileName).toBe('Alice')
       expect(auth.isLoggedIn).toBe(true)
-      expect(document.cookie).toContain('savia_session')
+      expect(document.cookie).toContain('savia_connection')
+      expect(document.cookie).not.toContain('tok-abc')
     })
   })
 
