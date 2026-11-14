@@ -178,12 +178,14 @@ class CorsOriginTests(unittest.TestCase):
 
     def test_folded_origin_with_crlf_is_not_reflected(self):
         sent = []
-        fake = type("H", (), {})()
+        fake = object.__new__(bridge.SaviaBridgeHandler)
         fake.headers = {"Origin": "http://localhost\r\n X-Evil: 1"}
         fake.send_header = lambda name, value: sent.append((name, value))
         bridge.SaviaBridgeHandler._send_cors_headers(fake)
-        acao = dict(sent)["Access-Control-Allow-Origin"]
-        self.assertEqual(acao, "https://localhost")
+        # SE-528 S2 (AC-2.17): un Origin rechazado no recibe ninguna cabecera
+        # de permiso; antes se respondía un valor fijo.
+        self.assertNotIn("Access-Control-Allow-Origin", dict(sent))
+        self.assertNotIn("Access-Control-Allow-Credentials", dict(sent))
         self.assertFalse(any("\r" in v or "\n" in v for _, v in sent))
 
 

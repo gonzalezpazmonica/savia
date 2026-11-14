@@ -76,6 +76,7 @@ import os
 import re
 import secrets
 import shutil
+import socket
 import ssl
 import subprocess
 import sys
@@ -86,6 +87,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
+import bridge_auth
 from bridge_cli_adapters import (
     AdapterContractError,
     BridgeRequest,
@@ -597,6 +599,7 @@ def _rotate_user_token(slug: str) -> str | None:
     token_file.chmod(0o600)
     with _user_token_cache_lock:
         _user_token_cache[new_token] = slug
+    SaviaBridgeHandler.sessions.revoke_user(slug)
     log(f"Token rotated for user '{slug}'")
     return new_token
 
@@ -610,6 +613,7 @@ def _revoke_user_token(slug: str) -> bool:
     with _user_token_cache_lock:
         _user_token_cache.pop(old_token, None)
     token_file.write_text("")
+    SaviaBridgeHandler.sessions.revoke_user(slug)
     log(f"Token revoked for user '{slug}'")
     return True
 
@@ -2019,48 +2023,190 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
     # Set by _check_auth: slug of authenticated user, or None for master token
     _auth_user: str | None = None
+    # SE-528 S2: canal por el que se autenticó ("header", "cookie", "open").
+    _auth_via: str | None = None
+
+    # SE-528 S2 — configuración de autenticación (la fija main()).
+    open_mode = False
+    tls_enabled = True
+    sessions = bridge_auth.SessionStore()
+    allowed_hosts: frozenset = frozenset(bridge_auth.LOOPBACK_HOSTS)
+    allow_local_ip_hosts = True
+    allowed_origins: frozenset = frozenset()
+    trusted_proxies: frozenset = frozenset()
+
+    def _client_key(self) -> str:
+        return bridge_auth.client_key(self.client_address[0],
+                                      self.headers.get("X-Forwarded-For"),
+                                      self.trusted_proxies)
+
+    def _origin_ok(self) -> str | None:
+        """Origin permitido, reconstruido (nunca el texto del cliente)."""
+        origin = self.headers.get("Origin")
+        if not self.open_mode and not self.allowed_origins:
+            return _allowed_cors_origin(origin or "")
+        return bridge_auth.origin_allowed(origin, self.allowed_origins, self.open_mode)
+
+    def _gate(self) -> bool:
+        """Puerta previa a todo enrutado: Host, Origin en modo abierto y canal.
+
+        Devuelve False tras enviar la respuesta de rechazo.
+        """
+        if not bridge_auth.host_allowed(self.headers.get("Host"), self.allowed_hosts,
+                                        self.allow_local_ip_hosts and not self.open_mode):
+            log(f"Host not allowed from {self._client_key()}", "SECURITY")
+            self._send_json({"error": "Forbidden", "reason": "host_not_allowed"}, 403)
+            return False
+        if self.open_mode and self.headers.get("Origin") and not self._origin_ok():
+            log(f"Open mode: foreign Origin from {self._client_key()}", "SECURITY")
+            self._send_json({"error": "Forbidden", "reason": "origin_not_allowed"}, 403)
+            return False
+        if bridge_auth.forbidden_credential_channel(self.path):
+            key = self._client_key()
+            if not _check_auth_rate_limit(key):
+                self._send_json({"error": "Too many failed authentication attempts"}, 429)
+                return False
+            _record_auth_failure(key)
+            log(f"Credential in query string rejected from {key}", "SECURITY")
+            self._send_json({"error": "Unauthorized",
+                             "reason": "credential_channel_not_supported"}, 401)
+            return False
+        return True
+
+    _auth_fail: tuple[int, str] = (401, "missing_credentials")
 
     def _check_auth(self) -> bool:
+        """Autentica por cabecera Authorization o por la cookie de sesión.
+
+        Sets self._auth_user to the user slug if per-user, None if master, y
+        en fallo deja (status, reason) en self._auth_fail. No envía respuesta.
         """
-        Two-tier auth: master token (admin) or per-user token.
-        Sets self._auth_user to the user slug if per-user, None if master.
-        """
+        ok, status, reason = self._authenticate()
+        self._auth_fail = (status, reason)
+        return ok
+
+    def _authenticate(self) -> tuple[bool, int, str]:
         self._auth_user = None
-        client_ip = self.address_string().split(':')[0]
-        if not _check_auth_rate_limit(client_ip):
-            log(f"Auth rate limit exceeded for IP {client_ip}", "SECURITY")
-            self._send_json({"error": "Too many failed authentication attempts"}, 429)
-            return False
-
+        self._auth_via = None
+        if self.open_mode:
+            self._auth_via = "open"
+            return True, 200, ""
         if not self.auth_token:
-            return True
+            # Fallo cerrado: no cuenta en el límite (un tercero no debe poder
+            # agotarlo ni tapar la causa real, que es de configuración).
+            log(bridge_auth.FAIL_CLOSED_MESSAGE, "SECURITY")
+            return False, 401, "bridge_not_configured"
+        key = self._client_key()
+        if not _check_auth_rate_limit(key):
+            log(f"Auth rate limit exceeded for {key}", "SECURITY")
+            return False, 429, "rate_limited"
 
-        token = None
-        auth_header = self.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-        else:
-            parsed = urlparse(self.path)
-            params = parse_qs(parsed.query)
-            token = params.get("token", [None])[0]
+        header = self.headers.get("Authorization")
+        if header:
+            token = bridge_auth.bearer_from_header(header)
+            principal = self._principal_for_token(token) if token else None
+            if principal is None:
+                _record_auth_failure(key)
+                return False, 401, "invalid_credentials"
+            self._auth_user = principal[1]
+            self._auth_via = "header"
+            return True, 200, ""
 
-        if not token:
-            _record_auth_failure(client_ip)
-            return False
+        sid = bridge_auth.session_from_cookie_header(self.headers.get("Cookie"))
+        if sid is None:
+            return False, 401, "missing_credentials"
+        principal = self.sessions.lookup(sid)
+        if principal is None:
+            _record_auth_failure(key)
+            return False, 401, "invalid_session"
+        # CSRF: con cookie, Origin de la lista; sin Origin solo en lectura.
+        origin = self.headers.get("Origin")
+        if origin and not self._origin_ok():
+            return False, 403, "origin_not_allowed"
+        if not origin and self.command in bridge_auth.STATE_CHANGING_METHODS:
+            return False, 403, "origin_required"
+        self._auth_user = principal[1]
+        self._auth_via = "cookie"
+        return True, 200, ""
 
-        # Check master token first
-        if secrets.compare_digest(token, self.auth_token):
-            self._auth_user = None
-            return True
-
-        # Check per-user tokens
+    def _principal_for_token(self, token: str):
+        if bridge_auth.token_equals(token, self.auth_token or ""):
+            return ("master", None)
         user_slug = _validate_user_token(token)
         if user_slug:
-            self._auth_user = user_slug
-            return True
+            return ("user", user_slug)
+        return None
 
-        _record_auth_failure(client_ip)
+    def _require_auth(self) -> bool:
+        if self._check_auth():
+            return True
+        status, reason = self._auth_fail
+        if status == 429:
+            self._send_json({"error": "Too many failed authentication attempts"}, 429)
+        elif status == 403:
+            self._send_json({"error": "Forbidden", "reason": reason}, 403)
+        else:
+            self._send_json({"error": "Unauthorized", "reason": reason}, 401)
         return False
+
+    def _handle_auth_routes(self, path: str) -> bool:
+        """POST /auth/login, POST /auth/logout, GET /auth/session (SE-528 S2)."""
+        if path == "/auth/login" and self.command == "POST":
+            self._auth_login()
+            return True
+        if path == "/auth/logout" and self.command == "POST":
+            self._auth_logout()
+            return True
+        if path == "/auth/session" and self.command == "GET":
+            sid = bridge_auth.session_from_cookie_header(self.headers.get("Cookie"))
+            if self.sessions.lookup(sid) is not None:
+                self._send_json({"authenticated": True})
+            else:
+                self._send_json({"authenticated": False}, 401)
+            return True
+        return False
+
+    def _auth_login(self):
+        if self.headers.get("Origin") and not self._origin_ok():
+            self._send_json({"error": "Forbidden", "reason": "origin_not_allowed"}, 403)
+            return
+        if self.open_mode:
+            self._send_json({"status": "ok", "session": "none", "mode": "open"})
+            return
+        if not self.auth_token:
+            log(bridge_auth.FAIL_CLOSED_MESSAGE, "SECURITY")
+            self._send_json({"error": "Unauthorized", "reason": "bridge_not_configured"}, 401)
+            return
+        key = self._client_key()
+        if not _check_auth_rate_limit(key):
+            self._send_json({"error": "Too many failed authentication attempts"}, 429)
+            return
+        token = bridge_auth.bearer_from_header(self.headers.get("Authorization"))
+        principal = self._principal_for_token(token) if token else None
+        if principal is None:
+            _record_auth_failure(key)
+            self._send_json({"error": "Unauthorized", "reason": "invalid_credentials"}, 401)
+            return
+        role = _get_user_role(principal[1])
+        if not self.tls_enabled:
+            # Sin TLS no hay sesión por cookie: solo vale la cabecera.
+            self._send_json({"status": "ok", "session": "none", "role": role})
+            return
+        sid = self.sessions.create(principal)
+        self._send_json({"status": "ok", "session": "cookie", "role": role,
+                         "expires_in": self.sessions.ttl},
+                        extra_headers=[("Set-Cookie", bridge_auth.session_cookie(sid, self.sessions.ttl))])
+
+    def _auth_logout(self):
+        sid = bridge_auth.session_from_cookie_header(self.headers.get("Cookie"))
+        if sid:
+            origin = self.headers.get("Origin")
+            if not origin or not self._origin_ok():
+                self._send_json({"error": "Forbidden", "reason": "origin_required"}, 403)
+                return
+            self.sessions.revoke(sid)
+        self._send_json({"status": "logged_out"},
+                        extra_headers=[("Set-Cookie", bridge_auth.expired_session_cookie())])
 
     def _send_security_headers(self):
         """A4 FIX: Add standard security headers to all responses."""
@@ -2070,28 +2216,44 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
-    def _send_json(self, data: dict, status: int = 200):
+    def _send_json(self, data: dict, status: int = 200, extra_headers=None):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
+        for name, value in extra_headers or ():
+            self.send_header(name, value)
         self._send_cors_headers()
         self._send_security_headers()
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
 
     def _send_cors_headers(self):
-        """A5 FIX: Restrict CORS to local network origins only."""
-        allowed = _allowed_cors_origin(self.headers.get("Origin", ""))
-        self.send_header("Access-Control-Allow-Origin", allowed or "https://localhost")
+        """CORS solo para orígenes permitidos; nunca credenciales con «*»."""
+        self.send_header("Vary", "Origin")
+        allowed = self._origin_ok()
+        if not allowed:
+            return
+        self.send_header("Access-Control-Allow-Origin", allowed)
+        self.send_header("Access-Control-Allow-Credentials", "true")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-        self.send_header("Vary", "Origin")
 
     def do_OPTIONS(self):
+        if not self._gate():
+            return
+        if self.headers.get("Origin") and not self._origin_ok():
+            self.send_response(403)
+            self.send_header("Vary", "Origin")
+            self.end_headers()
+            return
         self.send_response(204)
         self._send_cors_headers()
         self.end_headers()
 
     def do_GET(self):
+        if not self._gate():
+            return
+        if self._handle_auth_routes(urlparse(self.path).path):
+            return
         parsed = urlparse(self.path)
 
         if parsed.path == "/health":
@@ -2112,8 +2274,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/sessions":
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             # Per-user: return only their sessions; master: return all
             if self._auth_user:
@@ -2132,8 +2293,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/logs":
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             params = parse_qs(parsed.query)
             n = int(params.get("n", ["100"])[0])
@@ -2247,8 +2407,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/profile":
             # C5 FIX: Require auth for sensitive endpoints
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             # Read from git config
             name = subprocess.run(['git', 'config', '--global', 'user.name'], capture_output=True, text=True, timeout=2).stdout.strip()
@@ -2306,8 +2465,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/company":
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             company_dir = Path.home() / "savia" / ".claude" / "profiles" / "company"
             if not company_dir.exists() or not any(company_dir.glob("*.md")):
@@ -2347,8 +2505,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/git-config":
             """GET /git-config — Read git global configuration (name, email, PAT status)."""
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             try:
                 name = subprocess.run(['git', 'config', '--global', 'user.name'],
@@ -2387,8 +2544,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/team":
             """GET /team — Read team configuration from .claude/profiles/users/."""
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             team_dir = Path.home() / "savia" / ".claude" / "profiles" / "users"
             members = []
@@ -2450,8 +2606,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/auth/me":
             """GET /auth/me — Returns authenticated user info."""
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             if self._auth_user is None:
                 self._send_json({"slug": "admin", "role": "admin", "name": "Admin"})
@@ -2462,8 +2617,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/users":
             """GET /users — List all users (admin only)."""
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             if _get_user_role(self._auth_user) != "admin":
                 self._send_json({"error": "Admin access required"}, 403)
@@ -2473,8 +2627,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path.startswith("/users/") and parsed.path.endswith("/role"):
             """GET /users/{slug}/role — Get user role (for auth store)."""
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             slug = parsed.path.split("/")[2]
             profile = _get_user_profile(slug)
@@ -2516,8 +2669,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path.startswith("/backlog"):
             """GET /backlog?project={id} — PBIs and tasks from project backlog."""
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             params = parse_qs(parsed.query)
             project_id = params.get("project", ["_workspace"])[0]
@@ -2727,8 +2879,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         # ─── Reports: delegate to savia-bridge-reports module ───
         if parsed.path.startswith("/reports/"):
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             params = parse_qs(parsed.query)
             project_id = params.get("project", ["default"])[0]
@@ -2761,8 +2912,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         # ─── File Browser: list directory contents ───
         if parsed.path == "/files":
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             params = parse_qs(parsed.query)
             rel_path = params.get("path", [""])[0]
@@ -2812,8 +2962,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         # ─── File Content: read file for viewer ───
         if parsed.path == "/files/content":
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             params = parse_qs(parsed.query)
             rel_path = params.get("path", [""])[0]
@@ -2856,13 +3005,16 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
         self._send_json({"error": "Not found"}, 404)
 
     def do_POST(self):
+        if not self._gate():
+            return
+        if self._handle_auth_routes(urlparse(self.path).path):
+            return
         parsed = urlparse(self.path)
         request_id = self._next_request_id()
 
         # --- POST /users (create user, admin only) ---
         if parsed.path == "/users":
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             if _get_user_role(self._auth_user) != "admin":
                 self._send_json({"error": "Admin access required"}, 403)
@@ -2887,8 +3039,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         # --- POST /users/{slug}/rotate-token ---
         if parsed.path.startswith("/users/") and parsed.path.endswith("/rotate-token"):
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             slug = parsed.path.split("/")[2]
             user_role = _get_user_role(self._auth_user)
@@ -2904,8 +3055,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         # --- POST /users/{slug}/revoke (admin only) ---
         if parsed.path.startswith("/users/") and parsed.path.endswith("/revoke"):
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             if _get_user_role(self._auth_user) != "admin":
                 self._send_json({"error": "Admin access required"}, 403)
@@ -2919,8 +3069,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         # --- POST /projects (create new project with scaffolding) ---
         if parsed.path == "/projects":
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length).decode()
@@ -3026,8 +3175,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         # --- POST /chat/permission — Permission response from mobile app ---
         if parsed.path == "/chat/permission":
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
 
             content_length = int(self.headers.get("Content-Length", 0))
@@ -3086,8 +3234,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         # --- POST /auth/register — Create per-user token (master token required) ---
         if parsed.path == "/auth/register":
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             if self._auth_user is not None:
                 self._send_json({"error": "Only master token can register users"}, 403)
@@ -3112,9 +3259,9 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
             self._send_json({"error": "Not found"}, 404)
             return
 
-        if not self._check_auth():
+        if not self._require_auth():
             log(f"[req:{request_id}] Auth failed from {self.address_string()}", "WARN")
-            self._send_json({"error": "Unauthorized"}, 401)
+
             return
 
         # A6 FIX: Read request body with size limit
@@ -3264,12 +3411,15 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
                 })
 
     def do_DELETE(self):
+        if not self._gate():
+            return
+        if self._handle_auth_routes(urlparse(self.path).path):
+            return
         parsed = urlparse(self.path)
 
         # DELETE /users/{slug} (admin only)
         if parsed.path.startswith("/users/") and parsed.path.count("/") == 2:
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             if _get_user_role(self._auth_user) != "admin":
                 self._send_json({"error": "Admin access required"}, 403)
@@ -3282,14 +3432,16 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
             import shutil as _shutil
             _shutil.rmtree(user_dir)
             with _user_token_cache_lock:
-                _user_token_cache.pop(slug, None)
+                # La caché va de token a slug: se borran sus tokens, no la clave slug.
+                for tok in [t for t, s_ in _user_token_cache.items() if s_ == slug]:
+                    del _user_token_cache[tok]
+            self.sessions.revoke_user(slug)
             log(f"User '{slug}' deleted by {self._auth_user or 'admin'}")
             self._send_json({"status": "deleted", "slug": slug})
             return
 
         if parsed.path == "/sessions":
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             if SESSIONS_DIR.exists():
                 shutil.rmtree(SESSIONS_DIR)
@@ -3301,12 +3453,15 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
     def do_PUT(self):
         """Handle PUT requests for updating configuration."""
+        if not self._gate():
+            return
+        if self._handle_auth_routes(urlparse(self.path).path):
+            return
         parsed = urlparse(self.path)
 
         # PUT /users/{slug} (admin only — update profile/role)
         if parsed.path.startswith("/users/") and parsed.path.count("/") == 2:
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             if _get_user_role(self._auth_user) != "admin":
                 self._send_json({"error": "Admin access required"}, 403)
@@ -3335,8 +3490,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/files/content":
             """PUT /files/content — Save file content (markdown editor)."""
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             try:
                 content_length = int(self.headers.get("Content-Length", 0))
@@ -3356,8 +3510,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/profile":
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             try:
                 content_length = int(self.headers.get("Content-Length", 0))
@@ -3396,8 +3549,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/git-config":
             """PUT /git-config — Update git global configuration (requires auth)."""
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             try:
                 content_length = int(self.headers.get("Content-Length", 0))
@@ -3481,8 +3633,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/team":
             """PUT /team — Update team member profiles (requires auth)."""
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             try:
                 content_length = int(self.headers.get("Content-Length", 0))
@@ -3569,8 +3720,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         if parsed.path == "/company":
             """PUT /company — Update company profile sections (requires auth)."""
-            if not self._check_auth():
-                self._send_json({"error": "Unauthorized"}, 401)
+            if not self._require_auth():
                 return
             try:
                 content_length = int(self.headers.get("Content-Length", 0))
@@ -3736,7 +3886,52 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--print-fingerprint", action="store_true", help="Print the TLS cert fingerprint and exit")
     parser.add_argument("--install-port", type=int, default=DEFAULT_INSTALL_PORT, help=f"HTTP port for install page (default: {DEFAULT_INSTALL_PORT})")
     parser.add_argument("--no-install-server", action="store_true", help="Disable the HTTP install server")
+    # SE-528 S2: listas de hosts, orígenes y proxies de confianza.
+    parser.add_argument("--allowed-host", action="append", default=[],
+                        help="Host permitido en la cabecera Host (repetible). Bucle local, "
+                             "el nombre de la máquina y las IP de red local ya lo están")
+    parser.add_argument("--allowed-origin", action="append", default=[],
+                        help="Origin permitido para CORS y sesión por cookie (repetible, "
+                             "scheme://host[:puerto]). Sin ninguno: bucle local y red local")
+    parser.add_argument("--trusted-proxy", action="append", default=[],
+                        help="IP de un proxy inverso de confianza: solo entonces se usa "
+                             "X-Forwarded-For para el límite de intentos (repetible)")
     return parser
+
+
+def plan_listen_address(host: str, open_mode: bool) -> str:
+    """Dirección de escucha. En modo abierto solo bucle local (SE-528 Q2).
+
+    Sale con código 2 antes de abrir ningún puerto si el modo abierto pide una
+    dirección que no es de bucle local.
+    """
+    if not open_mode:
+        return host
+    addr = bridge_auth.open_mode_listen_address(host)
+    if addr is None:
+        print(bridge_auth.OPEN_MODE_REFUSAL, file=sys.stderr)
+        log(bridge_auth.OPEN_MODE_REFUSAL, "SECURITY")
+        sys.exit(2)
+    print(bridge_auth.OPEN_MODE_WARNING, file=sys.stderr)
+    log(bridge_auth.OPEN_MODE_WARNING, "SECURITY")
+    return addr
+
+
+def _allowed_hosts_for(listen: str, open_mode: bool, extra) -> frozenset:
+    if open_mode:
+        return frozenset(bridge_auth.LOOPBACK_HOSTS)
+    names = set(bridge_auth.LOOPBACK_HOSTS)
+    if listen not in ("0.0.0.0", "::", ""):
+        names.add(listen.lower().strip("[]"))
+    hostname = socket.gethostname().lower()
+    if hostname:
+        names.update({hostname, hostname.split(".")[0]})
+    names.update(h.lower().strip() for h in extra if h.strip())
+    return frozenset(names)
+
+
+class _ThreadingHTTPServerV6(http.server.ThreadingHTTPServer):
+    address_family = socket.AF_INET6
 
 
 def main():
@@ -3792,6 +3987,7 @@ def main():
         python3 savia-bridge.py --no-auth --no-tls          # HTTP without auth (dev only)
     """
     args = build_argument_parser().parse_args()
+    listen_host = plan_listen_address(args.host, args.no_auth)
 
     # Setup directories
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -3844,6 +4040,22 @@ def main():
 
     # Configure handler
     SaviaBridgeHandler.auth_token = token
+    SaviaBridgeHandler.open_mode = bool(args.no_auth)
+    SaviaBridgeHandler.tls_enabled = use_tls
+    SaviaBridgeHandler.allowed_hosts = _allowed_hosts_for(listen_host, args.no_auth, args.allowed_host)
+    SaviaBridgeHandler.allow_local_ip_hosts = not args.no_auth
+    explicit_origins = set()
+    for o in args.allowed_origin:
+        norm = bridge_auth.normalize_origin(o)
+        if norm is None:
+            log(f"--allowed-origin ignorado (no es scheme://host[:puerto]): {o!r}", "ERROR")
+            sys.exit(2)
+        explicit_origins.add(norm)
+    SaviaBridgeHandler.allowed_origins = frozenset(explicit_origins)
+    SaviaBridgeHandler.trusted_proxies = frozenset(
+        ip for ip in (bridge_auth._norm_ip(p) for p in args.trusted_proxy) if ip)
+    if not token and not args.no_auth:
+        log(bridge_auth.FAIL_CLOSED_MESSAGE, "SECURITY")
     SaviaBridgeHandler.system_prompt = args.system_prompt or (
         "Eres Savia, una asistente de gestión de proyectos inteligente, empática y eficiente. "
         "Respondes en el idioma del usuario (español por defecto). "
@@ -3854,7 +4066,9 @@ def main():
     # Start server
     # ThreadingHTTPServer: each request runs in its own thread so /chat (which
     # blocks while the selected CLI streams) never prevents /health, /dashboard, etc.
-    server = http.server.ThreadingHTTPServer((args.host, args.port), SaviaBridgeHandler)
+    server_cls = (_ThreadingHTTPServerV6 if ":" in listen_host
+                  else http.server.ThreadingHTTPServer)
+    server = server_cls((listen_host, args.port), SaviaBridgeHandler)
 
     protocol = "HTTP"
     if use_tls:
@@ -3866,7 +4080,7 @@ def main():
         server.socket = ssl_context.wrap_socket(server.socket, server_side=True)
         protocol = "HTTPS"
 
-    log(f"Savia Bridge v{BRIDGE_VERSION} starting on {protocol.lower()}://{args.host}:{args.port}")
+    log(f"Savia Bridge v{BRIDGE_VERSION} starting on {protocol.lower()}://{listen_host}:{args.port}")
     if use_tls:
         log(f"TLS: ENABLED")
         log(f"Certificate fingerprint: {cert_fingerprint}")
@@ -3901,7 +4115,7 @@ def main():
     install_server = None
     if not args.no_install_server:
         try:
-            install_server = http.server.ThreadingHTTPServer((args.host, args.install_port), InstallHandler)
+            install_server = server_cls((listen_host, args.install_port), InstallHandler)
             install_thread = threading.Thread(target=install_server.serve_forever, daemon=True)
             install_thread.start()
             log(f"")
