@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cabecera de un agente de Savia (SE-532 S1)",
+  "description": "Describe el estado actual del catálogo, no uno deseado. Una clave que no figura aquí es un error (fail-closed). Lo lee scripts/validate-agent-catalog.py.",
+  "type": "object",
+  "required": ["name", "description", "model_tier", "permission_level", "tools"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {"type": "string", "minLength": 1},
+    "description": {"type": "string", "minLength": 1},
+    "model_tier": {"enum": ["heavy", "mid", "fast"]},
+    "permission_level": {"enum": ["L0", "L1", "L2", "L3", "L4"]},
+    "tools": {"type": "object", "additionalProperties": {"type": "boolean"}},
+    "token_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "per_invocation": {"type": "integer", "minimum": 1},
+        "context_window_target": {"type": "integer", "minimum": 1},
+        "escalation_policy": {"type": "string", "minLength": 1}
+      }
+    },
+    "output_max_tokens": {"type": "integer", "minimum": 1},
+    "max_context_tokens": {"type": "integer", "minimum": 1},
+    "permissionMode": {"enum": ["acceptEdits", "bypassPermissions", "default", "dontAsk", "plan"]},
+    "maxTurns": {"type": "integer", "minimum": 1},
+    "maxSteps": {"type": "integer", "minimum": 1},
+    "color": {"type": "string"},
+    "skills": {"type": ["array", "string"]},
+    "hooks": {"type": ["object", "array"]},
+    "isolation": {"enum": ["worktree"]},
+    "permission.task": {"type": "object", "additionalProperties": false, "properties": {"allowlist": {"type": "array"}}},
+    "decision_tree": {"type": "string", "minLength": 1}
+  }
+}

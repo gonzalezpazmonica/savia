@@ -15,7 +15,7 @@ import { AuthError, type AccessController } from '../auth/controller.js';
 import type { UserStore } from '../auth/store.js';
 import type { DomeRegistry } from '../registry/domes.js';
 import { RateLimiter } from './ratelimit.js';
-import { TokenError, TokenSigner, type ScopedToken } from './grants.js';
+import { KeyUnavailableError, TokenError, TokenSigner, type ScopedToken } from './grants.js';
 import { checkVersion, tusCreate, tusDelete, tusHead, tusOptions, tusPatch, type TusContext } from './tus.js';
 
 export interface FilesHttpOptions {
@@ -203,6 +203,7 @@ export class FilesHttpServer {
     let message = 'error interno';
     if (e instanceof HttpError) ({ status, code, message } = e);
     else if (e instanceof TokenError) { status = 401; code = 'unauthorized'; message = e.message; }
+    else if (e instanceof KeyUnavailableError) { status = 503; code = 'KEY_UNAVAILABLE'; message = 'la clave de firma de autorizaciones no está disponible; ver el registro del servidor'; }
     else if (e instanceof AuthError) { status = e.code === 'unauthorized' ? 401 : e.code === 'forbidden' ? 403 : 404; code = e.code; message = e.message; }
     else if (e instanceof FilesError) { status = STATUS[e.code] ?? 500; code = e.code; message = e.message.replace(/^[A-Z_]+: /, ''); }
     if (res.headersSent) { res.destroy(); return; }
