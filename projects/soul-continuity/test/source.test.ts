@@ -116,7 +116,8 @@ test("source add (negativo): sin terminal exige --purpose, y con él tampoco con
 });
 
 test("source add (negativo): desde un frontend de agente se rechaza con código 4 y no pregunta ni escribe", async () => {
-  for (const env of [{ CLAUDECODE: "1" }, { OPENCODE: "1" }]) {
+  const environments: Record<string, string>[] = [{ CLAUDECODE: "1" }, { OPENCODE: "1" }];
+  for (const env of environments) {
     const s = mk({ answers: ["s"], env });
     const before = cfgText(s);
     assert.equal(await runCli(["source", "add", "github", "--purpose", "X"], s.deps), 4);
