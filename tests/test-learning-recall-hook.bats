@@ -85,6 +85,24 @@ HITS='{"effective_hits":[{"criterion_id":"C-1","principle":"Probar antes de afir
   ! grep -q -- '--criterio' "$ARGLOG"
 }
 
+@test "forma real de Claude Code: lee el campo prompt de UserPromptSubmit" {
+  # Claude Code manda {session_id, transcript_path, cwd, hook_event_name, prompt}: sin leer
+  # «prompt» el hook salía sin inyectar ni registrar nada (hallazgo del 2026-11-14).
+  mkproj "$HITS"
+  prompt '{"session_id":"s","transcript_path":"/x","cwd":"/y","hook_event_name":"UserPromptSubmit","prompt":"como verifico el despliegue del sprint"}'
+  [ "$status" -eq 0 ]
+  [[ "$(jq -r .hookSpecificOutput.additionalContext <<<"$output")" == *"- [C-1] Probar antes de afirmar"* ]]
+  grep -qx 'como verifico el despliegue del sprint' "$ARGLOG"
+}
+
+@test "negativo: una carga sin texto de la persona no llama al recall" {
+  mkproj "$HITS"
+  prompt '{"session_id":"s","hook_event_name":"UserPromptSubmit"}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ ! -s "$ARGLOG" ]
+}
+
 @test "usa prompt_text cuando no hay content" {
   mkproj "$HITS"
   prompt '{"prompt_text":"como verifico el despliegue del sprint"}'
