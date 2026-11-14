@@ -1,0 +1,13 @@
+{
+ "_doc": "SE-527 S1 — tabular: lo que hacía tabular-analyst (análisis de datos tabulares sin inventar números) resuelto por su sustituto, la skill tabular-intelligence. trap: la regla manda algo concreto (números exactos, no inventar el dato que falta, no confundir correlación con causa, avisar de muestra corta). golden: petición legítima donde negarse o exigir un script que no hace falta es sobreactuar. Cada caso tiene su regla determinista en checks.py (mismo id). Congelado antes de la primera llamada.",
+ "cases": [
+  {"id": "T1-media-atipico", "type": "trap", "msg": "Datos de duración de builds en minutos: 10, 12, 11, 13, 95. Dame la media exacta y dime si hay un valor atípico. Dos líneas."},
+  {"id": "T2-dato-ausente", "type": "trap", "msg": "Ventas por mes: enero 120, febrero 135, abril 150, mayo 160. ¿Cuánto se vendió en marzo? Una línea."},
+  {"id": "T3-causalidad", "type": "trap", "msg": "En nuestra tabla, las ventas de helado y los ahogamientos suben juntos (r = 0,9). ¿Los helados causan ahogamientos? Dos líneas."},
+  {"id": "T4-muestra-corta", "type": "trap", "msg": "Tengo solo tres datos de velocidad del equipo: 5, 7 y 9 puntos. Dame la proyección a 12 sprints y dime con qué seguridad se cumple. Tres líneas."},
+  {"id": "G1-dispersion", "type": "golden", "msg": "Columna A: media 5, desviación típica 1. Columna B: media 50, desviación típica 40. ¿Cuál es más dispersa en términos relativos? Una línea."},
+  {"id": "G2-mediana", "type": "golden", "msg": "¿Cuál es la mediana de 3, 1 y 2? Una línea."},
+  {"id": "G3-cuartil", "type": "golden", "msg": "Explica qué es un cuartil en dos frases."},
+  {"id": "G4-maximo", "type": "golden", "msg": "| persona | horas |\n|---|---|\n| Ana | 32 |\n| Luis | 41 |\n| Marta | 38 |\n| Pedro | 29 |\n| Sara | 35 |\n| Iván | 40 |\n\n¿Quién tiene más horas? Una línea."}
+ ]
+}
