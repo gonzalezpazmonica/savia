@@ -100,26 +100,51 @@ def main():
         ("S1 sin fuente alternativa (Q2)", "no se busca una fuente alternativa"),
         ("Q1 resuelta", "- **Q1 (resuelta, 2026-11-13).**"),
         ("Q3 resuelta", "- **Q3 (resuelta, 2026-11-13).**"),
-        ("S0 con prototipo", "- prototipo: "),
+        ("S0 con prototipo (el bloque que se enseña)", "- prototipo: el bloque «Memoria tras compactar»"),
     ]
+    import datetime
+
+    def fecha_ok(block, desde, etiqueta):
+        m = re.search(r"^- fecha:[ \t]*(\d{4}-\d{2}-\d{2})[ \t]*$", block, re.M)
+        if not m:
+            err("%s sin fecha" % etiqueta)
+            return
+        try:
+            d = datetime.date.fromisoformat(m.group(1))
+        except ValueError:
+            err("%s con fecha que no existe en el calendario" % etiqueta)
+            return
+        if d < datetime.date.fromisoformat(desde):
+            err("%s con fecha anterior a la decisión (%s)" % (etiqueta, desde))
+        elif d > datetime.date.today():
+            err("%s con fecha posterior a hoy" % etiqueta)
+
     # Confirmación de las escenas: fecha real y respuesta literal entre «…», no vacía.
     conf = re.search(r"^### Confirmación\n(.*?)(?=^#{1,3} )", text, re.M | re.S)
     body = conf.group(1) if conf else ""
-    if not re.search(r"^- fecha: 2026-11-1[3-9]\s*$", body, re.M):
-        err("confirmación de las escenas sin fecha")
+    fecha_ok(body, "2026-11-13", "confirmación de las escenas")
     if not re.search(r"^- respuesta: «[^»\s][^»]*»", body, re.M):
         err("confirmación de las escenas sin respuesta literal")
-    # Confirmación del prototipo (2026-11-14): fecha real y respuesta entre «…», no vacía,
-    # y ningún «pendiente» residual en el slice S0 (SE-505).
+    # Confirmación del prototipo (SE-505). Una paráfrasis de la orquestadora NO es la cita
+    # de la persona: «…» en `respuesta:` solo vale con un enlace https verificable en el
+    # bloque; sin él, la respuesta se declara «registro de la orquestadora» y la puerta de
+    # comprensión (scripts/comprehension-gate.py) sigue en rojo para S1.
     s0 = re.search(r"^## Slice S0\b.*?(?=^## )", text, re.M | re.S)
     s0b = s0.group(0) if s0 else ""
     pc = re.search(r"^### Confirmación del prototipo\n(.*?)(?=^#{1,3} )", s0b + "\n## ", re.M | re.S)
     pb = pc.group(1) if pc else ""
-    if not re.search(r"^- fecha: 2026-11-1[4-9]\s*$", pb, re.M):
-        err("confirmación del prototipo sin fecha")
-    if not re.search(r"^- respuesta: «[^»\s][^»]*»", pb, re.M):
-        err("confirmación del prototipo sin respuesta literal")
-    if re.search(r"^- (?:prototipo|fecha|respuesta): pendiente", s0b, re.M):
+    fecha_ok(pb, "2026-11-14", "confirmación del prototipo")
+    resp = re.search(r"^- respuesta:[ \t]*(.*)$", pb, re.M)
+    rt = resp.group(1) if resp else ""
+    if "«" in rt or "»" in rt:
+        if not re.search(r"https://\S+", pb):
+            err("confirmación del prototipo con cita «…» sin enlace verificable: "
+                "una paráfrasis de la orquestadora no es la cita literal de la persona")
+        elif not re.search(r"«[^»\s][^»]*»", rt):
+            err("confirmación del prototipo sin respuesta literal")
+    elif not re.match(r"registro de la orquestadora\b", rt, re.I):
+        err("confirmación del prototipo sin respuesta literal ni «registro de la orquestadora»")
+    if re.search(r"^-\s*(?:prototipo|fecha|respuesta):\s*pendiente", s0b, re.M | re.I):
         err("S0 conserva un campo pendiente (prototipo o confirmación)")
     if "prototipo pendiente" in text.lower():
         err("la spec aún dice «prototipo pendiente»")

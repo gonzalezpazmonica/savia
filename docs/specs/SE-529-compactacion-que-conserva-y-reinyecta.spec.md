@@ -86,9 +86,9 @@ Antes y después, en llano.
 ### Confirmación del prototipo
 
 - fecha: 2026-11-14
-- respuesta: «los textos que confirmó el 2026-11-13 sean el prototipo de SE-529». Registro de la orquestadora, no texto literal de la operadora: decisión que ella tomó el 2026-11-14 por pregunta interactiva, transmitida en el encargo de esta PR, sin enlace verificable todavía. Sustituye el criterio anterior de esta spec, que pedía ver el aviso funcionando con datos reales antes de confirmar. Lo que sigue sin existir es el aviso funcionando con datos reales; eso lo producen S1 y S2, y la medición de S0 sigue siendo previa a ellos.
+- respuesta: registro de la orquestadora, no cita literal de la operadora: según el encargo de esta PR, la operadora decidió el 2026-11-14, por pregunta interactiva, que los textos confirmados el 2026-11-13 son el prototipo de SE-529. No hay enlace verificable, así que esta respuesta no cumple la puerta de comprensión (SE-505) y S1 no se pone en curso hasta que conste su cita literal con enlace. Sustituye el criterio anterior de esta spec, que pedía ver el aviso funcionando con datos reales antes de confirmar; ese aviso funcionando sigue sin existir (lo producen S1 y S2; la medición de S0 es previa).
 
-La spec sigue en PROPOSED: falta que la aprobación (no el prototipo) conste de forma verificable en la PR (SE-488).
+La spec sigue en PROPOSED y la confirmación del prototipo sigue abierta a efectos de la puerta: faltan la cita literal de la operadora con enlace verificable (SE-505) y la aprobación verificable (SE-488), que debe citar expresamente este cambio de criterio.
 
 El prototipo de esta spec son los textos citados arriba. S0 es la medición; su salida es `docs/evidence/SE-529-S0-forma-y-linea-base.md` más los fixtures de S3. Nada del contenido de una conversación entra en el repo.
 
@@ -229,4 +229,4 @@ Cerradas por la operadora el 2026-11-13 (pregunta interactiva, «Confirmo todo c
 
 ## Aprobación
 
-En PROPOSED. La operadora confirmó escenas y decisiones 10 a 12 el 2026-11-13 y, el 2026-11-14, que esos mismos textos son el prototipo de S0 (ambos registros de la orquestadora, sin enlace verificable). Pasa a APPROVED cuando la aprobación conste en la PR por una vía verificable (SE-488). Ningún slice empieza sin aprobación; S0 puede aprobarse sola (no cambia comportamiento).
+En PROPOSED. La operadora confirmó escenas y decisiones 10 a 12 el 2026-11-13 y, el 2026-11-14, que esos mismos textos son el prototipo de S0 (ambos registros de la orquestadora, sin enlace verificable). Pasa a APPROVED cuando la aprobación conste en la PR por una vía verificable (SE-488) y cite expresamente el prototipo y el cambio de criterio; S1 no arranca hasta que la confirmación del prototipo tenga cita literal con enlace (SE-505). Ningún slice empieza sin aprobación; S0 puede aprobarse sola (no cambia comportamiento).
