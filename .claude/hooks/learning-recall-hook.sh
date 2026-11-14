@@ -23,7 +23,9 @@ try:
     data = json.loads(os.environ['SCL_INPUT'])
 except Exception:
     raise SystemExit
-for key in ('content', 'prompt_text'):
+# Claude Code manda el texto en «prompt» (UserPromptSubmit); «content» y «prompt_text» son las formas
+# del guard de OpenCode y de pruebas antiguas. Sin «prompt» el hook no inyectaba ni registraba nada.
+for key in ('prompt', 'content', 'prompt_text'):
     value = data.get(key)
     if isinstance(value, str):
         print(value)
