@@ -1,5 +1,5 @@
 ---
-status: APPROVED
+status: RETIRED
 priority: P1
 developer_type: agent-team
 created: 2026-11-09
@@ -17,9 +17,15 @@ timeline:
   - from: "2026-11-09"
     learned: "2026-11-09"
     value: "APPROVED"
+  - from: "2026-11-14"
+    learned: "2026-11-14"
+    value: "RETIRED"
+    source: "spec-lifecycle:auto"
 ---
-
 # SE-513 — Admisión duradera de cambios de intención y comprobación previa
+
+> **RETIRADA (2026-11-14).** La operadora retiró esta spec y su código (S1 admisión y S2 promoción, que vivían en `scripts/lib/task-queue.py`, más sus tres ficheros de pruebas) por la regla «conectar antes de construir». Motivos: ningún flujo llamaba a la admisión, la cola de SE-075 sobre la que se apoyaba tampoco tenía consumidor desde su origen, y no se ha observado la pérdida de ningún cambio de prioridad. El texto y el prototipo S0 se conservan como historia. El código se recupera del historial de git: es el de la versión anterior a la PR de retirada. SE-514 S2 y SE-515 S3 ya no pueden apoyarse en la admisión de SE-513.
+
 
 ## Problema (leído en main e59b795ee, 2026-11-09; lectura estática)
 
