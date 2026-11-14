@@ -289,6 +289,30 @@ for r in scope[max(0, pos - window): pos + window + 1]:
 PY
 }
 
+# SE-529 S2: --max-bytes N para context y search. Corta en frontera de línea completa
+# (así nunca a mitad de un carácter UTF-8). Sin la opción, la salida no cambia.
+_cap_bytes() {
+    LC_ALL=C awk -v max="$1" '
+        { n = length($0) + 1
+          # Sigue leyendo tras el corte (sin exit) para no dar SIGPIPE al productor.
+          if (full || used + n > max) { full = 1; next }
+          print; used += n; shown++ }
+        END { if (shown == 0) print "memory-store: --max-bytes " max " menor que la primera línea; no se emite nada" > "/dev/stderr" }'
+}
+_with_max_bytes() {
+    local fn="$1"; shift
+    local args=() max=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --max-bytes) max="${2:-}"; shift; [[ $# -gt 0 ]] && shift ;;
+            *) args+=("$1"); shift ;;
+        esac
+    done
+    if [[ -z "$max" ]]; then "$fn" "${args[@]}"; return; fi
+    [[ "$max" =~ ^[0-9]+$ ]] || { echo "memory-store: --max-bytes requiere un entero" >&2; return 1; }
+    "$fn" "${args[@]}" | _cap_bytes "$max"
+}
+
 # Skip dispatcher if sourced (allows tests to load functions without executing)
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
     return 0 2>/dev/null || true
@@ -296,8 +320,8 @@ fi
 
 case "${1:-help}" in
     save) shift; cmd_save "$@" ;;
-    search|recall) shift; _ensure_embed_server "$@"; cmd_search "$@" ;;
-    context) shift; cmd_context "$@" ;;
+    search|recall) shift; _ensure_embed_server "$@"; _with_max_bytes cmd_search "$@" ;;
+    context) shift; _with_max_bytes cmd_context "$@" ;;
     stats) cmd_stats ;;
     prune) cmd_prune ;;
     entity) shift; cmd_entity "$@" ;;
