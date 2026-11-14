@@ -274,12 +274,15 @@ cmd_entity() { local action="${1:-list}" query= etype= proj=; shift 2>/dev/null 
 }
 
 cmd_session_summary() {
-    local goal= discoveries= accomplished= files= project=
+    # SE-529 S1: --source/--origin se reenvían a cmd_save. Sin ellos, SE-072 rechazaba el guardado
+    # y el resumen de pre-compact se perdía en silencio. No hay procedencia por defecto: quien llama la declara.
+    local goal= discoveries= accomplished= files= project= source= origin=
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --goal) goal="$2"; shift 2 ;; --discoveries) discoveries="$2"; shift 2 ;;
             --accomplished) accomplished="$2"; shift 2 ;; --files) files="$2"; shift 2 ;;
-            --project) project="$2"; shift 2 ;; *) shift ;;
+            --project) project="$2"; shift 2 ;; --source) source="$2"; shift 2 ;;
+            --origin) origin="$2"; shift 2 ;; *) shift ;;
         esac
     done
     [[ -z "$accomplished" ]] && { echo "Error: --accomplished requerido"; return 1; }
@@ -289,7 +292,8 @@ cmd_session_summary() {
     [[ -n "$files" ]] && content="$content | Files: $files"
     cmd_save --type "session-summary" --title "Session $(date +%Y-%m-%d)" \
         --content "$content" --concepts "session" \
-        --topic "session/$(date +%Y-%m-%d)" ${project:+--project "$project"}
+        --topic "session/$(date +%Y-%m-%d)" ${project:+--project "$project"} \
+        ${source:+--source "$source"} ${origin:+--origin "$origin"}
 }
 
 # SE-352: distribución de orígenes de las entradas de memoria
