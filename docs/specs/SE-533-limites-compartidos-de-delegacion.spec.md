@@ -76,7 +76,7 @@ Un **encargo** es el trabajo que una persona o la planta pide en origen. Su pres
 
 | Magnitud | Qué cuenta | Cómo se fija |
 |---|---|---|
-| **D** profundidad | Saltos de creación anidada. La sesión inicial es D=0. Lanzar un script intermediario **no** reinicia D | **Techo duro desde el principio: 2.** La cadena anidada más larga legítima del repo es sesión → orquestador → agente (tribunal, corrección, test-runner), es decir D=2; las cadenas SDD son handoffs secuenciales que procesa un supervisor y no anidan. S0 lo confirma o corrige **antes** de activarlo |
+| **D** profundidad | Saltos de creación anidada. La sesión inicial es D=0. Lanzar un script intermediario **no** reinicia D | **Techo estático duro desde el principio: 2** (el analizador de enrutado, S1/S2); el techo **de ejecución** entra en `observe` en S3 y pasa a `enforce` en S4 con la ventana de 7 días. La cadena anidada más larga legítima del repo es sesión → orquestador → agente (tribunal, corrección, test-runner), es decir D=2; las cadenas SDD son handoffs secuenciales que procesa un supervisor y no anidan. S0 lo confirma o corrige **antes** de activarlo |
 | **C** concurrencia | Hijos activos a la vez dentro del encargo, sumando todos los runtimes | Se observa en S0/S3; el techo duro se fija como **2× el máximo observado en uso normal** y nunca por debajo de 7 (los siete jueces del tribunal de veracidad) |
 | **H** lanzamientos acumulados | Total de lanzamientos y handoffs del encargo | Igual que C: aviso en el **p99 observado × 1,5**, techo duro en el doble del aviso |
 | **R** repeticiones | Lanzamientos del mismo destino para el mismo elemento de trabajo, aunque cambien el SHA, la sesión o el día | Aviso al tercero; ver D3 |
@@ -85,7 +85,7 @@ Un **encargo** es el trabajo que una persona o la planta pide en origen. Su pres
 
 1. **Modo observación primero.** Cada límite tiene `mode: observe | enforce` en `config/delegation-limits.yaml`. En `observe` no bloquea nada: anota «habría bloqueado» con la magnitud y el encargo.
 2. **Se pasa a `enforce` por límite y con datos.** Un límite pasa a `enforce` solo si durante al menos 7 días de uso real la tasa de «habría bloqueado» sobre encargos que terminaron bien fue 0. Si no es 0, se sube el valor o se descarta el límite, y la PR lo dice. Es la prueba anti-fricción (AC-7).
-3. **Solo D y el ciclo son estructurales** y entran duros desde el primer día; C y H empiezan en `observe` sin valor de bloqueo hasta que S0 aporte datos.
+3. **Solo D y el ciclo son estructurales, y lo son en el analizador estático** (S1/S2: fallan en CI desde el primer día). En ejecución, D también empieza en `observe` (S3) y no pasa a `enforce` sin la ventana de 7 días (S4, AC-7). C y H empiezan en `observe` sin valor de bloqueo hasta que S0 aporte datos. **El bloqueo actual de `delegation-guard.sh` (`SAVIA_DELEGATION_DEPTH` ≥ 1, `:35`) no cambia en S3**: S3 solo añade la observación; si D=2 es legítimo, S4 sustituye ese bloqueo por el techo medido, no antes.
 4. **Un límite que corta no mata el encargo.** Devuelve al padre un handback con la magnitud, el valor y qué hacer (SE-332). El resto de compañeros y el padre siguen trabajando.
 
 ### D2 — Permiso de quién puede pedir a quién, cerrado por defecto
@@ -143,11 +143,11 @@ Orden: **S0 → S1 → S2 → S3 → S4 → S5.** Cada una con su PR y revisión
 | S0 | Medir D, C, H, R y la identidad del padre. Sin cambio de comportamiento | 2 | **2** |
 | S1 | Arreglo del analizador, test real y paso en validate-ci-local; excepciones congeladas | 2 | **2** |
 | S2 | Allowlist en los seis delegadores y `delegation-entrypoints.yaml`; las excepciones se vacían | 3 | **4** |
-| S3 | Mediador en modo observación: reserva, repetición, fallos seguidos y recibo | 2 | **2** |
+| S3 | Mediador en modo observación: reserva, repetición, fallos seguidos y recibo | 2 | **3** |
 | S4 | Paso a `enforce` límite a límite, con los valores de S0 | 3 | **3** |
 | S5 | Los lanzadores toman reserva del mediador; contrato para la planta privada | 2 | **2** |
 
-**Notas de tier, medidas el 2026-11-14.** S2 toca `.opencode/agents/` y `.claude/agents/`: `risk-tier.py` da tier 4 («path de gobernanza»), no el 3 pedido; no entra en un lote de tier 1/2. S3 y S5 salen tier 2 solo si no editan `.claude/settings.json`. **Registrar el hook de delegación también para la herramienta `Task`, o cambiar el perfil de `standard` a otro, exige editar `.claude/settings.json` (tier 4, decisión de la operadora)**: esta spec no lo hace; S3 deja la orden exacta en su PR. S4 son valores en `config/delegation-limits.yaml`: un fichero YAML de `config/` sin categoría sube a tier 3 por fail-closed (`risk-tier.py`).
+**Notas de tier, medidas el 2026-11-14.** S2 toca `.opencode/agents/` y `.claude/agents/`: `risk-tier.py` da tier 4 («path de gobernanza»), no el 3 pedido; no entra en un lote de tier 1/2. S3 sale tier 3: `config/delegation-limits.yaml` es un YAML de `config/` sin categoría (fail-closed) y además edita un guard; medido con `risk-tier.py --diff`. S5 sale tier 2 solo si no edita `.claude/settings.json` ni ningún YAML de `config/` (los lanzadores y la documentación en `docs/rules/domain/` salen tier 2; si S5 tocara `delegation-entrypoints.yaml` sería tier 3). **Registrar el hook de delegación también para la herramienta `Task`, o cambiar el perfil de `standard` a otro, exige editar `.claude/settings.json` (tier 4, decisión de la operadora)**: esta spec no lo hace; S3 deja la orden exacta en su PR. S4 son valores en `config/delegation-limits.yaml`: un fichero YAML de `config/` sin categoría sube a tier 3 por fail-closed (`risk-tier.py`).
 
 ### S0 — Medir antes de limitar (tier 2)
 
@@ -169,7 +169,7 @@ Orden: **S0 → S1 → S2 → S3 → S4 → S5.** Cada una con su PR y revisión
 - **Pruebas.** La ruta legítima de cada una de las seis sigue siendo posible: tribunal de veracidad con sus siete jueces, tribunal de recomendación con sus cuatro, tribunal de código con cinco jueces y corrección, `test-runner` y `frontend-test-runner` con desarrollador, arquitecto y analista, `commit-guardian` con el agente responsable (el validador acepta cada arista). Un destino fuera de la lista falla. Una entrada de lanzador con comodín falla. Un lanzador sin entrada falla. Un diff de `permission_level`, `permissionMode` y `tools` de todos los agentes antes y después sale vacío; si no lo es, la PR no sale de borrador.
 - **Reversión.** `git revert`; vuelve la apertura declarativa anterior.
 
-### S3 — Mediador en observación (tier 2)
+### S3 — Mediador en observación (tier 3 calculado)
 
 - **Entrega.** `scripts/delegation-budget.py` (reserva atómica, liberación, repetición, fallos seguidos, R), `config/delegation-limits.yaml` con todos los límites en `observe`, recibo por encargo, y la adaptación de `delegation-guard.sh` para llamarlo **en modo observación y sin dejar de bloquear lo que bloquea hoy**. El texto del mensaje de handback se define aquí.
 - **Pruebas.** Dos reservas simultáneas contra un techo de 1 (carrera real con dos procesos) dejan exactamente una. Repetición literal: la segunda no se lanza y devuelve la referencia; con entrada distinta pasa. Tres fallos seguidos suspenden al compañero; un éxito intermedio reinicia el contador; la cuota agotada no cuenta. R: tres lanzamientos con SHA distintos cuentan juntos. Presupuesto ausente, JSON vacío o malformado, herramienta auxiliar ausente y STOP vigente **no lanzan**. Un hijo que intenta crear su propio presupuesto raíz no obtiene uno nuevo. Con `observe`, un exceso no bloquea y deja la línea «habría bloqueado».
@@ -231,7 +231,7 @@ Orden: **S0 → S1 → S2 → S3 → S4 → S5.** Cada una con su PR y revisión
 
 ## Riesgos
 
-- **Frenar el trabajo normal.** Mitigación: observación primero, ventana de 7 días con cero «habría bloqueado» (AC-7), techo de C de al menos 7 y D como único duro inicial; un límite que no demuestra no molestar no se activa.
+- **Frenar el trabajo normal.** Mitigación: observación primero, ventana de 7 días con cero «habría bloqueado» (AC-7), techo de C de al menos 7 y D estático como único duro inicial (D de ejecución, en `observe` hasta S4); un límite que no demuestra no molestar no se activa.
 - **Cerrar por defecto rompe un tribunal.** Mitigación: S2 declara en cada allowlist lo que hoy usan y AC-5 prueba cada ruta legítima, incluidos los siete jueces.
 - **Identidad del padre sin acreditar.** Mitigación: Q1; sin parentesco, solo observación y se declara.
 - **Falso positivo de repetición.** Mitigación: la clave descarta campos volátiles y un reintento con entrada distinta pasa; una repetición que falló se deja pasar.

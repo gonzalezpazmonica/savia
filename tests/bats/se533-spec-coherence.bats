@@ -27,9 +27,9 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   # Seis slices S0..S5 en este orden y ninguno más.
   [ "$(grep -E '^### S[0-9] — ' "$f" | cut -c1-6 | paste -sd,)" = "### S0,### S1,### S2,### S3,### S4,### S5" ] \
     || { echo "orden o número de slices"; return 1; }
-  # Tiers calculados (última columna de la tabla de slices): S0=2, S1=2, S2=4, S3=2, S4=3, S5=2.
+  # Tiers calculados (última columna de la tabla de slices): S0=2, S1=2, S2=4, S3=3, S4=3, S5=2.
   local pair s t
-  for pair in S0:2 S1:2 S2:4 S3:2 S4:3 S5:2; do
+  for pair in S0:2 S1:2 S2:4 S3:3 S4:3 S5:2; do
     s=${pair%%:*}; t=${pair##*:}
     grep -qE "^\| $s \|.*\| \*\*$t\*\* \|\$" "$f" || { echo "tier calculado $s != $t"; return 1; }
   done
@@ -43,7 +43,7 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   # Diseño anti-fricción: observación primero y prueba de que el límite no molesta.
   grep -q 'mode: observe | enforce' "$f" || { echo "falta el modo observación"; return 1; }
   grep -q 'Modo observación primero' "$f" || { echo "falta observación primero"; return 1; }
-  grep -q 'Solo D y el ciclo son estructurales' "$f" || { echo "falta qué es duro desde el inicio"; return 1; }
+  grep -q 'lo son en el analizador estático' "$f" || { echo "falta qué es duro desde el inicio"; return 1; }
   grep -q 'ventana de 7 días' "$f" || { echo "falta la ventana de 7 días"; return 1; }
   grep -q 'No se ha medido el uso real' "$f" || { echo "falta honestidad sobre el uso medido"; return 1; }
   # Permiso: cerrado por defecto, sin comodín, sin escalada y sin conceder autoridad de efectos.
@@ -70,7 +70,9 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   grep -q '^## Relación con otras specs: no se duplica$' "$f" || { echo "falta la sección de no duplicación"; return 1; }
   local sp
   for sp in SE-496 SE-498 SE-531 SE-532 SPEC-121 SE-332; do
-    grep -qE "^\| .*\| $sp[ )]|^\| .*\| .*$sp" "$f" || { echo "no se relaciona con $sp"; return 1; }
+    # Fila de la sección «no se duplica» cuya segunda columna («La responde») empieza por la spec.
+    sed -n '/^## Relación con otras specs: no se duplica$/,/^## Qué decide esta spec$/p' "$f" \
+      | grep -qE "^\|[^|]*\| $sp([ ,]|\$)" || { echo "no se relaciona con $sp"; return 1; }
   done
   # Reversión por slice y plan de OpenCode.
   [ "$(grep -c '^- \*\*Reversión\.\*\*' "$f")" -ge 6 ] || { echo "falta reversión en algún slice"; return 1; }
@@ -244,6 +246,40 @@ PY3
   neg "no se relaciona con SE-496"
 }
 
+@test "negativo: borrar solo la fila de relación con SE-531 falla aunque la spec la mencione en otros sitios" {
+  python3 -I - "$M" <<'PY4'
+import sys
+p=sys.argv[1]; L=open(p,encoding="utf-8").read().split("\n")
+out=[l for l in L if not (l.startswith("| ¿Cómo se corta un proceso hijo") )]
+assert len(out)==len(L)-1
+open(p,"w",encoding="utf-8").write("\n".join(out))
+PY4
+  grep -q 'SE-531' "$M"
+  neg "no se relaciona con SE-531"
+}
+
+@test "negativo: borrar solo la fila de relación con SE-532 falla" {
+  python3 -I - "$M" <<'PY5'
+import sys
+p=sys.argv[1]; L=open(p,encoding="utf-8").read().split("\n")
+out=[l for l in L if not l.startswith("| ¿Cómo se valida la cabecera de cada agente?")]
+assert len(out)==len(L)-1
+open(p,"w",encoding="utf-8").write("\n".join(out))
+PY5
+  grep -q 'SE-532' "$M"
+  neg "no se relaciona con SE-532"
+}
+
+@test "negativo: S3 declarado tier 2 falla (el calculado es 3)" {
+  mutate '| S3 | Mediador en modo observación: reserva, repetición, fallos seguidos y recibo | 2 | **3** |' '| S3 | Mediador en modo observación: reserva, repetición, fallos seguidos y recibo | 2 | **2** |'
+  neg "tier calculado S3 != 3"
+}
+
+@test "negativo: D de ejecución declarado duro desde el primer día falla" {
+  mutate 'Solo D y el ciclo son estructurales, y lo son en el analizador estático' 'Solo D y el ciclo son estructurales'
+  neg "falta qué es duro desde el inicio"
+}
+
 @test "negativo: un slice sin reversión falla" {
   mutate '- **Reversión.** `git revert`; el script vuelve a su versión anterior.' '- Nada.'
   neg "falta reversión"
@@ -318,13 +354,41 @@ json.dump(d,open(sys.argv[2],'w'))
   [ "$status" -ne 0 ]
 }
 
-@test "repo público: changelog, LOG, planning y este test no contienen datos privados" {
-  local priv f; priv=$(priv_re)
+# priv_scan <fichero>: devuelve 1 si el fichero contiene un dato privado (fail-closed: fichero vacío o ausente también falla).
+priv_scan() {
+  [ -s "$1" ] || { echo "falta o vacío: $1"; return 1; }
+  if grep -inE "$(priv_re)" "$1"; then echo "dato privado en $1"; return 1; fi
+  return 0
+}
+
+@test "repo público: changelog, LOG y planning no contienen datos privados" {
+  # Un `! grep` dentro de un bucle no aborta bajo errexit; por eso se usa priv_scan con return explícito.
+  local f
   for f in "$REPO_ROOT/CHANGELOG.d/se533-limites-delegacion.md" \
            "$REPO_ROOT/docs/propuestas/LOG.d/SE-533-PROPOSED.md" "$STATE"; do
-    [ -s "$f" ] || { echo "falta $f"; return 1; }
-    ! grep -inE "$priv" "$f"
+    priv_scan "$f"
   done
+}
+
+@test "negativo: un dato privado en el primer fichero del bucle hace fallar priv_scan" {
+  local f="$BATS_TEST_TMPDIR/cl.md"
+  cp "$REPO_ROOT/CHANGELOG.d/se533-limites-delegacion.md" "$f"
+  printf 'contacto %s\n' "$(printf 'x@y''.es')" >> "$f"
+  run priv_scan "$f"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"dato privado"* ]]
+}
+
+@test "negativo: una ruta de usuario o un literal privado en el LOG falla; el fichero vacío también" {
+  local f="$BATS_TEST_TMPDIR/log.md"
+  cp "$REPO_ROOT/docs/propuestas/LOG.d/SE-533-PROPOSED.md" "$f"
+  printf '%s/u/x\n' "$(printf '/ho''me')" >> "$f"
+  run priv_scan "$f"
+  [ "$status" -ne 0 ]
+  : > "$f"
+  run priv_scan "$f"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"falta o vacío"* ]]
 }
 
 @test "sanity: el patrón privado detecta un literal, un correo y una ruta de usuario" {
@@ -336,12 +400,47 @@ json.dump(d,open(sys.argv[2],'w'))
   [ "$status" -ne 0 ]
 }
 
+# resolve_ref <fichero[:línea]>: ruta absoluta del fichero citado (con directorio o solo nombre; nombre ambiguo = fallo).
+resolve_ref() {
+  local file="$1" hits
+  case "$file" in *..*|/*) echo "ruta no admitida: $file"; return 1;; esac
+  if [[ "$file" == */* || -f "$REPO_ROOT/$file" ]]; then echo "$REPO_ROOT/$file"; return 0; fi
+  hits=$(git -C "$REPO_ROOT" ls-files | grep -E "(^|/)$file\$" || true)
+  [ "$(printf '%s\n' "$hits" | grep -c .)" -eq 1 ] || { echo "nombre ausente o ambiguo: $file"; return 1; }
+  echo "$REPO_ROOT/$hits"
+}
+
 @test "las referencias fichero:línea citadas siguen existiendo en main" {
   # Anti-deriva: cada fichero citado con línea existe y tiene al menos esa línea. No prueba su contenido.
-  local ref file line
+  # Cubre citas con directorio y citas solo con nombre; las citas «:NN» sueltas se acotan abajo.
+  local ref file line path n=0 refs
+  refs=$(grep -oE '[A-Za-z0-9_./-]+\.(sh|md|json|py|yaml|bats):[0-9]+' "$SPEC" | sort -u)
   while read -r ref; do
     file=${ref%%:*}; line=${ref##*:}
-    [ -f "$REPO_ROOT/$file" ] || { echo "no existe $file"; return 1; }
-    [ "$(wc -l < "$REPO_ROOT/$file")" -ge "$line" ] || { echo "$file sin línea $line"; return 1; }
-  done < <(grep -oE '(scripts|\.claude|\.opencode|docs|opencode)[A-Za-z0-9_./-]*\.(sh|md|json):[0-9]+' "$SPEC" | sort -u)
+    path=$(resolve_ref "$file") || { echo "$path"; return 1; }
+    [ -f "$path" ] || { echo "no existe $file"; return 1; }
+    [ "$(grep -c '' "$path")" -ge "$line" ] || { echo "$file sin línea $line"; return 1; }
+    n=$((n + 1))
+  done <<< "$refs"
+  [ "$n" -ge 8 ] || { echo "solo $n referencias comprobadas: la extracción no funciona"; return 1; }
+  # Citas «:NN» sueltas: las mayores de cada fichero citado en el texto.
+  [ "$(grep -c '' "$REPO_ROOT/scripts/agent-depth-limit.sh")" -ge 120 ]
+  [ "$(grep -c '' "$REPO_ROOT/.claude/hooks/delegation-guard.sh")" -ge 35 ]
+}
+
+# ref_ok <fichero> <línea>: 0 si el fichero citado existe y tiene al menos esa línea.
+ref_ok() {
+  local path; path=$(resolve_ref "$1") || return 1
+  [ -f "$path" ] && [ "$(grep -c '' "$path")" -ge "$2" ]
+}
+
+@test "negativo: una referencia a una línea inexistente o a un nombre ausente falla" {
+  run resolve_ref "no-existe-jamas.sh"
+  [ "$status" -ne 0 ]
+  run resolve_ref "../../etc/passwd"
+  [ "$status" -ne 0 ]
+  run ref_ok "delegation-guard.sh" 35
+  [ "$status" -eq 0 ]
+  run ref_ok "delegation-guard.sh" 99999
+  [ "$status" -ne 0 ]
 }
