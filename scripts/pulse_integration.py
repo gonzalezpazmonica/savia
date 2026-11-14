@@ -18,15 +18,36 @@ solo se informa qué se haría (modo `observar`, D3).
 Uso:
   gh pr list --json number,mergeable,mergeStateStatus | pulse_integration.py plan --next N
   pulse_integration.py fingerprint --base origin/main --head HEAD [--repo DIR]
-  pulse_integration.py reviewers --pr N --base origin/main --head SHA [--record]
+  pulse_integration.py reviewers --pr N --base origin/main --head SHA
+  pulse_integration.py reviewers-launched --pr N --base origin/main --head SHA
   pulse_integration.py ci --pr N [--apply]
+`reviewers` solo decide; quien llama graba la huella con `reviewers-launched` DESPUÉS
+de confirmar que las revisoras se relanzaron (si el relanzamiento falla, no se graba
+y la siguiente pasada vuelve a relanzar).
 Entorno: PULSE_LEDGER (ruta del ledger; por defecto bajo XDG_STATE_HOME), GH_BIN (gh).
-Exit: 0 decisión tomada; 2 entrada o entorno no válidos (sin efectos).
+Exit: 0 decisión tomada; 1 huella no calculable (`fingerprint`, `reviewers-launched`;
+nada se graba); 2 entrada o entorno no válidos, u otra pasada en curso (sin efectos).
+
+Límites conocidos:
+- Huella: un cambio que solo reubica una línea entre dos vecinas idénticas a las de su
+  sitio anterior no se distingue (contexto de 1 línea). Cualquier otro cambio, incluidos
+  sangría y espacios, cambia la huella.
+- Relanzar CI cierra y reabre la PR: desactiva el auto-merge y dispara los workflows de
+  `pull_request: closed`. Si `reopen` falla tras reintentar, se emite la petición al
+  momento (la PR quedó cerrada).
+- La petición se anota en el ledger y se devuelve en la salida; entregarla a la persona
+  es cosa de quien llama (S6).
+- Ledger con una línea corrupta: no se actúa sobre ninguna PR hasta revisarlo a mano
+  (fail-closed deliberado).
 """
 import argparse
+import contextlib
 import datetime as dt
+import fcntl
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -49,6 +70,10 @@ class Invalid(Exception):
     """Entrada o entorno no válido: exit 2, sin efectos."""
 
 
+class ReopenFailed(Exception):
+    """`pr close` funcionó pero `pr reopen` no: la PR quedó cerrada."""
+
+
 # ── 1. Política de integración ─────────────────────────────────────────────
 
 def _classify(pr):
@@ -60,6 +85,9 @@ def _classify(pr):
         return "desconocido"
     if s == "BEHIND":
         return "detras"
+    if s == "BLOCKED":
+        # GitHub da un solo estado: BLOCKED tapa BEHIND. No se sabe si va por detrás.
+        return "bloqueada"
     return "otro"
 
 
@@ -86,6 +114,8 @@ def plan_integration(prs, next_pr=None, policy="solo_conflicto"):
             out.append({"number": n, "action": "omitir", "reason": "desconocido"})
         elif n == next_pr and state == "detras":
             out.append({"number": n, "action": "integrar", "reason": "siguiente"})
+        elif n == next_pr and state == "bloqueada":
+            out.append({"number": n, "action": "omitir", "reason": "siguiente_bloqueada"})
         elif n == next_pr:
             out.append({"number": n, "action": "omitir", "reason": "siguiente_al_dia"})
         else:
@@ -95,26 +125,61 @@ def plan_integration(prs, next_pr=None, policy="solo_conflicto"):
 
 # ── 2. Huella de contenido ─────────────────────────────────────────────────
 
+# Config local que podría alterar el texto del diff: se fija explícitamente.
+_GIT_CFG = ("-c", "diff.noprefix=false", "-c", "diff.mnemonicPrefix=false",
+            "-c", "diff.relative=false", "-c", "core.quotePath=true")
+_DIFF_FLAGS = ("--no-ext-diff", "--no-textconv", "--no-color", "--no-renames",
+               "--src-prefix=a/", "--dst-prefix=b/", "--diff-algorithm=myers",
+               "--indent-heuristic", "--full-index", "--binary", "-O/dev/null")
+_HUNK = re.compile(rb"^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@.*$")
+_SHA = re.compile(r"^[0-9a-f]{40}(?:[0-9a-f]{24})?$")
+
+
 def _git(repo, *args, stdin=None):
-    return subprocess.run(["git", "-C", repo] + list(args), input=stdin,
+    return subprocess.run(["git", "-C", repo] + list(_GIT_CFG) + list(args), input=stdin,
                           capture_output=True, check=True, timeout=120).stdout
 
 
-def content_fingerprint(repo, base, head):
-    """patch-id estable de la diferencia head vs merge-base(base, head), sin contexto.
+def _resolve(repo, ref):
+    """SHA del commit o None. Nada que empiece por `-` llega a git como opción."""
+    if not isinstance(ref, str) or not ref or ref.startswith("-"):
+        return None
+    sha = _git(repo, "rev-parse", "--verify", "-q", "--end-of-options",
+               ref + "^{commit}").decode().strip()
+    return sha if _SHA.match(sha) else None
 
-    Sin contexto (-U0) para que cambios ajenos alrededor de lo que toca la propuesta
-    no alteren la huella. None ante cualquier fallo o diferencia vacía (fail-closed).
+
+def _normalize(diff):
+    """Quita lo que depende de la base y no del contenido de la propuesta: números de
+    línea y función de las cabeceras de hunk, y líneas `index` (blobs de la base)."""
+    out = []
+    for line in diff.split(b"\n"):
+        if line.startswith(b"index "):
+            continue
+        out.append(b"@@" if _HUNK.match(line) else line)
+    return b"\n".join(out)
+
+
+def content_fingerprint(repo, base, head):
+    """sha256 de la diferencia head vs merge-base(base, head): literal, con 1 línea de
+    contexto y sin números de línea.
+
+    Literal: sangría y espacios cuentan (no se usa `git patch-id`, que los ignora).
+    Una línea de contexto fija la posición de lo añadido sin que cambios ajenos a más
+    de una línea de distancia alteren la huella. None ante cualquier fallo, ref no
+    válida o diferencia vacía (fail-closed).
     """
     try:
-        mb = _git(repo, "merge-base", base, head).decode().strip()
-        if not mb:
+        b, h = _resolve(repo, base), _resolve(repo, head)
+        if not b or not h:
             return None
-        diff = _git(repo, "diff", "-U0", "--binary", mb, head)
+        mb = _git(repo, "merge-base", "--end-of-options", b, h).decode().strip()
+        if not _SHA.match(mb):
+            return None
+        diff = _git(repo, "diff", "-U1", *_DIFF_FLAGS, mb, h, "--")
         if not diff.strip():
             return None
-        pid = _git(repo, "patch-id", "--stable", stdin=diff).decode().split()
-        return pid[0] if pid else None
+        return "sha256:" + hashlib.sha256(_normalize(diff)).hexdigest()
     except (subprocess.SubprocessError, OSError, UnicodeDecodeError):
         return None
 
@@ -190,6 +255,21 @@ class Ledger:
         return [r for r in self.read() if r.get("kind") == kind and r.get("pr") == pr
                 and (sha is None or r.get("sha") == sha)]
 
+    @contextlib.contextmanager
+    def lock(self):
+        """Exclusión entre pasadas concurrentes durante leer → decidir → escribir.
+        Si otra pasada lo tiene, no se espera ni se actúa (Invalid → exit 2)."""
+        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+        fd = os.open(self.path + ".lock", os.O_WRONLY | os.O_CREAT, 0o600)
+        try:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                raise Invalid("otra pasada de Pulse tiene el ledger: no se actúa")
+            yield self
+        finally:
+            os.close(fd)
+
 
 # ── 3. Cabeza sin pruebas ──────────────────────────────────────────────────
 
@@ -216,8 +296,9 @@ def ci_step(ledger, pr, sha, state, committed_at, now, relaunch, apply=False,
 
     acciones: nada | esperar | relanzar | peticion | peticion_ya_emitida |
               observar_relanzar (dry-run)
-    El instante de partida es el posterior entre el commit y la primera vez que
-    Pulse vio la cabeza: un commit antiguo recién empujado no cuenta como atascado.
+    El instante de partida es la primera vez que Pulse vio la cabeza: un commit
+    antiguo recién empujado no cuenta como atascado, y una fecha de commit futura
+    (la fija el autor) no aplaza nada.
     """
     seen = ledger.find("cabeza_observada", pr, sha)
     if not seen:
@@ -235,8 +316,12 @@ def ci_step(ledger, pr, sha, state, committed_at, now, relaunch, apply=False,
                           intento_en=relanz[0]["ts"])
         return ("nada", "en_marcha")
 
-    since = max(committed_at, first_seen) if committed_at else first_seen
+    # Se cuenta desde la primera vez que Pulse vio esta cabeza. Un commit siempre es
+    # anterior a que se vea su SHA, así que committedDate solo podría adelantar el
+    # inicio si es falso o el reloj está mal (lo fija el autor): queda informativo.
+    since = first_seen
     obs = {"estado": state, "edad_s": int((now - since).total_seconds()),
+           "commit": _iso(committed_at) if committed_at else None,
            "pruebas": [{"nombre": str(c.get("name") or c.get("context") or "?"),
                         "estado": str(c.get("status") or c.get("state") or "?")}
                        for c in (checks or [])][:20]}
@@ -249,12 +334,20 @@ def ci_step(ledger, pr, sha, state, committed_at, now, relaunch, apply=False,
         # Intención ANTES del efecto: si el proceso muere a mitad, no se repite.
         ledger.append("ci_relanzamiento", now, pr=pr, sha=sha, estado=state,
                       mecanismo="reabrir_pr", observado=obs)
+        closed = False
         try:
             relaunch(pr)
             res = "ok"
+        except ReopenFailed:
+            res, closed = "error:ReopenFailed", True
         except Exception as e:  # el intento ya cuenta, aunque falle
             res = "error:%s" % type(e).__name__
         ledger.append("ci_relanzamiento_resultado", _now(), pr=pr, sha=sha, resultado=res)
+        if closed:
+            # La PR quedó cerrada: la persona debe saberlo ya, no dentro de 15 min.
+            ledger.append("ci_atascada_peticion", _now(), pr=pr, sha=sha,
+                          motivo="pr_cerrada_reabrir_fallo", observado=obs)
+            return ("peticion", "pr_cerrada_reabrir_fallo")
         return ("relanzar", res)
 
     # Ya hubo un relanzamiento para esta cabeza: nunca otro automático.
@@ -262,11 +355,13 @@ def ci_step(ledger, pr, sha, state, committed_at, now, relaunch, apply=False,
         return ("esperar", "tras_relanzar")
     if ledger.find("ci_atascada_peticion", pr, sha):
         return ("peticion_ya_emitida", "una_por_cabeza")
+    motivo = ("en_cola_tras_arrancar" if ledger.find("ci_arrancada", pr, sha)
+              else "no_arranca_tras_relanzar")
     if not apply:
-        return ("peticion", "no_arranca_tras_relanzar")
-    ledger.append("ci_atascada_peticion", now, pr=pr, sha=sha,
-                  motivo="no_arranca_tras_relanzar", observado=obs)
-    return ("peticion", "no_arranca_tras_relanzar")
+        return ("peticion", motivo)
+    ledger.append("ci_atascada_peticion", now, pr=pr, sha=sha, motivo=motivo,
+                  observado=obs)
+    return ("peticion", motivo)
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────
@@ -279,9 +374,18 @@ def _gh(*args):
     return r.stdout
 
 
+REOPEN_TRIES = 3
+
+
 def _relaunch_reopen(pr):
     _gh("pr", "close", str(pr))
-    _gh("pr", "reopen", str(pr))
+    for _ in range(REOPEN_TRIES):
+        try:
+            _gh("pr", "reopen", str(pr))
+            return
+        except Invalid:
+            continue
+    raise ReopenFailed("pr %d cerrada; reopen falló %d veces" % (pr, REOPEN_TRIES))
 
 
 def _cmd_plan(a):
@@ -303,16 +407,31 @@ def _cmd_fingerprint(a):
     return 0
 
 
+def _prev_fingerprint(led, pr):
+    prev = None
+    for r in led.find("huella_revisoras", pr):
+        prev = r.get("huella")
+    return prev
+
+
 def _cmd_reviewers(a):
     led = Ledger(ledger_path(a.ledger))
-    prev = None
-    for r in led.find("huella_revisoras", a.pr):
-        prev = r.get("huella")
     cur = content_fingerprint(a.repo, a.base, a.head)
-    action, why = reviewers_decision(prev, cur)
-    if action == "relanzar" and a.record and cur:
-        led.append("huella_revisoras", _now(), pr=a.pr, sha=a.head, huella=cur)
+    action, why = reviewers_decision(_prev_fingerprint(led, a.pr), cur)
     print(json.dumps({"action": action, "reason": why, "huella": cur}, sort_keys=True))
+    return 0
+
+
+def _cmd_reviewers_launched(a):
+    """Graba la huella solo cuando quien llama confirma que las revisoras arrancaron."""
+    led = Ledger(ledger_path(a.ledger))
+    cur = content_fingerprint(a.repo, a.base, a.head)
+    if not cur:
+        print("huella no calculable: no se graba", file=sys.stderr)
+        return 1
+    with led.lock():
+        led.append("huella_revisoras", _now(), pr=a.pr, sha=a.head, huella=cur)
+    print(json.dumps({"pr": a.pr, "huella": cur}, sort_keys=True))
     return 0
 
 
@@ -329,8 +448,9 @@ def _cmd_ci(a):
         raise Invalid("respuesta de gh no interpretable: no se actúa")
     checks = info.get("statusCheckRollup")
     state = classify_head_ci(checks)
-    action, why = ci_step(led, a.pr, sha, state, committed, _now(), _relaunch_reopen,
-                          apply=a.apply, umbral=a.umbral, checks=checks)
+    with led.lock():
+        action, why = ci_step(led, a.pr, sha, state, committed, _now(), _relaunch_reopen,
+                              apply=a.apply, umbral=a.umbral, checks=checks)
     print(json.dumps({"pr": a.pr, "sha": sha, "estado": state, "action": action,
                       "reason": why, "apply": bool(a.apply)}, sort_keys=True))
     return 0
@@ -353,9 +473,15 @@ def main(argv):
     p.add_argument("--pr", type=int, required=True)
     p.add_argument("--base", required=True)
     p.add_argument("--head", required=True)
-    p.add_argument("--record", action="store_true")
     p.add_argument("--ledger")
     p.set_defaults(fn=_cmd_reviewers)
+    p = sub.add_parser("reviewers-launched")
+    p.add_argument("--repo", default=".")
+    p.add_argument("--pr", type=int, required=True)
+    p.add_argument("--base", required=True)
+    p.add_argument("--head", required=True)
+    p.add_argument("--ledger")
+    p.set_defaults(fn=_cmd_reviewers_launched)
     p = sub.add_parser("ci")
     p.add_argument("--pr", type=int, required=True)
     p.add_argument("--apply", action="store_true")

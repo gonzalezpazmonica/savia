@@ -49,6 +49,12 @@ class PlanIntegration(unittest.TestCase):
         d = by_num(pi.plan_integration([pr(7)], next_pr=7))
         self.assertEqual((d[7]["action"], d[7]["reason"]), ("omitir", "siguiente_al_dia"))
 
+    def test_siguiente_bloqueada_se_etiqueta_como_tal_y_no_se_integra(self):
+        d = by_num(pi.plan_integration([pr(8, "MERGEABLE", "BLOCKED"), pr(9, "MERGEABLE", "BLOCKED")],
+                                       next_pr=8))
+        self.assertEqual((d[8]["action"], d[8]["reason"]), ("omitir", "siguiente_bloqueada"))
+        self.assertEqual((d[9]["action"], d[9]["reason"]), ("omitir", "sin_conflicto"))
+
     def test_desconocido_no_se_toca_ni_siendo_la_siguiente(self):
         d = by_num(pi.plan_integration([pr(5, "UNKNOWN", "UNKNOWN"), {"number": 6}], next_pr=5))
         self.assertEqual(d[5]["action"], "omitir")
@@ -133,6 +139,68 @@ class Fingerprint(unittest.TestCase):
         self.assertNotEqual(before, after)
         self.assertEqual(pi.reviewers_decision(before, after), ("relanzar", "huella_distinta"))
 
+    def _pr_adds(self, text):
+        write(self.r, "code.py", text)
+        git(self.r, "add", "."); git(self.r, "commit", "-qm", "codigo")
+        return self.fp()
+
+    def _amend(self, text):
+        write(self.r, "code.py", text)
+        git(self.r, "commit", "-q", "--amend", "-am", "codigo")
+        return self.fp()
+
+    def test_cambio_solo_de_sangria_cambia_la_huella(self):
+        a = self._pr_adds("if ok:\n    run(x)\nfin()\n")
+        b = self._amend("if ok:\nrun(x)\nfin()\n")  # sacar run(x) de la guarda
+        self.assertNotEqual(a, b)
+        c = self._amend("if ok:\n        run(x)\nfin()\n")
+        self.assertNotEqual(a, c)
+        self.assertEqual(pi.reviewers_decision(a, c), ("relanzar", "huella_distinta"))
+
+    def test_espacios_dentro_de_un_literal_cambian_la_huella(self):
+        a = self._pr_adds('cmd = "rm -rf /tmp/x"\n')
+        b = self._amend('cmd = "rm -rf / tmp/x"\n')
+        self.assertNotEqual(a, b)
+
+    def test_linea_anadida_reubicada_en_el_mismo_fichero_cambia_la_huella(self):
+        lines = ["a%d" % i for i in range(30)]
+        inside = list(lines); inside.insert(5, "run()")
+        write(self.r, "a.txt", "\n".join(inside) + "\n")
+        git(self.r, "commit", "-qam", "pr toca a.txt")
+        a = self.fp()
+        outside = list(lines); outside.insert(25, "run()")
+        write(self.r, "a.txt", "\n".join(outside) + "\n")
+        git(self.r, "commit", "-q", "--amend", "-am", "pr toca a.txt")
+        self.assertNotEqual(a, self.fp())
+
+    def test_main_inserta_lineas_encima_en_el_mismo_fichero_no_cambia_la_huella(self):
+        lines = ["a%d" % i for i in range(30)]
+        edited = list(lines); edited[20] = "a20-propuesta"
+        write(self.r, "a.txt", "\n".join(edited) + "\n")
+        git(self.r, "commit", "-qam", "pr toca a.txt")
+        before = self.fp()
+        git(self.r, "checkout", "-q", "main")
+        write(self.r, "a.txt", "\n".join(["nueva1", "nueva2"] + lines) + "\n")
+        git(self.r, "commit", "-qam", "main inserta arriba")
+        git(self.r, "checkout", "-q", "pr")
+        git(self.r, "merge", "-q", "--no-edit", "main")
+        self.assertEqual(before, self.fp())
+
+    def test_config_local_del_diff_no_altera_la_huella(self):
+        before = self.fp()
+        git(self.r, "config", "diff.noprefix", "true")
+        git(self.r, "config", "diff.mnemonicPrefix", "true")
+        git(self.r, "config", "diff.algorithm", "patience")
+        self.assertEqual(before, self.fp())
+
+    def test_refs_con_forma_de_opcion_no_llegan_a_git(self):
+        # Guarda de regresión: hoy ya lo impide que merge-base falle antes de diff;
+        # _resolve + --end-of-options es defensa en profundidad para cuando S6 pase refs.
+        out = os.path.join(self.r, "escrito.txt")
+        self.assertIsNone(pi.content_fingerprint(self.r, "main", "--output=" + out))
+        self.assertIsNone(pi.content_fingerprint(self.r, "--output=" + out, "pr"))
+        self.assertFalse(os.path.exists(out))
+
     def test_fallo_del_calculo_devuelve_none_y_relanza(self):
         self.assertIsNone(pi.content_fingerprint(self.r, "main", "no-existe"))
         self.assertIsNone(pi.content_fingerprint(self.r, "rama-ilegible", "pr"))
@@ -201,6 +269,40 @@ class CiStep(unittest.TestCase):
         row = self.led.find("ci_relanzamiento", 9)[0]
         self.assertEqual(row["observado"]["estado"], "en_cola")
         self.assertEqual(row["observado"]["edad_s"], 900)
+
+    def test_el_ledger_registra_nombres_y_estados_de_las_pruebas(self):
+        checks = [{"name": "lint", "status": "QUEUED"}, {"context": "ci/x", "state": "PENDING"}]
+        pi.ci_step(self.led, 9, "sha1", "en_cola", None, T0, self.relaunch, checks=checks)
+        pi.ci_step(self.led, 9, "sha1", "en_cola", None, T0 + 15 * M, self.relaunch,
+                   apply=True, checks=checks)
+        row = self.led.find("ci_relanzamiento", 9)[0]
+        self.assertEqual(row["observado"]["pruebas"],
+                         [{"nombre": "lint", "estado": "QUEUED"},
+                          {"nombre": "ci/x", "estado": "PENDING"}])
+
+    def test_commit_con_fecha_futura_no_aplaza_el_relanzamiento(self):
+        future = T0 + dt.timedelta(days=30)
+        self.step(T0, committed=future)
+        self.assertEqual(self.step(T0 + 15 * M, committed=future), ("relanzar", "ok"))
+        row = self.led.find("ci_relanzamiento", 9)[0]
+        self.assertEqual(row["observado"]["edad_s"], 900)
+
+    def test_reopen_fallido_emite_peticion_al_momento(self):
+        def closed(n):
+            self.calls.append(n)
+            raise pi.ReopenFailed("cerrada")
+        self.step(T0)
+        self.assertEqual(self.step(T0 + 15 * M, relaunch=closed),
+                         ("peticion", "pr_cerrada_reabrir_fallo"))
+        self.assertEqual(self.step(T0 + 40 * M), ("peticion_ya_emitida", "una_por_cabeza"))
+        self.assertEqual(self.calls, [9])
+
+    def test_vuelta_a_cola_tras_arrancar_tiene_su_motivo(self):
+        self.step(T0); self.step(T0 + 15 * M)
+        self.step(T0 + 18 * M, state="en_marcha")
+        self.assertEqual(self.step(T0 + 31 * M, state="en_cola"),
+                         ("peticion", "en_cola_tras_arrancar"))
+        self.assertEqual(self.calls, [9])
 
     def test_si_arranca_tras_relanzar_no_hay_peticion(self):
         self.step(T0); self.step(T0 + 15 * M)
@@ -271,7 +373,8 @@ FAKE_GH = r"""#!/bin/bash
 echo "$@" >> "$FAKE_GH_LOG"
 case "$1 $2" in
   "pr view") cat "$FAKE_GH_VIEW" ;;
-  "pr close"|"pr reopen") exit "${FAKE_GH_RC:-0}" ;;
+  "pr close") exit "${FAKE_GH_RC:-0}" ;;
+  "pr reopen") exit "${FAKE_GH_REOPEN_RC:-${FAKE_GH_RC:-0}}" ;;
   *) exit 9 ;;
 esac
 """
@@ -332,16 +435,53 @@ class Cli(unittest.TestCase):
 
     def test_ci_con_apply_relanza_una_vez(self):
         self.set_view([])
-        # umbral 0: la primera pasada ya cumple (commit de las 08:00, visto ahora → desde=ahora)
-        # por eso se hacen dos pasadas con umbral 0 para pasar por «esperar» y luego actuar.
+        # umbral 0: la 1.ª pasada ya relanza; la 2.ª emite la petición; la 3.ª ve que ya
+        # se emitió. Nunca un segundo cierre/reapertura.
         first = json.loads(self.run_cli("ci", "--pr", "9", "--apply", "--umbral", "0").stdout)
         second = json.loads(self.run_cli("ci", "--pr", "9", "--apply", "--umbral", "0").stdout)
         third = json.loads(self.run_cli("ci", "--pr", "9", "--apply", "--umbral", "0").stdout)
         acts = [first["action"], second["action"], third["action"]]
-        self.assertEqual(acts.count("relanzar"), 1, acts)
+        self.assertEqual(acts, ["relanzar", "peticion", "peticion_ya_emitida"])
         closes = [c for c in self.gh_calls() if c.startswith("pr close")]
         reopens = [c for c in self.gh_calls() if c.startswith("pr reopen")]
         self.assertEqual((len(closes), len(reopens)), (1, 1))
+
+    def test_reopen_falla_reintenta_y_emite_peticion_al_momento(self):
+        self.set_view([])
+        env = dict(self.env, FAKE_GH_REOPEN_RC="1")
+        r = self.run_cli("ci", "--pr", "9", "--apply", "--umbral", "0", env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = json.loads(r.stdout)
+        self.assertEqual((out["action"], out["reason"]), ("peticion", "pr_cerrada_reabrir_fallo"))
+        calls = self.gh_calls()
+        self.assertEqual(len([c for c in calls if c.startswith("pr close")]), 1)
+        self.assertEqual(len([c for c in calls if c.startswith("pr reopen")]), pi.REOPEN_TRIES)
+        peds = pi.Ledger(self.ledger).find("ci_atascada_peticion", 9)
+        self.assertEqual([p["motivo"] for p in peds], ["pr_cerrada_reabrir_fallo"])
+        # NEGATIVO: la pasada siguiente no vuelve a cerrar
+        r2 = json.loads(self.run_cli("ci", "--pr", "9", "--apply", "--umbral", "0", env=env).stdout)
+        self.assertEqual(r2["action"], "peticion_ya_emitida")
+        self.assertEqual(len([c for c in self.gh_calls() if c.startswith("pr close")]), 1)
+
+    def test_otra_pasada_con_el_ledger_tomado_no_actua(self):
+        import fcntl
+        self.set_view([])
+        fd = os.open(self.ledger + ".lock", os.O_WRONLY | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            r = self.run_cli("ci", "--pr", "9", "--apply", "--umbral", "0")
+        finally:
+            os.close(fd)
+        self.assertEqual((r.returncode, r.stdout), (2, ""))
+        self.assertFalse([c for c in self.gh_calls() if c.startswith("pr close")])
+        # liberado el lock, la pasada sí actúa
+        r = json.loads(self.run_cli("ci", "--pr", "9", "--apply", "--umbral", "0").stdout)
+        self.assertEqual(r["action"], "relanzar")
+
+    def test_plan_stdin_no_utf8_exit_2(self):
+        r = subprocess.run([sys.executable, SCRIPT, "plan"], input=b"\xff\xfe",
+                           capture_output=True, env=self.env)
+        self.assertEqual((r.returncode, r.stdout), (2, b""))
 
     def test_ci_respuesta_de_gh_ilegible_no_actua(self):
         with open(self.view, "w") as f:
@@ -363,11 +503,23 @@ class Cli(unittest.TestCase):
             write(repo, "a", "1\n"); git(repo, "add", "."); git(repo, "commit", "-qm", "b")
             git(repo, "checkout", "-qb", "pr")
             write(repo, "f", "x\n"); git(repo, "add", "."); git(repo, "commit", "-qm", "p")
-            a = ["reviewers", "--repo", repo, "--pr", "5", "--base", "main", "--head", "pr", "--record"]
+            a = ["reviewers", "--repo", repo, "--pr", "5", "--base", "main", "--head", "pr"]
             r1 = json.loads(self.run_cli(*a).stdout)
             self.assertEqual((r1["action"], r1["reason"]), ("relanzar", "sin_huella_anterior"))
+            # NEGATIVO: decidir no graba; si el relanzamiento fallara, se vuelve a relanzar
+            r1b = json.loads(self.run_cli(*a).stdout)
+            self.assertEqual((r1b["action"], r1b["reason"]), ("relanzar", "sin_huella_anterior"))
+            rec = self.run_cli("reviewers-launched", "--repo", repo, "--pr", "5",
+                               "--base", "main", "--head", "pr")
+            self.assertEqual(rec.returncode, 0, rec.stderr)
+            self.assertEqual(json.loads(rec.stdout)["huella"], r1["huella"])
             r2 = json.loads(self.run_cli(*a).stdout)
             self.assertEqual((r2["action"], r2["reason"]), ("omitir", "huella_igual"))
+            # huella no calculable: exit 1 y no se graba nada
+            bad_rec = self.run_cli("reviewers-launched", "--repo", repo, "--pr", "6",
+                                   "--base", "main", "--head", "no-existe")
+            self.assertEqual((bad_rec.returncode, bad_rec.stdout), (1, ""))
+            self.assertEqual(pi.Ledger(self.ledger).find("huella_revisoras", 6), [])
             bad = json.loads(self.run_cli("reviewers", "--repo", repo, "--pr", "5", "--base", "main",
                                           "--head", "no-existe").stdout)
             self.assertEqual((bad["action"], bad["reason"]), ("relanzar", "huella_actual_ilegible"))
