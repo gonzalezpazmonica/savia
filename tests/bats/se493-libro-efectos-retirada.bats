@@ -13,14 +13,18 @@ setup() {
 }
 
 # Lista ficheros bajo $1 que referencian el libro retirado (script, mapa de operaciones, ayudas de prueba
-# o ficheros de prueba del libro). Sin directorio válido sale 2 (fail-closed).
+# o ficheros de prueba del libro), con o sin prefijo scripts/ (cubre "$SCRIPT_DIR/…" y `cd scripts && ./…`).
+# Fail-closed: sin directorio válido sale 2; un error de grep (rc>1) se propaga, no se lee como «sin coincidencias».
 # Este fichero queda excluido por nombre; .claude/context-cache es caché de sesión gitignored.
-# Las menciones al libro en el texto de un prototipo (docs/specs/assets, fuera de estos directorios) son historia.
+# test-se493-se498-prototipos.bats cita el script como texto del prototipo de la spec (fixtures `$ … .py`), sin llamarlo.
 consumers() {
   [ -d "$1" ] || return 2
+  local rc=0
   grep -rlIP --exclude-dir=node_modules --exclude-dir=target --exclude-dir=context-cache \
-    --exclude=se493-libro-efectos-retirada.bats \
-    -e "scripts/${LEDGER}|scripts/${OPS}|${HELPERS}|se493-${LEDGER}" "$1" || true
+    --exclude=se493-libro-efectos-retirada.bats --exclude=test-se493-se498-prototipos.bats \
+    -e "${LEDGER}\\.py|${OPS}\\.json|${HELPERS}|se493-${LEDGER}" "$1" || rc=$?
+  [ "$rc" -le 1 ] || return "$rc"
+  return 0
 }
 
 @test "los ficheros del libro ya no existen en el árbol" {
@@ -32,6 +36,9 @@ consumers() {
 }
 
 @test "ningún script, hook, workflow, test ni regla referencia el libro retirado" {
+  # scripts y tests son obligatorios: si faltaran, el barrido no probaría nada (fail-closed).
+  [ -d "$REPO_DIR/scripts" ]
+  [ -d "$REPO_DIR/tests" ]
   for d in scripts .claude .github .opencode tests docs/rules; do
     [ -d "$REPO_DIR/$d" ] || continue
     run consumers "$REPO_DIR/$d"
@@ -61,9 +68,31 @@ consumers() {
   [ "$status" -eq 2 ]
 }
 
-@test "el contrato vivo f5-state.sh sigue ahí y rechaza una op distinta de pr.merge" {
-  run bash "$REPO_DIR/scripts/f5-state.sh" reserve publish.report 7
+@test "el detector funciona: llamadas sin prefijo scripts/ también se detectan" {
+  mkdir -p "$BATS_TEST_TMPDIR/fx3/scripts"
+  printf 'python3 "$SCRIPT_DIR/%s.py" status\n' "$LEDGER" > "$BATS_TEST_TMPDIR/fx3/scripts/a.sh"
+  printf 'cd scripts && ./%s.py reconcile\n' "$LEDGER" > "$BATS_TEST_TMPDIR/fx3/scripts/b.sh"
+  printf 'echo sin relacion\n' > "$BATS_TEST_TMPDIR/fx3/scripts/c.sh"
+  run consumers "$BATS_TEST_TMPDIR/fx3"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"a.sh"* ]]
+  [[ "$output" == *"b.sh"* ]]
+  [[ "$output" != *"c.sh"* ]]
+}
+
+@test "el detector falla cerrado: un error de grep (fichero ilegible) no da verde" {
+  mkdir -p "$BATS_TEST_TMPDIR/fx4"
+  printf 'nada\n' > "$BATS_TEST_TMPDIR/fx4/x.sh"
+  chmod 000 "$BATS_TEST_TMPDIR/fx4/x.sh"
+  run consumers "$BATS_TEST_TMPDIR/fx4"
+  chmod 600 "$BATS_TEST_TMPDIR/fx4/x.sh"
   [ "$status" -eq 2 ]
+}
+
+@test "el contrato vivo f5-state.sh sigue ahí con su guard de operación (cobertura en test-f5-state-guards.bats)" {
+  [ -f "$REPO_DIR/tests/bats/test-f5-state-guards.bats" ]
+  run grep -c 'pr.merge' "$REPO_DIR/scripts/f5-state.sh"
+  [ "$output" -ge 1 ]
 }
 
 @test "merge-sprint y push-pr siguen usando f5-state.sh" {
