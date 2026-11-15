@@ -17,6 +17,7 @@ import { emptyConfig, loadConfig, saveConfig } from "../src/core/config.ts";
 import { serveFromCli } from "../src/api/serve.ts";
 import { ensureInstallCert } from "../src/api/cert.ts";
 import { servePinned } from "../src/cli/setup.ts";
+import { escapeRegExp } from "./regex-escape.ts";
 
 const v4 = (address: string, internal = false) => ({ address, family: "IPv4" as const, internal, netmask: "255.192.0.0", mac: "00:00:00:00:00:00", cidr: null });
 const VPN = "100.101.7.3";
@@ -66,7 +67,7 @@ test("init con VPN detectada fija api.listen en la IP de la VPN y lo dice", asyn
   const s = mk(conVpn());
   assert.equal(await runCli(["init", "trabajo"], s.deps), 0, s.err.join("\n"));
   assert.deepEqual(loadConfig(s.deps.dataDir).api.listen, [VPN]);
-  assert.match(s.out.join("\n"), new RegExp(`Escucharé solo en tu VPN: ${VPN.replace(/\./g, "\\.")}`));
+  assert.match(s.out.join("\n"), new RegExp(`Escucharé solo en tu VPN: ${escapeRegExp(VPN)}`));
 });
 
 test("init sin VPN (negativo): api.listen queda vacía y explica qué hacer; nunca 0.0.0.0", async () => {
@@ -362,7 +363,7 @@ test("doctor macOS: IP configurada que ya no está en ninguna interfaz => FALLO 
 test("doctor macOS: con una utun en 100.x y sin IP fijada => FALLO que da la orden «soul listen»", async () => {
   const m = mac({ listen: [] });
   assert.equal(await runCli(["doctor"], m.deps), 1);
-  assert.match(m.out.join("\n"), new RegExp(`arreglo: soul listen ${VPN.replace(/\./g, "\\.")}`));
+  assert.match(m.out.join("\n"), new RegExp(`arreglo: soul listen ${escapeRegExp(VPN)}`));
 });
 
 test("doctor Linux (control): con secret-tool sigue en ok y no prueba llavero ni arranque de macOS", async () => {
