@@ -19,6 +19,8 @@ function leanHit(h: RagHit, withText: boolean) {
     heading: h.heading,
     ...(withText ? { text: h.text } : {}),
     score: round(h.score),
+    // Fecha del fichero (ya la calcula el servicio): sin ella el cliente no puede mostrar frescura.
+    ...(h.freshness.modified ? { modified: h.freshness.modified } : {}),
     ...(h.freshness.status ? { status: h.freshness.status } : {}),
     ...(h.freshness.supersededBy ? { supersededBy: h.freshness.supersededBy } : {}),
     // SE-413: procedencia de fichero (documento, revisión, localizador) para citar.

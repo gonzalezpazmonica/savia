@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""telemetry-fingerprint.py — SE-334 S1: fingerprint determinista de errores.
+"""telemetry-fingerprint.py — SE-534 S1: fingerprint determinista de errores.
 
 Computa una huella normalizada de un evento de telemetría JSON para agrupar
 errores repetidos ("este error apareció 47 veces").

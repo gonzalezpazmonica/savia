@@ -31,10 +31,10 @@ Es TypeScript sobre el runtime oficial de Node.js (≥ 22.6). No tiene dependenc
 
 ## Uso
 
-Instalación en un paso (Linux y macOS; detalle en `docs/instalar.md`):
+Instalación en un paso (Linux y macOS; sin git: Code → Download ZIP; detalle en `docs/instalar.md`):
 
 ```
-bash install.sh                      # Node.js LTS oficial si hace falta (sin sudo) y la orden «soul»
+bash install.sh                      # Node.js LTS oficial si hace falta (sin sudo), la orden «soul» y, si preguntas «s», su PATH
 soul setup                           # perfil, VPN, comprobaciones, servicio de usuario y emparejar el móvil
 soul doctor                          # comprobaciones con la orden exacta de cada arreglo
 ```

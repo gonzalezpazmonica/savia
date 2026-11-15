@@ -267,6 +267,15 @@ PY
 }
 
 # ── SE-407 S2: estado limpio al cerrar (advisory) ─────────────────────────
+# ── Frescura de la cúpula savia-docs (advisory, nunca bloquea; ~50 ms, también en --quick) ──
+# Solo git local. Silencio si la cúpula no existe en esta máquina (CI, otros operadores).
+check_vault_freshness() {
+  local msg
+  msg=$(timeout 5 bash "$REPO_ROOT_CI/scripts/vaults-freshness.sh" --summary 2>/dev/null | head -1)
+  [[ -n "$msg" ]] && echo "WARN $msg" > "$TMPDIR_CI/9c-vault-freshness"
+  return 0
+}
+
 check_clean_state() {
   clean_state_report "$REPO_ROOT_CI" 2>&1 | grep -E '^(PASS|WARN) ' > "$TMPDIR_CI/9b-clean-state"
 }
@@ -330,6 +339,7 @@ check_changelog &
 check_generated_fresh &
 check_lockfiles &
 check_gate_unknown &
+check_vault_freshness &
 $CLEAN_STATE && check_clean_state &
 if ! $QUICK_MODE; then
   check_required_files &

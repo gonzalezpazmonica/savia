@@ -87,4 +87,4 @@ bash scripts/acceptance-cost.sh --days 7 --format json
 
 ## Referencias
 - Anthropic: claude.com/blog/the-ai-native-sdlc-playbook (métrica de aceptación)
-- Savia: SE-349 (ledger runs), SE-355 (audit), SE-334 (telemetría), CRIT-001
+- Savia: SE-349 (ledger runs), SE-355 (audit), SE-534 (telemetría), CRIT-001
