@@ -12,6 +12,11 @@ current_wave: 0            # 0 = baseline freeze (curation aún no ejecutada)
 # parallel-dispatch, pentesting, attack-surface-mapper. Otras 9 ya contaban Calibrated por el
 # auditor y no estaban en el inventario; su discriminación no se ha re-verificado. Todo stable
 # queda pendiente del OK de la operadora al revisar la PR.
+# 2026-11-15 (remedición, S03 grupo 2): auditor en vivo 140 skills, 24 Calibrated -> deuda 116/140
+# (117 al empezar). Entra context-task-classifier (ya era stable). Otras 4 tienen ya prueba de
+# comportamiento certificada y mutación verificada (azure-devops-queries, mobile-security-scanner,
+# pr-agent-judge, merge-plan) pero siguen en beta: promoverlas edita .claude/ y queda pendiente de la
+# operadora (112/140 con las 4 en stable, medido en copia temporal). Ratchet intacto (baseline wave 0 = 133).
 waves:
   0: 133                   # baseline +1 2026-09-05 (social-linkedin nueva, no calibrada aun)
   1: 95                    # tras curation wave 1 (DELETE de stubs + REFACTOR rápidos)
