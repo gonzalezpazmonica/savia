@@ -2,10 +2,21 @@
 ficha: opencode
 runtime:
   aislamiento: no_medido
-  rc_en_error: no_medido
+  rc_en_error: no_fiable
+  rc_deteccion: {tipo: patron, valor: "^..type.:.error."}
   senal_cuota: no_medido
-  informa_uso: no_medido
+  informa_uso: si
   reanudacion: no_medido
   limpieza: no_medido
-  flujo_llamadas: no_medido
-  notas: "El fallo conocido (sale con 0 tras un error de la API) figura en SE-531 pero su regla de detección vive en un invocador no versionado aquí; hasta citarla y medirla en la versión instalada, rc_en_error queda no_medido (se lee igual de desconfiado)."
+  flujo_llamadas: json
+  fuente:
+    rc_en_error: "ronda M5 de la línea L39: opencode run salía con 0 tras un error de la API; el invocador de la línea lo corregía a mano (invocar.py, función invocar, justo tras leer_metricas). No reproducido en 1.19.5: un modelo inexistente y un endpoint rechazado salieron con 1."
+    rc_deteccion: "la regla del invocador: un evento JSON de tipo error en la salida (leer_metricas, rama de opencode); aquí como patrón por línea"
+    informa_uso: "medición 2026-11-14: opencode run --format json; step_finish trae tokens (input, output, cache) y cost"
+    flujo_llamadas: "medición 2026-11-14: la misma ejecución, con una orden bash, emite un evento tool_use"
+  version_cli:
+    rc_en_error: "1.19.5"
+    rc_deteccion: "1.19.5"
+    informa_uso: "1.19.5"
+    flujo_llamadas: "1.19.5"
+  notas: "rc_en_error sigue no_fiable aunque 1.19.5 no reproduzca el fallo: la versión de M5 no se registró y un solo tipo de error (conexión rechazada, modelo inexistente) no prueba que no vuelva. Subirlo a fiable pide medir el error a mitad de flujo."
