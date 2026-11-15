@@ -131,9 +131,15 @@ export interface HostProbe {
   run: Run;
   /** Carpeta personal (arranque de usuario de macOS). */
   home?: string;
-  /** Tiempo máximo de cada paso de la prueba del almacén (un diálogo del sistema esperando). */
+  /** Tiempo máximo de cada paso de la prueba del almacén (un diálogo del sistema esperando). Por defecto, `probeTimeoutFor`. */
   timeoutMs?: number;
 }
+
+/**
+ * Tiempo máximo por paso de la prueba del almacén. Windows tiene más margen: el primer `Add-Type` de
+ * PowerShell compila C# y un antivirus corporativo puede tardar en dejarlo pasar.
+ */
+export const probeTimeoutFor = (platform: NodeJS.Platform) => (platform === "win32" ? 60_000 : 20_000);
 
 export const noVpnHelp = (platform: NodeJS.Platform) => (platform === "darwin" ? NO_VPN_HELP_MAC : NO_VPN_HELP);
 
@@ -149,11 +155,15 @@ export function checkSecretTool(h: HostProbe): Check {
 
 class ProbeTimeout extends Error {}
 
-/** `run` que da por fallido un paso que no termina (p. ej. un diálogo del sistema pidiendo la contraseña). */
+/**
+ * `run` que da por fallido un paso que no termina (p. ej. un diálogo del sistema pidiendo la contraseña)
+ * y mata el proceso hijo: vivo, mantendría `doctor` sin devolver el control.
+ */
 function withTimeout(run: Run, ms: number): Run {
   return (cmd, args, input) => new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new ProbeTimeout(`sin respuesta tras ${Math.round(ms / 1000)} s`)), ms);
-    run(cmd, args, input).then((r) => { clearTimeout(t); resolve(r); }, (e) => { clearTimeout(t); reject(e); });
+    const ac = new AbortController();
+    const t = setTimeout(() => { ac.abort(); reject(new ProbeTimeout(`sin respuesta tras ${Math.round(ms / 1000)} s`)); }, ms);
+    run(cmd, args, input, { signal: ac.signal }).then((r) => { clearTimeout(t); resolve(r); }, (e) => { clearTimeout(t); reject(e); });
   });
 }
 
@@ -164,21 +174,29 @@ const CREDMAN_FIX = "revisa que PowerShell se puede ejecutar en tu cuenta (una d
 /**
  * macOS y Windows: no se da por bueno el almacén, se prueba. Guarda un secreto aleatorio con un
  * servicio propio de diagnóstico, lo lee, comprueba que es el mismo y lo borra (también si la lectura
- * falla). `ok` solo si lo leído es lo guardado. El secreto va por stdin, como en el uso normal.
+ * falla). `ok` solo si lo leído es lo guardado y el borrado se comprueba. Un almacén que no borra es
+ * un fallo: revocar o desinstalar no podrían quitar los tokens. El secreto va por stdin, como en el uso normal.
+ * Tras un tiempo agotado no se relee para comprobar el borrado (sería otra espera entera).
  */
 export async function checkKeychain(h: HostProbe): Promise<Check> {
   const nombre = h.platform === "darwin" ? "llavero de macOS" : "Credential Manager de Windows";
   const fix = h.platform === "darwin" ? KEYCHAIN_FIX : CREDMAN_FIX;
-  const fail = (message: string, timeout = false): Check =>
-    ({ id: "almacen", level: "fallo", message: `${nombre}: ${message}`, fix: timeout ? KEYCHAIN_TIMEOUT_FIX : fix });
-  const backend = backendFor(h.platform, withTimeout(h.run, h.timeoutMs ?? 20_000));
   const service = `doctor-${randomBytes(4).toString("hex")}`;
   const account = "probe";
   const secret = randomBytes(16).toString("hex");
+  const manual = h.platform === "darwin"
+    ? `bórralo en «Acceso a Llaveros» (busca «${service}») o con: security delete-generic-password -a ${account} -s soul-continuity.${service}`
+    : `bórralo en Credential Manager (entrada «soul-continuity/${service}/${account}»)`;
+  const fail = (message: string, timeout = false): Check =>
+    ({ id: "almacen", level: "fallo", message: `${nombre}: ${message}`, fix: timeout ? `${KEYCHAIN_TIMEOUT_FIX}. Si respondes al diálogo más tarde, puede quedar el elemento de prueba «${service}»: ${manual}` : fix });
+  const backend = backendFor(h.platform, withTimeout(h.run, h.timeoutMs ?? probeTimeoutFor(h.platform)));
   let failure: Check | null = null;
-  const why = (e: unknown, paso: string) => e instanceof ProbeTimeout
-    ? fail(`no respondió al ${paso} (${e.message})`, true)
-    : fail(`no pude ${paso} el elemento de prueba (${(e as Error).message})`);
+  let timedOut = false;
+  const why = (e: unknown, paso: string) => {
+    if (!(e instanceof ProbeTimeout)) return fail(`no pude ${paso} el elemento de prueba (${(e as Error).message})`);
+    timedOut = true;
+    return fail(`no respondió al ${paso} (${e.message})`, true);
+  };
   try {
     await backend.set(service, account, secret);
     try {
@@ -187,16 +205,16 @@ export async function checkKeychain(h: HostProbe): Promise<Check> {
     } catch (e) { failure = why(e, "leer"); }
   } catch (e) { failure = why(e, "guardar"); }
   // El borrado se intenta siempre, también si guardar o leer fallaron.
-  let sobra = false;
+  let borrado = false;
   try {
     await backend.delete(service, account);
-    try { sobra = (await backend.get(service, account)) !== null; } catch { /* no se puede afirmar: se cuenta como borrado */ }
+    // Fail-closed: si la relectura falla, el borrado no está comprobado (no se da por borrado).
+    if (!timedOut) borrado = (await backend.get(service, account)) === null;
   } catch (e) {
-    sobra = true;
     if (!failure && e instanceof ProbeTimeout) failure = why(e, "borrar");
   }
   if (failure) return failure;
-  if (sobra) return { id: "almacen", level: "aviso", message: `${nombre}: funciona, pero no pude borrar el elemento de prueba «${service}»`, fix: h.platform === "darwin" ? `bórralo en «Acceso a Llaveros» (busca «${service}») o con: security delete-generic-password -a ${account} -s soul-continuity.${service}` : `bórralo en Credential Manager (entrada «soul-continuity/${service}/${account}»)` };
+  if (!borrado) return { id: "almacen", level: "fallo", message: `${nombre}: guarda y lee, pero no pude borrar el elemento de prueba «${service}»: revocar o desinstalar no podrían quitar tus tokens`, fix: manual };
   return { id: "almacen", level: "ok", message: `${nombre}: guarda, lee y borra (probado con un elemento de prueba)` };
 }
 
@@ -215,7 +233,8 @@ export function checkLaunchAgents(h: HostProbe): Check {
   const home = h.home;
   const dir = home ? join(home, "Library", "LaunchAgents") : "";
   const fix = `crea la carpeta con «mkdir -p ~/Library/LaunchAgents» y comprueba que es tuya (ls -ld ~/Library/LaunchAgents). Si tu organización la bloquea, Soul seguirá funcionando pero tendrás que arrancarlo a mano con «soul serve»`;
-  const bad = (message: string): Check => ({ id: "arranque", level: "fallo", message, fix });
+  // Aviso, no fallo: el arranque automático es opcional (SE-490, modo por defecto bajo demanda).
+  const bad = (message: string): Check => ({ id: "arranque", level: "aviso", message, fix });
   if (!home) return bad("no sé cuál es tu carpeta personal");
   const writable = (p: string) => { try { accessSync(p, constants.W_OK | constants.X_OK); return true; } catch { return false; } };
   const isDir = (p: string) => { try { return statSync(p).isDirectory(); } catch { return false; } };

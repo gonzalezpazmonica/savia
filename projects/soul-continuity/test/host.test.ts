@@ -4,12 +4,13 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Run } from "../src/credentials/store.ts";
+import { type Run, powershellPath } from "../src/credentials/store.ts";
 import {
-  type Interfaces, NM_UNMANAGED_FIX, VPN_IF, canonicalIp, checkListen, recognizedVpn, checkSecretTool, detectVpn, isCgnat, missingAddress, nmManaged, onInterface, onPath,
+  type Interfaces, NM_UNMANAGED_FIX, VPN_IF, canonicalIp, checkKeychain, checkListen, probeTimeoutFor, recognizedVpn, checkSecretTool, detectVpn, isCgnat, missingAddress, nmManaged, onInterface, onPath,
 } from "../src/cli/host.ts";
 
 const v4 = (address: string, internal = false) => ({ address, family: "IPv4" as const, internal, netmask: "255.255.255.0", mac: "00:00:00:00:00:00", cidr: null });
@@ -168,4 +169,71 @@ test("secret-tool (negativo): un directorio con ese nombre no cuenta; fuera de L
   assert.equal(onPath("secret-tool", d, "linux"), false);
   // Fail-closed: fuera de Linux esta función no comprueba nada y no lo disfraza de ok (la prueba es checkKeychain).
   assert.equal(checkSecretTool({ platform: "darwin", path: "", ifaces: {}, run: fakeRun({}) }).level, "aviso");
+});
+
+// ------------------------------------------------------------------ prueba del almacén: procesos reales y Windows
+
+test("almacén: un `security` real que se cuelga se mata al agotar el tiempo y doctor devuelve el control", () => {
+  // En un proceso aparte: si el hijo colgado sigue vivo, mantiene vivo el event loop y el proceso no sale.
+  const host = new URL("../src/cli/host.ts", import.meta.url).href;
+  const store = new URL("../src/credentials/store.ts", import.meta.url).href;
+  const code = `
+    import { checkKeychain } from ${JSON.stringify(host)};
+    import { hostRun } from ${JSON.stringify(store)};
+    const hang = (cmd, args, input, o) => hostRun(process.execPath, ["-e", "setInterval(() => {}, 1e9)"], input, o);
+    const c = await checkKeychain({ platform: "darwin", path: "", ifaces: {}, run: hang, timeoutMs: 300 });
+    console.log(JSON.stringify(c));`;
+  const t0 = Date.now();
+  const r = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", "--input-type=module", "-e", code], { encoding: "utf8", timeout: 15_000 });
+  assert.equal(r.signal, null, `el proceso no terminó solo (hijo colgado vivo): ${r.stderr}`);
+  assert.equal(r.status, 0, r.stderr);
+  const c = JSON.parse(r.stdout.trim().split("\n").at(-1) ?? "{}");
+  assert.equal(c.level, "fallo");
+  assert.match(c.message, /no respondió al guardar/);
+  assert.ok(Date.now() - t0 < 10_000);
+});
+
+/** Credential Manager de mentira: imita el script de PowerShell (operaciones en JSON por stdin). */
+function fakeCredman(mode: "ok" | "cuelga" | "falla" = "ok") {
+  const items = new Map<string, string>();
+  const calls: string[] = [];
+  const run: Run = async (cmd, args, input) => {
+    calls.push(cmd);
+    if (cmd !== powershellPath()) return { code: 127, stdout: "", stderr: "no existe" };
+    if (mode === "cuelga") return new Promise(() => {});
+    if (mode === "falla") return { code: 1, stdout: "", stderr: "" };
+    const { ops } = JSON.parse(input ?? "{}") as { ops: { op: string; t: string; v?: string }[] };
+    const out: string[] = [];
+    for (const o of ops) {
+      if (o.op === "r") out.push(items.has(o.t) ? `+${items.get(o.t)}` : "-");
+      if (o.op === "w") { items.set(o.t, o.v ?? ""); out.push("+"); }
+      if (o.op === "d") out.push(items.delete(o.t) ? "+" : "-");
+    }
+    return { code: 0, stdout: out.map((l) => `${l}\r\n`).join(""), stderr: "" };
+  };
+  return { run, items, calls };
+}
+
+test("almacén Windows: Credential Manager que funciona => ok y no deja la entrada de prueba", async () => {
+  const w = fakeCredman();
+  const c = await checkKeychain({ platform: "win32", path: "", ifaces: {}, run: w.run, timeoutMs: 200 });
+  assert.equal(c.level, "ok", c.message);
+  assert.match(c.message, /Credential Manager de Windows: guarda, lee y borra/);
+  assert.equal(w.items.size, 0);
+  assert.ok(w.calls.length >= 3 && w.calls.every((x) => x === powershellPath()), "siempre por la ruta absoluta de PowerShell");
+});
+
+test("almacén Windows (negativo): PowerShell bloqueado o colgado => FALLO con su arreglo, nunca ok", async () => {
+  const f = await checkKeychain({ platform: "win32", path: "", ifaces: {}, run: fakeCredman("falla").run, timeoutMs: 200 });
+  assert.equal(f.level, "fallo");
+  assert.match(f.message, /Credential Manager de Windows: no pude guardar/);
+  assert.match(f.fix ?? "", /PowerShell/);
+  const h = await checkKeychain({ platform: "win32", path: "", ifaces: {}, run: fakeCredman("cuelga").run, timeoutMs: 100 });
+  assert.equal(h.level, "fallo");
+  assert.match(h.message, /no respondió al guardar/);
+});
+
+test("almacén: Windows tiene más margen que macOS (primer Add-Type de PowerShell con antivirus)", () => {
+  assert.equal(probeTimeoutFor("darwin"), 20_000);
+  assert.ok(probeTimeoutFor("win32") >= 60_000, String(probeTimeoutFor("win32")));
 });

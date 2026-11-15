@@ -63,7 +63,7 @@ export interface CliDeps {
   readSecret?: () => Promise<string>;
   platform: NodeJS.Platform;
   home: string;
-  run: Run; probeTimeoutMs?: number; // `doctor`: ms máximos por paso de la prueba del almacén (20 s si falta)
+  run: Run; probeTimeoutMs?: number; // `doctor`: ms máximos por paso de la prueba del almacén (`probeTimeoutFor` si falta)
   node: string;
   entry: string;
   serve?: (deps: CliDeps) => Promise<number>;

@@ -18,7 +18,9 @@ import { CredentialError, type CredentialStore } from "../contract/adapter.ts";
 import { readJson, writeJson } from "../core/store.ts";
 
 export interface RunResult { code: number; stdout: string; stderr: string }
-export type Run = (cmd: string, args: string[], input?: string) => Promise<RunResult>;
+/** `signal`: al abortarse, el proceso hijo se mata (un hijo vivo mantendría vivo a Soul). */
+export interface RunOptions { signal?: AbortSignal }
+export type Run = (cmd: string, args: string[], input?: string, opts?: RunOptions) => Promise<RunResult>;
 
 export interface SecretBackend {
   name: string;
@@ -29,8 +31,9 @@ export interface SecretBackend {
 
 const APP = "soul-continuity";
 
-export const hostRun: Run = (cmd, args, input = "") => new Promise((resolve) => {
-  const p = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+export const hostRun: Run = (cmd, args, input = "", opts = {}) => new Promise((resolve) => {
+  // Con `signal`, abortar mata el hijo (SIGKILL: uno que espera un diálogo puede ignorar SIGTERM).
+  const p = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, signal: opts.signal, killSignal: "SIGKILL" });
   let stdout = "";
   let stderr = "";
   p.stdout.on("data", (b) => { stdout += b; });
