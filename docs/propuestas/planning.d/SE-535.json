@@ -1,0 +1,9 @@
+{
+  "id": "SE-535",
+  "status": "PROPOSED",
+  "priority": "P1",
+  "phase": "A",
+  "title": "Cliente externo con alcance solo de conversación en el puente (2 slices)",
+  "evidence": "docs/specs/SE-535-cliente-externo-solo-conversacion.spec.md",
+  "note": "Encargo de la orquestadora: que otra instancia de Savia con su propia cuenta pueda conversar con esta por el puente sin ningún otro poder. No cabe en SE-528 (no define alcances por token, ni Claude en solo lectura, ni topes; deja fuera la revocación de tokens) ni en SE-429 (Savia Space). S1 puente, tier 3 forzado por autenticación; S2 cliente de un fichero, tier 2. Factibilidad de la ejecución en solo lectura comprobada con el CLI real antes de redactar (detalle en el registro privado). Decisiones D1-D4 pendientes de la operadora; escenas y prototipo sin confirmar (SE-505)."
+}
