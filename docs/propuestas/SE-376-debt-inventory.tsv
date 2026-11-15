@@ -11,7 +11,7 @@ ast-comprehension	Incomplete	143	REFACTOR	completar tests/DOMAIN para calibrar (
 ast-quality-gate	Incomplete	139	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 attack-surface-mapper	Calibrated	93	CALIBRATED	2026-11-14: test de comportamiento certificado (>=80), verificado por mutación del script (cada mutante cae) y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
 automation-scheduler	Incomplete	65	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-azure-devops-queries	Incomplete	134	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+azure-devops-queries	Incomplete	134	REFACTOR	2026-11-15: test de comportamiento certificado (>=80), mutación verificada; falta solo savia.maturity: stable (edita .claude/, pendiente de la operadora)
 azure-pipelines	Incomplete	125	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 backlog-git-tracker	Incomplete	107	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 banking-architecture	Incomplete	71	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
@@ -31,7 +31,7 @@ context-dome	Incomplete	89	REFACTOR	completar tests/DOMAIN para calibrar (propue
 context-interview-conductor	Incomplete	132	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 context-optimized-dev	Incomplete	148	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 context-rot-strategy	Incomplete	147	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-context-task-classifier	Incomplete	96	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+context-task-classifier	Calibrated	96	CALIBRATED	2026-11-15: test de comportamiento certificado (>=80) sobre clasificador y medidor, verificado por mutación (22 de 22 mutantes caen) y maturity stable
 cost-management	Incomplete	128	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 dag-scheduling	Incomplete	141	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 dependency-scanner	Incomplete	92	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
@@ -62,7 +62,7 @@ managed-content	Incomplete	73	REFACTOR	completar tests/DOMAIN para calibrar (pro
 meeting-transcript-extract	Incomplete	91	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 memvid-backup	Calibrated	123	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
 meta-reflection	Incomplete	128	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-mobile-security-scanner	Incomplete	111	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+mobile-security-scanner	Incomplete	111	REFACTOR	2026-11-15: test de comportamiento certificado (>=80), mutación verificada; falta solo savia.maturity: stable (edita .claude/, pendiente de la operadora)
 model-upgrade-audit	Incomplete	84	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 mutation-audit	Calibrated	134	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
 network-recon	Incomplete	97	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
@@ -80,7 +80,7 @@ pbi-decomposition	Incomplete	148	REFACTOR	completar tests/DOMAIN para calibrar (
 pentesting	Calibrated	132	CALIBRATED	2026-11-14: test de comportamiento certificado (>=80), verificado por mutación del script (cada mutante cae) y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
 performance-audit	Incomplete	113	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 personal-vault	Incomplete	85	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-pr-agent-judge	Incomplete	84	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+pr-agent-judge	Incomplete	84	REFACTOR	2026-11-15: test de comportamiento certificado (>=80), mutación verificada; falta solo savia.maturity: stable (edita .claude/, pendiente de la operadora)
 product-discovery	Incomplete	89	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 professional-domain	Stub	30	DELETE	stub sin cuerpo ni DOMAIN: candidata a eliminación (propuesta, requiere revisión)
 project-update	Incomplete	137	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
@@ -133,3 +133,4 @@ write-a-skill	Incomplete	125	REFACTOR	completar tests/DOMAIN para calibrar (prop
 zoom-out	Incomplete	59	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 knowledge-graph	Calibrated	91	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
 ubiquitous-language	Calibrated	95	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
+merge-plan	Incomplete	68	REFACTOR	2026-11-15: test de comportamiento certificado (>=80), mutación verificada; falta solo savia.maturity: stable (edita .claude/, pendiente de la operadora)
