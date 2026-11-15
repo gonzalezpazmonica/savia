@@ -1,6 +1,8 @@
-# Spec: SE-334 — Telemetry Intelligence: fingerprinting, incident grouping y auto-remediación (inspirado en superlog)
+# Spec: SE-534 — Telemetry Intelligence: fingerprinting, incident grouping y auto-remediación (inspirado en superlog)
 
 **Status:** PROPOSED → PARCIALMENTE IMPLEMENTADO (S1+S2, 2026-08-22)
+**Renumerada:** antes SE-334 (número duplicado con `SE-334-vaults-scl-criteria-hardening`); renumerada a SE-534 por decisión de la operadora, 2026-11-14.
+**Decisión 2026-11-14:** sin consumidor; no se cablea; revisar 2027-02-14 si hay errores repetidos. Motivo: solo 27 fallos de despacho en 98 días.
 **Fecha:** 2026-08-17
 **Area:** Observability / Telemetría / Autonomía / Savia Labs
 **Estimación:** ~40h (4 slices)
@@ -123,7 +125,7 @@ first_seen, last_seen, sample_event}`).
 > `scripts/telemetry-fingerprint.py`, `scripts/telemetry-issues.sh`,
 > `scripts/telemetry-alert.sh` (+ flag `--fingerprint` en `otel-emit.sh`),
 > policy `config/telemetry-policies.yaml`, 8 tests BATS
-> (`tests/test-se334-telemetry-fingerprint.bats`). S3/S4 siguen PENDIENTES.
+> (`tests/test-se534-telemetry-fingerprint.bats`). S3/S4 siguen PENDIENTES.
 
 **S1**
 - AC-1.1. Dos eventos con el mismo error pero distintos IDs/URLs/timestamps →
@@ -161,12 +163,12 @@ first_seen, last_seen, sample_event}`).
 
 ---
 
-## 4. Benchmark comparativo (superlog vs SE-334)
+## 4. Benchmark comparativo (superlog vs SE-534)
 
-Para validar que el fingerprint de SE-334 agrupa igual que el de superlog, se
+Para validar que el fingerprint de SE-534 agrupa igual que el de superlog, se
 usa un corpus de fixtures idéntico (errores con URLs/UUIDs/timestamps/paths):
 
-| Caso | superlog | SE-334 esperado |
+| Caso | superlog | SE-534 esperado |
 |---|---|---|
 | Mismo error, distinto UUID | mismo hash | mismo hash (AC-1.1) |
 | Mismo error, distinta URL | mismo hash | mismo hash |
@@ -238,7 +240,7 @@ tests de equivalencia sobre el corpus, no comparando hashes byte a byte.
 ## 9. No incluido (con motivo)
 
 - **Dashboard web** (superlog `apps/web`): SPEC-191 ya la cubre (bloqueada por
-  savia-web infra). SE-334 produce los datos que el dashboard consumiría.
+  savia-web infra). SE-534 produce los datos que el dashboard consumiría.
 - **Postgres/ClickHouse** (superlog `apps/db`): Savia es local-first JSONL
   (ADR-006 texto como verdad); la migración a base de datos es una decisión
   estratégica separada, no de este spec.

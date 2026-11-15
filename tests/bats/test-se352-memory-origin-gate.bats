@@ -376,12 +376,13 @@ _seed_search() {
   [[ "$output" != *"RankSys"* ]]
 }
 
-@test "search --min-origin con valor desconocido se comporta como untrusted" {
+@test "search --min-origin con valor desconocido falla cerrado (error, sin resultados)" {
+  # Contrato PR #1564: un valor inválido es error, no se degrada a untrusted ni a "sin filtro".
   _seed_search
   run "$STORE" search "palabraclave" --min-origin bogus --mode grep
-  [[ "$output" == *"RankAgent"* ]]
-  [[ "$output" == *"RankUntr"* ]]
-  [[ "$output" != *"RankSys"* ]]
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"inválido"* ]]
+  [[ "$output" != *"Rank"* ]]
 }
 
 @test "search sin --min-origin no filtra por origen (system incluido)" {

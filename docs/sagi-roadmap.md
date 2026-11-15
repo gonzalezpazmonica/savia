@@ -30,16 +30,16 @@ operadora dispone" (CRIT-031).
 | Sustrato de aprendizaje (captura→ciclo→métrica L→federación) | F0-F5 implementado | `docs/SCL-ROADMAP.md` |
 | Prioridad de descubrimiento (regla eager) | Se-335 merged | `docs/rules/domain/knowledge-discovery-priority.md` |
 | Turn-SDLC: auditor de fases + DoD de respuesta + telemetría `order_ok` | SE-336 merged | `docs/specs/SE-336-turn-sdlc.spec.md` |
-| **Telemetría de errores → incidentes → aprendizaje** | SE-334 S1+S2 IMPLEMENTADO | `docs/specs/SE-334-telemetry-intelligence.spec.md` |
+| **Telemetría de errores → incidentes → aprendizaje** | SE-534 S1+S2 IMPLEMENTADO | `docs/specs/SE-534-telemetry-intelligence.spec.md` |
 | Orquestador SAGI (fix-loop reusable) | SCL-011/012/013 IMPLEMENTADO, en producción | `docs/specs/SCL-011-orquestador-sagi.spec.md` |
 
 ## Roadmap de desarrollo (por orden)
 
-### H1 — Blindar la telemetría como sensor del bucle (SE-334 S1+S2) ✅
+### H1 — Blindar la telemetría como sensor del bucle (SE-534 S1+S2) ✅
 - Fingerprint determinista de errores: agrupar "este error apareció N veces".
 - Alerta con umbral que alimenta el hook de captura SCL (el bucle aprende del
   incidente).
-- **Estado**: IMPLEMENTADO — SE-334 S1+S2 mergeado (PR #982). 8 BATS verdes + CI.
+- **Estado**: IMPLEMENTADO — SE-534 S1+S2 mergeado (PR #982). 8 BATS verdes + CI.
 
 ### H2 — Robustez del agnosticismo (run-3, P1 con un segundo modelo)
 - Replicar la prueba de aprendizaje continuo con un modelo distinto (mid/heavy
@@ -90,7 +90,7 @@ operadora dispone" (CRIT-031).
 ## Dependencias entre hitos
 
 ```text
-H1 (telemetría) ✅ IMPLEMENTADO (SE-334 S1+S2, #982)
+H1 (telemetría) ✅ IMPLEMENTADO (SE-534 S1+S2, #982)
 H2 (agnosticismo) puede correr sobre labs/ sin producción
 H3 (criterio estable) y H4 (memoria/adaptación) → requieren el orquestador mínimo
 H5 (decisión de diseño) ✅ RESUELTA → SCL-011 (orquestador) + SCL-012 (pruebas)
