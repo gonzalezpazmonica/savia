@@ -8,4 +8,4 @@ runtime:
   reanudacion: no_medido
   limpieza: no_medido
   flujo_llamadas: no_medido
-  notas: "Sin medir en esta ficha. La CLI ofrece salida JSONL, no comprobado que incluya las llamadas a herramientas."
+  notas: "Sin medir con la 0.169.0 instalada: medir exige llamadas al modelo y la cuota de Codex está reservada a revisión independiente. Observado sin gastar cuota: con un directorio de configuración vacío y fuera de un repo de confianza codex exec sale con 1 antes de llamar a la API, lo que no dice nada del fallo de API. El invocador ya lee turn.completed y turn.failed del flujo JSONL, pero sin medir en esta versión."
