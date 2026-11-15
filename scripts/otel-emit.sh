@@ -103,7 +103,7 @@ validate_operation_event(json.load(sys.stdin))
 esac
 
 # ── Append (async, nunca bloquea) ────────────────────────────────────────────
-# SE-334 S1: --fingerprint adjunta huella normalizada para agrupación de issues
+# SE-534 S1: --fingerprint adjunta huella normalizada para agrupación de issues
 if [[ "${SAVIA_FINGERPRINT:-0}" == "1" || "${TEL_FP:-0}" == "1" ]]; then
   if [[ -x "$(dirname "${BASH_SOURCE[0]}")/telemetry-fingerprint.py" ]]; then
     FP_JSON=$(printf '%s' "$JSON" | python3 -c "

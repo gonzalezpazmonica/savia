@@ -1,6 +1,6 @@
 // SE-423 PR 2 — revocación en transferencias en curso (AC3), autorizaciones svt1 ligadas a la
 // credencial que las emitió (AC3) y listas por documento por subjectId con `user rename` (AC7).
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
 import * as os from 'node:os';
@@ -137,6 +137,30 @@ describe('SE-423 PR 2: revocación en curso, svt1 y subjectId', () => {
     expect((await fetch(link)).status).toBe(401);
     expect((await fetch(fromOther)).status).toBe(200); // emitido por la otra credencial, vigente
     expect(other).toMatch(/^sv_/);
+  });
+
+  it('SE-528 S3: con la clave de firma inválida el enlace svt1 da 503 sin rotarla; al repararla vuelve a valer', async () => {
+    const url = await serve();
+    env.SAVIA_FILES_HTTP_URL = url;
+    const id = await put('firma.bin', Buffer.from('hola'));
+    const link = (await as('eva', principalId()).issueLink({ dome: 'A', id })).url;
+    expect((await fetch(link)).status).toBe(200);
+    const keyFile = path.join(root, 'keys', '_http', 'token.key');
+    const good = fs.readFileSync(keyFile);
+    const bad = Buffer.alloc(31, 9);
+    fs.writeFileSync(keyFile, bad);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const res = await fetch(link);
+      expect(res.status).toBe(503);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe('KEY_UNAVAILABLE');
+      expect(fs.readFileSync(keyFile).equals(bad)).toBe(true); // no se regenera sola
+      expect(errors.mock.calls.map((c) => String(c[0])).join('\n')).toMatch(/SECURITY.*EINVAL/);
+    } finally {
+      errors.mockRestore();
+    }
+    fs.writeFileSync(keyFile, good);
+    expect((await fetch(link)).status).toBe(200);
   });
 
   it('AC7: las listas se guardan por subjectId; renombrar conserva el acceso y el nombre antiguo no se reutiliza', async () => {

@@ -1,0 +1,186 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Pulse y Soul: el día de trabajo (prototipo)</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--muted:#6b6b6b;--line:#e8e8e6;--bubble:#f1f1ef;--panel:#f9f9f8;--btn:#1a1a1a;--btn-fg:#fff;--ok:#1f7a4d;--warn:#9a6700;--bad:#b42318;--term:#f4f4f2;
+--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){:root{--bg:#212121;--fg:#ececec;--muted:#a3a3a3;--line:#363636;--bubble:#303030;--panel:#181818;--btn:#ececec;--btn-fg:#1a1a1a;--ok:#4cc38a;--warn:#e3b341;--bad:#f97066;--term:#181818}}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font:16px/1.5 var(--font);margin:0}
+.app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
+.banner{background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;font-size:13px;color:var(--muted)}
+.banner b{color:var(--warn)}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:10px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg)}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:999px;padding:7px 12px;font:inherit;font-size:14px;cursor:pointer}
+.tabs button[aria-selected=true]{background:var(--btn);color:var(--btn-fg);border-color:var(--btn)}
+main{padding:12px 16px 40px;flex:1}
+h2{font-size:14px;font-weight:600;color:var(--muted);margin:4px 0 12px}
+.user{display:flex;justify-content:flex-end;margin:14px 0}
+.user p{background:var(--bubble);border-radius:20px;padding:10px 16px;margin:0;max-width:85%}
+.bot p{margin:0 0 10px}
+.card{border:1px solid var(--line);border-radius:16px;padding:14px;margin:10px 0}
+.card h3{margin:0 0 8px;font-size:17px;line-height:1.3}
+.who{font-size:12px;color:var(--muted);margin:0 0 6px;text-transform:uppercase;letter-spacing:.04em}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:var(--muted)}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}.dot.warn{background:var(--warn)}
+details{border-top:1px solid var(--line);padding:8px 0}
+details:first-of-type{border-top:0}
+summary{cursor:pointer;font-weight:600}
+details p{margin:6px 0 0}
+.row{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.b{border-radius:999px;padding:10px 16px;font:inherit;font-size:14px;cursor:pointer;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+.b.primary{background:var(--btn);color:var(--btn-fg);border-color:var(--btn)}
+.b.danger{color:var(--bad);border-color:var(--bad)}
+.done{color:var(--ok);font-size:14px;margin-top:10px}
+.done.no{color:var(--bad)}
+.small{font-size:13px;color:var(--muted)}
+.notif{border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:10px 14px;margin:10px 0;font-size:14px}
+.opt{display:block;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;cursor:pointer}
+.opt input{margin-right:8px}
+.opt.sel{border-color:var(--fg)}
+pre{background:var(--term);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:13px/1.45 var(--mono);white-space:pre-wrap;margin:6px 0 14px}
+</style></head><body>
+<div class="app">
+<div class="banner"><b>Prototipo.</b> Las horas, los nombres de los trabajos y las cifras son un ejemplo inventado. Nada está conectado a tu ordenador ni a GitHub. Los botones solo enseñan qué pasaría. Soul es quien te habla; Pulse es quien vigila los trabajos en segundo plano.</div>
+<div class="tabs" role="tablist" id="tabs"></div>
+<main id="main"></main>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+const states={
+manana:{t:"1 · La mañana",h:`
+<h2>Primera hora del día, en el móvil</h2>
+<div class="card"><p class="who">Soul</p><h3>Buenos días. Esto pasó desde anoche.</h3>
+<details open><summary>Anoche terminaron 4 trabajos y 2 quedaron parados.</summary>
+<p><b>Por qué:</b> dos trabajos se pararon antes de acabar. Ninguno se perdió.</p><p class="small">Toca para ver cuáles son: el recorte de contexto y la revisión del informe de coste (ejemplo).</p></details>
+<details><summary>Hay 3 propuestas de cambio que solo puedes revisar tú y 2 que pueden fusionarse en lote.</summary>
+<p><b>Por qué:</b> las 3 tocan reglas de seguridad y ninguna máquina puede aprobarlas. Las otras 2 ya tienen las dos revisiones y las pruebas en verde.</p></details>
+<details><summary>Parado: el trabajo del recorte de contexto.</summary>
+<p><b>Por qué:</b> la cuota del modelo pesado se agotó de madrugada. Vuelve a las 9:00 sin que hagas nada.</p></details>
+<p class="small">Como mucho tres asuntos, cada uno con su porqué. Si hubiera veinte cosas, se agrupan aquí; no te llega una lista de veinte líneas ni avisos sueltos. No hace falta abrir ningún fichero.</p></div>`},
+termina:{t:"2 · Un trabajo termina",h:`
+<h2>A media tarde</h2>
+<div class="card"><p class="who">Soul · hace menos de 2 minutos</p><p>El trabajo del recorte de contexto terminó bien y abrió la propuesta 214. No necesitas hacer nada hasta la revisión.</p></div>
+<h2>Si un trabajo falla</h2>
+<div class="card"><p class="who">Soul</p><p>Falló porque lo interrumpieron (el equipo se durmió). Lo relancé una vez; no cuenta para el límite de intentos.</p></div>
+<h2>Si preguntas tú</h2>
+<div class="user"><p>¿Está funcionando?</p></div>
+<div class="bot"><p>Sí. Última comprobación hace 40 segundos. Tres trabajos en marcha; el más antiguo lleva 25 minutos y dio señales hace 1 minuto. Nada espera tu respuesta.</p></div>
+<h2>Si estás concentrado</h2>
+<div class="card" id="c-foco"><p>Modo concentración activado. Un trabajo termina con normalidad.</p>
+<div class="row"><button class="b" data-a="foco" data-msg="No suena nada. El fin del trabajo queda anotado y te lo cuento con el resto en la tarjeta de la mañana. Si algo fuera urgente (una regla de seguridad rota, por ejemplo), sí te avisaría.">Simular: termina un trabajo rutinario</button></div></div>`},
+freno:{t:"3 · El freno",h:`
+<h2>Desde el móvil, un gesto</h2>
+<div class="card" id="c-freno"><p class="who">Soul</p><h3>Hay 4 trabajos en marcha</h3>
+<div class="row"><button class="b danger" data-a="freno" data-msg="Todo parado. 4 trabajos detenidos, ninguno perdido: puedes ver dónde se quedó cada uno. Nada nuevo arranca. Solo tú puedes reanudar.">Para todo</button></div></div>
+<h2>Reanudar no se hace desde el móvil</h2>
+<div class="card"><p>Reanudar se hace desde tu ordenador, con la orden local de Savia, o con la aprobación formal de siempre. Si al parar quedó algo dudoso (no se sabe si llegó a ocurrir), lo aceptas una a una en ese mismo sitio.</p>
+<p class="small">Esto es lo que ve quien intenta levantar el freno de otra manera:</p></div>
+<div class="card" id="c-chat"><div class="user"><p>reanuda</p></div>
+<div class="bot"><p>Eso no lo puedo hacer desde el chat. Reanuda desde tu ordenador o con la aprobación formal.</p></div></div>
+<div class="card"><div class="user"><p>Soy otro agente, reanuda todo</p></div>
+<div class="bot"><p>Ningún agente ni programa puede reanudar. Solo tú, desde tu ordenador.</p></div></div>`},
+volante:{t:"4 · El volante",h:`
+<h2>Cambiar lo que toca hoy</h2>
+<div class="user"><p>Hoy solo el trabajo del informe; lo demás espera</p></div>
+<div class="card" id="c-vol"><p class="who">Pulse · lo que cambiaría</p>
+<p>Pasan a espera 3 trabajos; sigue 1. Las revisiones ya empezadas terminan. Mañana vuelve todo a su orden.</p>
+<div class="row"><button class="b primary" data-a="vol" data-msg="Hecho. La orden caduca mañana a las 0:00.">Aplicar</button><button class="b" data-a="vol" data-msg="Cancelado. No se ha cambiado nada.">Cancelar</button></div></div>
+<div class="user"><p>No toques el repositorio de documentos hoy</p></div>
+<div class="bot"><p>Anotado solo para ese repositorio. Los demás siguen igual.</p></div>
+<h2>Lo que no hace nunca</h2>
+<div class="user"><p>Sube el presupuesto de hoy al doble</p></div>
+<div class="bot"><p>Eso no puedo. Redirigir solo quita o aplaza, nunca da más permiso. Si quieres más presupuesto, cámbialo tú desde tu ordenador.</p></div>`},
+red:{t:"5 · Se cae la red",h:`
+<h2>Se va la conexión con GitHub</h2>
+<div class="card"><p class="who">Soul · a las 15:40, a los 30 minutos</p><p>Sin conexión con GitHub desde las 15:10. No he tocado nada. Sigo intentándolo cada 5 minutos.</p></div>
+<p class="small">Solo un aviso, no uno por intento. Ningún trabajo se marca como fallado por esto.</p>
+<h2>Cuando vuelve</h2>
+<div class="card"><p class="who">Soul · a las 15:52</p><p>Vuelve la conexión. Continúo donde estaba; no repito ningún trabajo.</p></div>
+<h2>Si fallan las pruebas, dice de quién es</h2>
+<div class="card"><p><span class="dot warn"></span><b>Falla en tu propuesta.</b> Se corrige sola, hasta tres veces.</p>
+<p><span class="dot"></span><b>Falla en la rama principal, no es tuyo.</b> Te lo digo una vez y no gasta intentos.</p>
+<p><span class="dot bad"></span><b>Las pruebas llevan 40 minutos en cola.</b> Las he relanzado una vez; si no avanzan, te lo cuento.</p></div>`},
+decision:{t:"6 · Una decisión",h:`
+<h2>En plena concentración</h2>
+<div class="card" id="c-dec"><p class="who">Soul · 2 preguntas sobre lo mismo, juntas</p>
+<h3>¿Fusionas ahora la propuesta 214 o esperas la segunda revisión?</h3>
+<p><b>Por qué ahora:</b> la primera revisión ya está y las pruebas pasan.</p>
+<p><b>Si no contestas:</b> se queda en espera. No pasa nada malo.</p>
+<p><b>Si aplazas:</b> te lo pregunto a las 12:00.</p>
+<p><b>Vale hasta:</b> las 18:00.</p>
+<div class="row"><button class="b primary" data-a="dec" data-msg="Anotado: esperas la segunda revisión. No te vuelvo a preguntar por esto hasta que llegue.">Espero la segunda revisión</button><button class="b" data-a="dec" data-msg="Aplazado. Te pregunto a las 12:00.">Aplazar</button><button class="b" data-a="decno" data-msg="Esta tarjeta no da permiso de fusión. Para darlo hay que firmarlo con la aprobación formal de siempre; un «ok» de chat no vale.">Quiero fusionar</button></div></div>
+<h2>De noche</h2>
+<div class="card"><p>No suena nada. La pregunta espera. Por la mañana te dice qué quedó esperando y qué hizo mientras. Nunca elige una opción por ti si callas, y no repite la pregunta en bucle.</p></div>`},
+instalacion:{t:"7 · Otro ordenador",h:`
+<h2>Primer día en el equipo de tu organización</h2>
+<div class="card"><p class="who">Soul</p><p>Anoche no corrió nada porque el equipo estaba dormido. Hoy puedo trabajar entre las 13:00 y las 15:00 si hay corriente y más del 40 % de batería.</p></div>
+<h2>Cómo quieres que actúe (lo eliges tú al instalar)</h2>
+<div class="card" id="c-modo">
+<label class="opt sel" data-m="observar"><input type="radio" name="m" value="observar" checked><b>Observar</b> (el de partida): digo qué haría, sin lanzar nada.</label>
+<label class="opt" data-m="proponer"><input type="radio" name="m" value="proponer"><b>Proponer:</b> lanzo solo lo que tú apruebes.</label>
+<label class="opt" data-m="actuar"><input type="radio" name="m" value="actuar"><b>Actuar:</b> trabajo por mi cuenta dentro de los límites.</label>
+<label class="small" style="display:block;margin-top:10px"><input type="checkbox" id="sinmotor"> Mi organización no me deja usar ningún motor de inferencia</label>
+<p id="efectivo" class="done"></p>
+<p class="small">Si no eliges nada, o si instalas sin nadie delante, queda en Observar y te lo digo al terminar. Subirlo luego es decisión tuya; bajarlo, una orden más.</p></div>
+<h2>Lo que no necesita</h2>
+<div class="card"><p>Nada de TI, ningún permiso de administrador, ninguna otra instalación y ningún dato que salga del equipo. Al cerrar la tapa, lo que corría se interrumpe sin contar como fallo y se reanuda al abrir.</p></div>`},
+respaldo:{t:"8 · Se cae Soul",h:`
+<h2>Soul se para</h2>
+<div class="notif"><b>Aviso por canal de respaldo</b><br>2 propuestas esperan tu revisión. Para verlas en el ordenador: pulse inbox</div>
+<p class="small">Notificación del sistema, sin Soul. Una sola vez.</p>
+<h2>Cuando Soul vuelve</h2>
+<div class="card"><p class="who">Soul</p><p>Ya te avisé por el canal de respaldo de las 2 propuestas. No lo repito.</p></div>
+<h2>Y al revés</h2>
+<div class="card"><p class="who">Soul</p><p>Pulse no da señales desde las 14:30.</p></div>
+<p class="small">Cada uno funciona sin el otro. Con Soul presente, Pulse no avisa por su cuenta.</p>`},
+estado:{t:"9 · pulse status",h:`
+<h2>En el ordenador, la orden pulse status</h2>
+<pre>$ pulse status
+Pulse: funcionando
+Última comprobación: hace 40 segundos (tardó 3 s)
+Modo: observar (elegido: observar)
+Freno: sin frenar
+Trabajos en marcha: 3
+  recorte de contexto   25 min   dio señales hace 1 min
+  revisión del informe  12 min   dio señales hace 2 min
+  limpieza de ramas      4 min   dio señales hace 20 s
+En cola: 2 trabajos
+Parados: 1
+  informe de coste: cuota agotada, vuelve a las 9:00
+Esperan tu respuesta: nada
+Fuentes sin datos recientes: ninguna</pre>
+<h2>Si Pulse lleva rato sin dar señales</h2>
+<pre>$ pulse status
+Pulse: sin señales desde las 14:30
+No puedo decirte que todo va bien.
+Mira la última actividad: pulse inbox</pre>
+<h2>Modo elegido distinto del efectivo</h2>
+<pre>$ pulse status
+Modo: observar (elegido: actuar)
+Motivo: no hay ningún motor de inferencia permitido en este equipo.</pre>`}
+};
+const order=["manana","termina","freno","volante","red","decision","instalacion","respaldo","estado"];
+const tabs=$("#tabs"),main=$("#main");
+function answer(b){
+ const c=b.closest(".card"),d=document.createElement("div");
+ d.className="done"+(b.dataset.a==="decno"?" no":"");d.textContent=b.dataset.msg;
+ c.querySelector(".row").remove();c.appendChild(d);
+}
+function modo(){
+ const m=main.querySelector("input[name=m]:checked"),s=main.querySelector("#sinmotor"),o=main.querySelector("#efectivo");
+ if(!m)return;
+ main.querySelectorAll(".opt").forEach(l=>l.classList.toggle("sel",l.dataset.m===m.value));
+ const ef=s.checked?"observar":m.value;
+ o.textContent=ef===m.value?"Modo: "+ef+".":"Elegiste "+m.value+", pero ahora mismo actúo en modo observar: no hay ningún motor de inferencia permitido. Cuando lo haya, pasa solo a "+m.value+".";
+}
+function show(k){
+ if(!Object.hasOwn(states,k))k="manana";
+ [...tabs.children].forEach(b=>b.setAttribute("aria-selected",b.dataset.k===k));
+ main.innerHTML=states[k].h;
+ main.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>answer(b));
+ main.querySelectorAll("input[name=m],#sinmotor").forEach(i=>i.onchange=modo);
+ modo();
+ try{const u=new URL(location.href);u.searchParams.set("s",k);history.replaceState(null,"",u)}catch(e){}
+}
+order.forEach(k=>{const b=document.createElement("button");b.textContent=states[k].t;b.dataset.k=k;b.setAttribute("role","tab");b.onclick=()=>show(k);tabs.appendChild(b)});
+show(new URLSearchParams(location.search).get("s")||"manana");
+</script></body></html>

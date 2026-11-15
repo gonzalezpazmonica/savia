@@ -30,7 +30,7 @@ rows = []
 for i, spec in enumerate(sys.argv[2:]):
     p = spec.split(":", 3)
     r = {"ts": "2026-10-%02dT00:00:00Z" % (i + 1), "type": p[1], "title": p[2], "content": "x",
-         "project": "alpha", "importance_tier": p[0], "topic_key": "k/%d" % i}
+         "project": "alpha", "importance_tier": p[0], "origin": "agent", "topic_key": "k/%d" % i}
     if len(p) > 3:
         r["expires_at"] = p[3]
     rows.append(r)

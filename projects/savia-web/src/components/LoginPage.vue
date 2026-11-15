@@ -4,11 +4,13 @@ import { useAuthStore } from '../stores/auth'
 import type { TeamMember, TeamResponse } from '../types/bridge'
 import RegisterWizard from './RegisterWizard.vue'
 import { Eye, EyeOff } from 'lucide-vue-next'
+import { bridgeInit, sessionModeFromLogin, type SessionMode } from '../utils/bridgeAuth'
 
 const auth = useAuthStore()
 const serverUrl = ref(auth.serverUrl || 'https://localhost:8922')
 const username = ref(auth.username || '')
 const token = ref(auth.token || '')
+let mode: SessionMode = 'memory'
 const error = ref('')
 const certHint = ref(false)
 const loading = ref(false)
@@ -52,8 +54,18 @@ async function connect() {
       if (regData.user_token) token.value = regData.user_token
     }
 
+    // SE-528: el puente emite la sesión opaca (cookie HttpOnly) si hay TLS y
+    // mismo sitio; la web lo comprueba también. Si no, el token vive solo en la
+    // memoria de la pestaña.
+    mode = 'memory'
+    try {
+      const loginRes = await timedFetch(`${serverUrl.value}/auth/login`,
+        bridgeInit(token.value, { method: 'POST' }))
+      if (loginRes.ok) mode = sessionModeFromLogin(await loginRes.json(), serverUrl.value)
+    } catch { /* sin sesión por cookie: modo memoria */ }
+
     if (member) {
-      auth.login(serverUrl.value, username.value, token.value, member)
+      auth.login(serverUrl.value, username.value, token.value, member, mode)
     } else {
       auth.save(new URL(serverUrl.value).hostname, new URL(serverUrl.value).port || '8922', token.value, serverUrl.value.startsWith('https'))
       auth.token = token.value
@@ -77,7 +89,7 @@ async function connect() {
 
 function onRegistered(member: TeamMember) {
   showRegister.value = false
-  auth.login(serverUrl.value, username.value, token.value, member)
+  auth.login(serverUrl.value, username.value, token.value, member, mode)
 }
 </script>
 
@@ -89,6 +101,7 @@ function onRegistered(member: TeamMember) {
       <img src="/savia-logo.png" alt="Savia" class="login-logo" />
       <h1>Savia</h1>
       <p class="login-subtitle">Connect to your PM-Workspace</p>
+      <p v-if="auth.notice" class="login-notice" data-testid="login-notice" role="status">{{ auth.notice }}</p>
       <div class="form-row">
         <label>Server URL</label>
         <input v-model="serverUrl" placeholder="https://localhost:8922" />
@@ -126,6 +139,7 @@ function onRegistered(member: TeamMember) {
 .login-card { padding: 40px; width: 420px; text-align: center; }
 .login-logo { width: 80px; height: 80px; margin-bottom: 8px; }
 h1 { font-size: 26px; color: var(--savia-primary); margin-bottom: 4px; }
+.login-notice { font-size: 13px; color: var(--savia-on-surface); background: var(--savia-surface-variant, transparent); border: 1px solid var(--savia-outline); border-radius: var(--savia-radius); padding: 8px 12px; margin-bottom: 16px; text-align: left; }
 .login-subtitle { font-size: 13px; color: var(--savia-on-surface-variant); margin-bottom: 24px; }
 .form-row { margin-bottom: 12px; text-align: left; }
 .form-row label { display: block; font-size: 12px; color: var(--savia-on-surface-variant); margin-bottom: 3px; }
