@@ -5,7 +5,8 @@
 # PR-state real via `gh pr view` (stub-able en tests con PATH).
 set -uo pipefail
 CMD="${1:-}"; OP="${2:-pr.merge}"; KEY="${3:-}"
-# SE-493 S1: hasta que el Effect Ledger lo sustituya (S3), este contrato solo vale para pr.merge.
+# Este contrato solo vale para pr.merge (guard permanente: el Effect Ledger de SE-493 que iba a
+# sustituirlo se retiró sin implementar; no quitar este guard). Cobertura: tests/bats/test-f5-state-guards.bats.
 # Otra op heredaría la reejecución de efectos inciertos (H1-H10): se rechaza antes de tocar nada.
 if [[ "$OP" != "pr.merge" ]]; then echo "BLOCK: op '$OP' no admitida en f5-state.sh (solo pr.merge; SE-493)" >&2; exit 2; fi
 # La clave es un número de PR: forma ancha permitiría `../` en la ruta de la reserva.
