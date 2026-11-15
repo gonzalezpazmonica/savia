@@ -311,7 +311,9 @@ test("doctor macOS: sin ~/Library/LaunchAgents escribible => AVISO con el arregl
   const n = mac({ agents: "sin-library" });
   assert.equal(await runCli(["doctor"], n.deps), 0);
   assert.match(n.out.join("\n"), /AVISO .*no existe y no puedo crearla/);
-  if (process.getuid?.() !== 0) {
+  // Los casos de permisos usan chmod POSIX: en Windows chmod no quita la escritura de una carpeta
+  // (solo el atributo de solo lectura de ficheros) y root escribe siempre. Fuera de ahí no se prueban.
+  if (process.platform !== "win32" && process.getuid?.() !== 0) {
     const ro = mac();
     chmodSync(ro.agents, 0o500);
     try {
