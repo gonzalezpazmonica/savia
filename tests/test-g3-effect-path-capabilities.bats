@@ -145,9 +145,9 @@ json.dump({'hooks':{'PostToolUse':[{'matcher':'.*','hooks':[{'type':'command','c
 
 @test "wired: referencia dentro del fichero de un hook registrado cuenta (un nivel)" {
   mkdir -p "$FAKE/.opencode/hooks"
-  printf '#!/bin/bash\nbash "$ROOT/scripts/effect-reservation.sh" check\n' > "$FAKE/.opencode/hooks/h.sh"
+  printf '#!/bin/bash\nbash "$ROOT/scripts/debt-burn-down.sh" check\n' > "$FAKE/.opencode/hooks/h.sh"
   write_settings "$FAKE/.claude/settings.json" '"$CLAUDE_PROJECT_DIR"/.opencode/hooks/h.sh'
-  CLAUDE_PROJECT_DIR="$FAKE" run bash "$FAKE/scripts/frontend-probe.sh" --wired effect-reservation.sh
+  CLAUDE_PROJECT_DIR="$FAKE" run bash "$FAKE/scripts/frontend-probe.sh" --wired debt-burn-down.sh
   [ "$status" -eq 0 ]
 }
 
@@ -172,7 +172,7 @@ stub_gates() {
   printf '#!/bin/bash\nexit 0\n' > "$FAKE/tests/chaos/run-chaos-suite.sh"
   printf 'import sys\nsys.exit(0)\n' > "$FAKE/scripts/capability-entropy.py"
   printf 'import sys\nsys.exit(0)\n' > "$FAKE/scripts/constitutional-coverage.py"
-  for t in grounding-verify.sh validate-handoff.sh validate-handoff-integrity.sh checkpoint.sh effect-reservation.sh debt-burn-down.sh planning-transition.sh report-benchmark.sh; do
+  for t in grounding-verify.sh validate-handoff.sh validate-handoff-integrity.sh checkpoint.sh debt-burn-down.sh planning-transition.sh report-benchmark.sh; do
     printf '#!/bin/bash\nexit 0\n' > "$FAKE/scripts/$t"; chmod +x "$FAKE/scripts/$t"
   done
   if [[ -n "$1" ]]; then
@@ -202,7 +202,7 @@ L4_OK='{"rows":[{"risk":"L4","covered":true},{"risk":"L4","covered":true},{"risk
   stub_gates "$L4_OK"
   write_settings "$FAKE/.claude/settings.json" \
     'bash scripts/grounding-verify.sh' 'bash scripts/validate-handoff.sh' 'bash scripts/validate-handoff-integrity.sh' \
-    'bash scripts/checkpoint.sh' 'bash scripts/effect-reservation.sh' 'bash scripts/debt-burn-down.sh'
+    'bash scripts/checkpoint.sh' 'bash scripts/debt-burn-down.sh'
   mkdir -p "$FAKE/.github/workflows"
   printf 'jobs:\n  x:\n    steps:\n      - run: bash scripts/planning-transition.sh\n      - run: bash tests/self-evolution/report-benchmark.sh\n' > "$FAKE/.github/workflows/ci.yml"
   run bash "$FAKE/scripts/coherence-gates.sh"

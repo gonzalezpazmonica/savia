@@ -192,12 +192,8 @@ EOF
   [ "$(stat -c %a "$SAVIA_EFFECT_LEDGER.lock")" = 600 ]
 }
 
-@test "f5-state.sh y effect-reservation.sh rechazan claves con recorrido de rutas (2) sin crear nada fuera" {
+@test "f5-state.sh rechaza claves con recorrido de rutas (2) sin crear nada fuera" {
   R="$BATS_TEST_TMPDIR/res"; mkdir -p "$R/sub"
-  for k in '../fuera' 'a/b' '' '.oculta'; do
-    SAVIA_RESERVATIONS="$R/sub" run bash "$REPO_DIR/scripts/effect-reservation.sh" reserve pr.merge "$k"
-    [ "$status" -eq 2 ]; [[ "$output" == *"no válida"* ]]
-  done
   for k in '../7' 'abc' '' '07'; do
     SAVIA_RESERVATIONS="$R/sub" run bash "$REPO_DIR/scripts/f5-state.sh" reserve pr.merge "$k"
     [ "$status" -eq 2 ]; [[ "$output" == *"no es un número de PR"* ]]
@@ -205,8 +201,6 @@ EOF
   [ -z "$(ls -A "$R/sub")" ]
   [ ! -e "$R/pr.merge__fuera.json" ]
   # Controles: claves válidas siguen funcionando.
-  SAVIA_RESERVATIONS="$R/sub" run bash "$REPO_DIR/scripts/effect-reservation.sh" reserve pr.merge bats-key.1
-  [ "$status" -eq 0 ]
   SAVIA_RESERVATIONS="$R/sub" run bash "$REPO_DIR/scripts/f5-state.sh" reserve pr.merge 42
   [ "$status" -eq 0 ]
 }
