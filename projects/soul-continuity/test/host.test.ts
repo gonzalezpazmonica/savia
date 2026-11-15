@@ -162,9 +162,10 @@ test("secret-tool: presente da ok; ausente da fallo con la orden de instalación
   assert.match(sin.fix ?? "", /apt install libsecret-tools/);
 });
 
-test("secret-tool (negativo): un directorio con ese nombre no cuenta; fuera de Linux no se exige", () => {
+test("secret-tool (negativo): un directorio con ese nombre no cuenta; fuera de Linux no da ok sin probar", () => {
   const d = mkdtempSync(join(tmpdir(), "soul-path-"));
   mkdirSync(join(d, "secret-tool"));
   assert.equal(onPath("secret-tool", d, "linux"), false);
-  assert.equal(checkSecretTool({ platform: "darwin", path: "", ifaces: {}, run: fakeRun({}) }).level, "ok");
+  // Fail-closed: fuera de Linux esta función no comprueba nada y no lo disfraza de ok (la prueba es checkKeychain).
+  assert.equal(checkSecretTool({ platform: "darwin", path: "", ifaces: {}, run: fakeRun({}) }).level, "aviso");
 });

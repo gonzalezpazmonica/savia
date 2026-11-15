@@ -35,7 +35,7 @@ import type { Run } from "../credentials/store.ts";
 import type { TokenSet } from "../adapters/oauth.ts";
 import { randomBytes } from "node:crypto";
 import { LoginUsage, PROFILE_NAME, initConfig, runLogin } from "./login.ts";
-import { type Interfaces, NO_VPN_HELP, type VpnAddress, checkSecretTool, describeVpn, detectVpn, missingAddress, onInterface, recognizedVpn } from "./host.ts";
+import { type Interfaces, type VpnAddress, checkSecretTool, describeVpn, detectVpn, missingAddress, noVpnHelp, onInterface, recognizedVpn } from "./host.ts";
 import { CONSENT_STATEMENT, SourceUsage, checkAdapter, declaration, defaultPurpose, isActive, nextStep, withSource } from "./source.ts";
 import { doctorChecks, formatChecks, hostProbe, runSetup } from "./setup.ts";
 
@@ -63,7 +63,7 @@ export interface CliDeps {
   readSecret?: () => Promise<string>;
   platform: NodeJS.Platform;
   home: string;
-  run: Run;
+  run: Run; probeTimeoutMs?: number; // `doctor`: ms máximos por paso de la prueba del almacén (20 s si falta)
   node: string;
   entry: string;
   serve?: (deps: CliDeps) => Promise<number>;
@@ -201,12 +201,12 @@ async function runWithoutConfig(p: Parsed, deps: CliDeps, print: (human: string,
       cfg.api.listen = listen;
       saveConfig(deps.dataDir, cfg);
       const almacen = checkSecretTool(hostProbe(deps));
-      if (almacen.level !== "ok") deps.err(`aviso: ${almacen.message}. Instálalo: ${almacen.fix}`);
+      if (almacen.level === "fallo") deps.err(`aviso: ${almacen.message}. Instálalo: ${almacen.fix}`);
       print([
         `Instalación creada en ${deps.dataDir} con el perfil «${name}». Ninguna fuente ni adaptador está activo: actívalos en config.json (ver docs/instalar.md).`,
         listen.length ? `Escucharé solo en tu VPN: ${listen.join(", ")} (cámbialo con soul listen).`
           : candidates.length ? `No fijo la escucha: ${describeVpn(candidates)}. Si es tu VPN: soul listen ${candidates.map((v) => v.address).join(" ")}`
-          : NO_VPN_HELP,
+          : noVpnHelp(deps.platform),
       ].join("\n"), { data_dir: deps.dataDir, profile: name, operator_ref: cfg.profiles[name].operator.ref, listen });
       return 0;
     }
@@ -570,7 +570,7 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
         if (p.flags.detect === true) {
           const found = await detectVpn(hostProbe(deps).ifaces, deps.run);
           ips = recognizedVpn(found);
-          if (!ips.length) throw new Exit(1, found.length ? `no reconozco ninguna VPN: ${describeVpn(found)}. Si es tu VPN, fíjala a mano: soul listen ${found.map((v) => v.address).join(" ")}` : NO_VPN_HELP);
+          if (!ips.length) throw new Exit(1, found.length ? `no reconozco ninguna VPN: ${describeVpn(found)}. Si es tu VPN, fíjala a mano: soul listen ${found.map((v) => v.address).join(" ")}` : noVpnHelp(deps.platform));
         } else if (p.args.length) {
           try { ips = validateListen(p.args); } catch (e) { throw new Exit(2, (e as Error).message); }
         } else {

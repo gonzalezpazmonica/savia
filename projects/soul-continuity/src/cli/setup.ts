@@ -1,7 +1,8 @@
 /**
  * `soul doctor` y `soul setup`: instalación en un paso para una persona sin conocimientos técnicos.
  *
- * - `doctor`: perfil, almacén de credenciales (`secret-tool` en Linux) y escucha (la IP de
+ * - `doctor`: perfil, almacén de credenciales (`secret-tool` en Linux; en macOS y Windows se prueba con un
+ *   elemento de prueba), arranque de usuario (macOS) y escucha (la IP de
  *   `api.listen` está en una interfaz; si no, la causa probable y la orden exacta del arreglo).
  * - `setup`: encadena init, la escucha en la VPN, las comprobaciones, `serve` como servicio de
  *   usuario (arranque automático) y `pair`, con preguntas sencillas. Es interactiva y la ejecuta la
@@ -15,13 +16,13 @@ import { isIP } from "node:net";
 import { connect as tlsConnect } from "node:tls";
 import { join } from "node:path";
 import type { CliDeps } from "./cli.ts";
-import { type Check, type HostProbe, NO_VPN_HELP, checkListen, checkSecretTool, describeVpn, detectVpn } from "./host.ts";
+import { type Check, type HostProbe, checkCredentialStore, checkLaunchAgents, checkListen, describeVpn, detectVpn, noVpnHelp } from "./host.ts";
 import { ConfigError, NoProfileError, loadConfig, resolveInstall } from "../core/config.ts";
 import { validateListen } from "../api/listen.ts";
 import { spkiPin } from "../api/cert.ts";
 
 export function hostProbe(deps: CliDeps): HostProbe {
-  return { platform: deps.platform, path: deps.env.PATH ?? deps.env.Path, ifaces: deps.ifaces?.() ?? {}, run: deps.run };
+  return { platform: deps.platform, path: deps.env.PATH ?? deps.env.Path, ifaces: deps.ifaces?.() ?? {}, run: deps.run, home: deps.home, timeoutMs: deps.probeTimeoutMs };
 }
 
 /** Comprobaciones de `doctor`, en orden. Fail-closed: un error al leer cuenta como fallo. */
@@ -42,7 +43,8 @@ export async function doctorChecks(deps: CliDeps): Promise<Check[]> {
       out.push({ id: "perfil", level: "fallo", message: e instanceof NoProfileError || e instanceof ConfigError ? e.message : `configuración ilegible (${(e as Error).name})`, fix });
     }
   }
-  out.push(checkSecretTool(h));
+  out.push(await checkCredentialStore(h));
+  if (h.platform === "darwin") out.push(checkLaunchAgents(h));
   out.push(...(await checkListen(listen, h)));
   return out;
 }
@@ -128,7 +130,7 @@ export async function runSetup(deps: CliDeps, sub: (argv: string[]) => Promise<n
       if (known ? yes(a) : yes(a) && a.trim() !== "") ips = vpn.map((v) => v.address);
     }
     if (!ips.length) {
-      if (!vpn.length) say(NO_VPN_HELP);
+      if (!vpn.length) say(noVpnHelp(deps.platform));
       const typed = (await ask("Escribe la IP de tu VPN en este equipo (Intro para salir y hacerlo luego): ")).trim();
       if (!typed) { deps.err("Sin dirección de escucha no se puede emparejar el móvil. Cuando tengas la VPN: soul setup"); return 1; }
       ips = typed.split(/[\s,]+/).filter(Boolean);
