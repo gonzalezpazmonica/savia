@@ -53,6 +53,8 @@ if [[ -z "$SNAP" ]]; then
 fi
 SNAP_TS="${SNAP%% *}"; SNAP_SHA="${SNAP##* }"
 SRC_SHA="$(git -C "$VAULT_PATH" log -1 --format=%B "$SNAP_SHA" 2>/dev/null | sed -n 's/^Source-Commit: //p' | head -1)"
+# El trailer es texto del historial de la cúpula: solo un SHA llega a git (evita inyección de opciones).
+[[ "$SRC_SHA" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]] || SRC_SHA=""
 # Fecha del origen del snapshot: la del commit de origen si existe en el repo; si no, la del snapshot.
 SYNC_TS="$SNAP_TS"
 if [[ -n "$SRC_SHA" ]]; then

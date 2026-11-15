@@ -372,6 +372,10 @@ cmd_dome_index() {
   local name="" force=false
   while [[ $# -gt 0 ]]; do case "$1" in --name) name="$2"; shift 2 ;; --force) force=true; shift ;; *) name="$1"; shift ;; esac; done
   [[ -z "$name" ]] && die "Dome name required"
+  [[ "$name" =~ ^[A-Za-z0-9._-]+$ && "$name" != *..* ]] || die "Nombre de cúpula no válido: $name"
+  # index-docs.sh sustituye docs/ y root/ por la documentación pública de Savia: aplicarlo a otra
+  # cúpula borraría su contenido y mezclaría niveles de confidencialidad.
+  [[ "$name" == "savia-docs" ]] || die "dome index solo sincroniza savia-docs (pedido: $name)"
   info "Rebuilding index for $name..."
   # Arg 1 vacío = repo de Savia ($SAVIA_ROOT o el de este script); arg 2 = la cúpula a sincronizar.
   bash "$SCRIPT_DIR/index-docs.sh" "" "${VAULT_ROOT}/${name}" || die "Sincronización de $name fallida"

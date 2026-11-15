@@ -5,7 +5,8 @@
 #   vault_path  cúpula destino (defecto: ${SAVIA_VAULTS_DIR:-$HOME/savia/vaults}/savia-docs)
 #   --branch    commitea en esa rama del repo de la cúpula, mediante un worktree temporal:
 #               la rama principal y el árbol vivo de la cúpula no se tocan.
-# Solo se copian ficheros VERSIONADOS de docs/ y de la raíz (a savia-docs solo va lo público);
+# Solo se copian ficheros VERSIONADOS de docs/ y de la raíz, leídos del commit HEAD y no del
+# disco, sin symlinks (a savia-docs solo va lo público);
 # lo retirado del origen se retira de docs/ y root/ en la cúpula. El commit lleva el trailer
 # `Source-Commit: <sha>`, que scripts/vaults-freshness.sh usa para medir el atraso.
 # Copyright (c) 2026 Savia. MIT License.
@@ -51,8 +52,14 @@ cleanup() { [[ -n "$WT" ]] && { git -C "$VAULT_PATH" worktree remove --force "$W
 if [[ -n "$BRANCH" ]]; then
   WT="$(mktemp -d "${TMPDIR:-/tmp}/index-docs-wt.XXXXXX")"
   trap cleanup EXIT
+  git -C "$VAULT_PATH" worktree prune 2>/dev/null || true
+  if [[ "$(git -C "$VAULT_PATH" symbolic-ref --short -q HEAD 2>/dev/null)" == "$BRANCH" ]]; then
+    echo "index-docs: $BRANCH es la rama del árbol vivo de la cúpula; usa otra o sincroniza sin --branch" >&2
+    exit 1
+  fi
   if git -C "$VAULT_PATH" show-ref --verify --quiet "refs/heads/$BRANCH"; then
-    git -C "$VAULT_PATH" worktree add -q --force "$WT" "$BRANCH" || { echo "index-docs: no se pudo abrir la rama $BRANCH" >&2; exit 1; }
+    # Sin --force: git rechaza una rama ya abierta en otro worktree.
+    git -C "$VAULT_PATH" worktree add -q "$WT" "$BRANCH" || { echo "index-docs: no se pudo abrir la rama $BRANCH" >&2; exit 1; }
   else
     git -C "$VAULT_PATH" worktree add -q -b "$BRANCH" "$WT" || { echo "index-docs: no se pudo crear la rama $BRANCH (¿la cúpula no tiene commits?)" >&2; exit 1; }
   fi
@@ -118,31 +125,37 @@ SKIPPED=0
 KEEP="$(mktemp)"
 EXT_RE='\.(md|yaml|yml|json|txt)$'
 
-copy_one() {
-  local rel="$1"
-  if [[ "$rel" =~ $EXT_RE ]]; then
-    mkdir -p "$(dirname "$TARGET/$rel")"
-    cp "$SAVIA_ROOT/$rel" "$TARGET/$rel"
-    printf '%s\n' "$rel" >> "$KEEP"
-    INDEXED=$((INDEXED + 1))
+# El contenido sale del commit de origen (git cat-file), no del disco: una edición sin commitear
+# o un fichero solo staged no llegan, y el trailer Source-Commit describe exactamente lo copiado.
+# Solo blobs normales (100644/100755): symlinks (120000) y submódulos (160000) se omiten, porque
+# un symlink versionado puede apuntar a contenido no versionado.
+copy_blob() {
+  local obj="$1" dest="$2"
+  mkdir -p "$(dirname "$TARGET/$dest")"
+  git -C "$SAVIA_ROOT" cat-file blob "$obj" > "$TARGET/$dest" \
+    || { echo "index-docs: no se pudo leer $dest del commit $SOURCE_SHA" >&2; exit 1; }
+  printf '%s\n' "$dest" >> "$KEEP"
+  INDEXED=$((INDEXED + 1))
+}
+is_plain_blob() { [[ "$2" == "blob" && ( "$1" == "100644" || "$1" == "100755" ) ]]; }
+
+echo "    Copiando documentación versionada (commit ${SOURCE_SHA:0:12})..."
+while IFS= read -r -d '' entry; do
+  meta="${entry%%$'\t'*}"; f="${entry#*$'\t'}"
+  read -r mode type obj <<< "$meta"
+  if is_plain_blob "$mode" "$type" && [[ "$f" =~ $EXT_RE ]]; then
+    copy_blob "$obj" "$f"
   else
     SKIPPED=$((SKIPPED + 1))
   fi
-}
-
-echo "    Copiando documentación versionada..."
-while IFS= read -r -d '' f; do
-  [[ -f "$SAVIA_ROOT/$f" ]] && copy_one "$f"
-done < <(git -C "$SAVIA_ROOT" ls-files -z -- docs 2>/dev/null)
+done < <(git -C "$SAVIA_ROOT" ls-tree -r -z --full-tree "$SOURCE_SHA" -- docs)
 
 echo "    Copiando documentos raíz versionados..."
 for f in "${ROOT_FILES[@]}"; do
-  if git -C "$SAVIA_ROOT" ls-files --error-unmatch -- "$f" >/dev/null 2>&1 && [[ -f "$SAVIA_ROOT/$f" ]]; then
-    mkdir -p "$TARGET/root"
-    cp "$SAVIA_ROOT/$f" "$TARGET/root/$f"
-    printf '%s\n' "root/$f" >> "$KEEP"
-    INDEXED=$((INDEXED + 1))
-  fi
+  entry="$(git -C "$SAVIA_ROOT" ls-tree --full-tree "$SOURCE_SHA" -- "$f")"
+  [[ -n "$entry" ]] || continue
+  read -r mode type obj _ <<< "$entry"
+  if is_plain_blob "$mode" "$type"; then copy_blob "$obj" "root/$f"; else SKIPPED=$((SKIPPED + 1)); fi
 done
 
 REMOVED=0
@@ -156,8 +169,16 @@ find "$TARGET/docs" "$TARGET/root" -type d -empty -delete 2>/dev/null || true
 rm -f "$KEEP"
 
 # ── Commit solo de lo gestionado, con el commit de origen como trailer ──
-git -C "$TARGET" add -A -- docs root INDEX.md MAP.md 2>/dev/null || true
+# Solo pathspecs que existen o están rastreados: uno inexistente (p. ej. sin root/) haría fallar
+# el `git add` entero y se reportaría «Sin cambios» en falso.
+ADD_PATHS=()
+for p in docs root INDEX.md MAP.md; do
+  if [[ -e "$TARGET/$p" || -n "$(git -C "$TARGET" ls-files -- "$p")" ]]; then ADD_PATHS+=("$p"); fi
+done
+git -C "$TARGET" add -A -- "${ADD_PATHS[@]}" || { echo "index-docs: fallo en git add en la cúpula" >&2; exit 1; }
 LAST_SRC="$(git -C "$TARGET" log -1 --grep='^index: Savia documentation snapshot' --format=%B 2>/dev/null | sed -n 's/^Source-Commit: //p' | head -1)"
+# El trailer es texto del historial de la cúpula: solo se acepta un SHA (evita inyección de opciones).
+[[ "$LAST_SRC" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]] || LAST_SRC=""
 ALLOW_EMPTY=()
 if git -C "$TARGET" diff --cached --quiet; then
   # Sin diferencias de contenido: solo se anota el nuevo origen si docs/ o la raíz cambiaron
@@ -172,7 +193,7 @@ if git -C "$TARGET" diff --cached --quiet; then
 fi
 COMMITTED="no"
 if ! git -C "$TARGET" diff --cached --quiet || [[ ${#ALLOW_EMPTY[@]} -gt 0 ]]; then
-  if git -C "$TARGET" commit -q "${ALLOW_EMPTY[@]}" -m "index: Savia documentation snapshot ($(date +%Y-%m-%d))" -m "Source-Commit: $SOURCE_SHA"; then
+  if git -C "$TARGET" commit -q ${ALLOW_EMPTY[@]+"${ALLOW_EMPTY[@]}"} -m "index: Savia documentation snapshot ($(date +%Y-%m-%d))" -m "Source-Commit: $SOURCE_SHA"; then
     COMMITTED="sí"
   else
     echo "index-docs: fallo al commitear en la cúpula (¿identidad git sin configurar?)" >&2

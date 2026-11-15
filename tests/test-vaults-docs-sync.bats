@@ -104,11 +104,73 @@ src_commit() {
   [ -z "$(git -C "$SRC" status --porcelain)" ]
 }
 
+@test "sync negativo: una edición sin commitear de un fichero versionado NO llega; llega lo del commit" {
+  echo "borrador privado sobre doc publico" > "$SRC/docs/a.md"
+  echo "nuevo solo staged" > "$SRC/docs/staged.md"; git -C "$SRC" add docs/staged.md
+  run sync_vault
+  [ "$status" -eq 0 ]
+  [ "$(cat "$VAULT/docs/a.md")" = "regla publica" ]
+  [ ! -e "$VAULT/docs/staged.md" ]
+  git -C "$VAULT" log -1 --format=%B | grep -q "^Source-Commit: $(git -C "$SRC" rev-parse HEAD)$"
+}
+
+@test "sync negativo: un symlink versionado NO se sigue (no copia contenido sin versionar)" {
+  mkdir -p "$SRC/output"; echo "secreto sin versionar" > "$SRC/output/privado.md"
+  echo "output/" >> "$SRC/.gitignore"
+  ln -s ../output/privado.md "$SRC/docs/enlace.md"
+  git -C "$SRC" add .gitignore docs/enlace.md; git -C "$SRC" commit -qm symlink
+  run sync_vault
+  [ "$status" -eq 0 ]
+  [ ! -e "$VAULT/docs/enlace.md" ]
+  run grep -rq "secreto" "$VAULT/docs"
+  [ "$status" -eq 1 ]
+}
+
+@test "sync: sin documentos raíz versionados (sin root/) igualmente commitea docs/" {
+  git -C "$SRC" rm -q CLAUDE.md; git -C "$SRC" commit -qm "sin raiz"
+  run bash "$SYNC" "$SRC" "$T/nuevo"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Sin cambios"* ]]
+  git -C "$T/nuevo" ls-files --error-unmatch docs/a.md
+  git -C "$T/nuevo" log -1 --format=%s | grep -q "^index: Savia documentation snapshot"
+}
+
+@test "sync --branch negativo: la rama del árbol vivo se rechaza y no se commitea en ella" {
+  local master_before; master_before=$(git -C "$VAULT" rev-parse master)
+  run sync_vault --branch master
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"árbol vivo"* ]]
+  [ "$(git -C "$VAULT" rev-parse master)" = "$master_before" ]
+}
+
 @test "vaults dome index: sincroniza la cúpula con SAVIA_ROOT, no usa la cúpula como repo" {
   mkdir -p "$T/vroot"; mv "$VAULT" "$T/vroot/savia-docs"
   run env SAVIA_VAULT_ROOT="$T/vroot" bash "$VAULTS" dome index savia-docs
+  [ "$status" -eq 0 ]
   [ -f "$T/vroot/savia-docs/docs/a.md" ]
   [ ! -e "$SRC/vaults" ]
+}
+
+@test "vaults dome index negativo: otra cúpula o un nombre con traversal se rechazan sin tocar nada" {
+  mkdir -p "$T/vroot"; mv "$VAULT" "$T/vroot/cliente-n3"
+  mkdir -p "$T/vroot/cliente-n3/docs"; echo "dato n3" > "$T/vroot/cliente-n3/docs/n3.md"
+  run env SAVIA_VAULT_ROOT="$T/vroot" bash "$VAULTS" dome index cliente-n3
+  [ "$status" -ne 0 ]
+  [ -f "$T/vroot/cliente-n3/docs/n3.md" ]
+  [ ! -e "$T/vroot/cliente-n3/docs/a.md" ]
+  mkdir -p "$T/fuera/docs"; echo "x" > "$T/fuera/docs/x.md"
+  run env SAVIA_VAULT_ROOT="$T/vroot" bash "$VAULTS" dome index ../fuera
+  [ "$status" -ne 0 ]
+  [ -f "$T/fuera/docs/x.md" ]
+  [ ! -d "$T/fuera/.git" ]
+}
+
+@test "vaults dome index negativo: si la sincronización falla, el comando falla (no da verde)" {
+  mkdir -p "$T/vroot"; mv "$VAULT" "$T/vroot/savia-docs"
+  mkdir -p "$T/sin-git"
+  run env SAVIA_VAULT_ROOT="$T/vroot" SAVIA_ROOT="$T/sin-git" bash "$VAULTS" dome index savia-docs
+  [ "$status" -ne 0 ]
+  [ ! -e "$T/vroot/savia-docs/docs/a.md" ]
 }
 
 # ── Frescura ─────────────────────────────────────────────────────────────────
@@ -170,6 +232,18 @@ src_commit() {
   [ "$status" -eq 1 ]
 }
 
+@test "frescura negativo: un Source-Commit que no es un SHA no llega a git como opción" {
+  sync_vault
+  git -C "$VAULT" commit -q --allow-empty -m "index: Savia documentation snapshot (falso)" \
+    -m "Source-Commit: --output=$T/pwned"
+  run bash "$FRESH" --path "$VAULT"
+  [ ! -e "$T/pwned" ]
+  [ "$status" -eq 0 ]
+  run bash "$SYNC" "$SRC" "$VAULT"
+  [ "$status" -eq 0 ]
+  [ ! -e "$T/pwned" ]
+}
+
 @test "frescura: resuelve la ruta por SAVIA_VAULTS_DIR cuando no hay --path" {
   mkdir -p "$T/vs"; mv "$VAULT" "$T/vs/savia-docs"
   run env SAVIA_VAULTS_DIR="$T/vs" bash "$FRESH"
@@ -214,15 +288,24 @@ mk_stale_docs_vault() {
 
 @test "clock-in: validate-ci-local --quick avisa (WARN, sin bloquear) si la cúpula va atrasada" {
   unset SAVIA_ROOT
+  export SAVIA_VAULTS_DIR="$T/no-hay"
+  run bash scripts/validate-ci-local.sh --quick
+  local base_status="$status"
   mk_stale_docs_vault "2026-01-01T00:00:00"
   run bash scripts/validate-ci-local.sh --quick
   [[ "$output" == *"WARN Cúpula savia-docs atrasada"* ]]
   [[ "$output" == *"index-docs.sh"* ]]
+  # Sin bloquear: el código de salida es el mismo que sin cúpula.
+  [ "$status" -eq "$base_status" ]
 }
 
 @test "clock-in negativo: cúpula al día o ausente no añade aviso de cúpula" {
   unset SAVIA_ROOT
   mk_stale_docs_vault "2099-01-01T00:00:00"
+  # La cúpula es medible y está al día (no es ausencia de aviso por fallo de la medición).
+  run bash "$FRESH" --summary
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
   run bash scripts/validate-ci-local.sh --quick
   [[ "$output" != *"Cúpula savia-docs"* ]]
   export SAVIA_VAULTS_DIR="$T/no-hay"
