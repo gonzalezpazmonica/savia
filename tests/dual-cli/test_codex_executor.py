@@ -263,6 +263,72 @@ class Recibo(Base):
         self.assertEqual(len(self.argv_log.read_text().splitlines()), 1)
 
 
+class Entradas(Base):
+    def test_run_dir_dentro_del_worktree_se_bloquea(self):
+        dentro = self.wt / "logs"
+        dentro.mkdir()
+        job = ce.CodexJob(prompt="MODO:rc0-sin-efecto", workdir=str(self.wt), run_dir=str(dentro),
+                          model="modelo-x", effort="low", espera_efecto=True)
+        res = self.adapter(job).execute(self.request())
+        self.assertEqual(res["state"], "blocked")
+        self.assertEqual(res["reason"], "RUN_DIR_IN_WORKTREE")
+        self.assertFalse(self.argv_log.exists())
+
+    def test_run_dir_fuera_del_worktree_no_se_bloquea(self):
+        res = self.adapter(self.job("MODO:ok", espera_efecto=True)).execute(self.request())
+        self.assertEqual(res["state"], "succeeded")
+
+    def test_argumentos_que_alterarian_la_orden_se_bloquean(self):
+        casos = ({"effort": "low\nsandbox_mode=\"danger-full-access\""}, {"effort": "extremo"},
+                 {"model": "-x"}, {"model": ""}, {"add_dirs": ("--oops",)})
+        for kw in casos:
+            with self.subTest(kw=kw):
+                base = {"prompt": "MODO:ok", "workdir": str(self.wt), "run_dir": str(self.run_dir),
+                        "model": "modelo-x", "effort": "low"}
+                base.update(kw)
+                res = self.adapter(ce.CodexJob(**base)).execute(self.request())
+                self.assertEqual(res["state"], "blocked")
+                self.assertEqual(res["reason"], "UNSAFE_ARGUMENT")
+        self.assertFalse(self.argv_log.exists())
+
+    def test_preflight_con_contexto_no_dict_no_revienta(self):
+        pre = self.adapter(self.job("MODO:ok")).preflight(["no", "dict"])
+        self.assertFalse(pre["ok"])
+
+
+class Huella(Base):
+    def test_cambios_no_incluye_lo_que_ya_estaba_sucio(self):
+        (self.wt / "sucio.txt").write_text("previo\n")
+        a = self.adapter(self.job("MODO:ok", espera_efecto=True))
+        a.execute(self.request())
+        self.assertEqual(a.observe("r1")["cambios"], ["producto.txt"])
+
+    def test_renombrado_registra_ambas_rutas_sin_recortar(self):
+        subprocess.run(["git", "-C", str(self.wt), "mv", "base.txt", "nuevo.txt"], check=True)
+        _, _, files = ce._worktree_state(str(self.wt))
+        self.assertEqual(sorted(files), ["base.txt", "nuevo.txt"])
+
+    def test_fifo_o_symlink_no_bloquean_la_huella(self):
+        fifo = self.root / "tuberia"
+        os.mkfifo(fifo)
+        (self.wt / "enlace").symlink_to(fifo)
+        os.mkfifo(self.wt / "fifo-dentro")
+        import threading
+        out = {}
+        t = threading.Thread(target=lambda: out.update(r=ce._worktree_state(str(self.wt))), daemon=True)
+        t.start()
+        t.join(10)
+        self.assertFalse(t.is_alive(), "la huella se quedó bloqueada leyendo un FIFO")
+        self.assertIn("enlace", out["r"][2])
+
+    def test_cambiar_el_destino_de_un_symlink_es_un_efecto(self):
+        (self.wt / "enlace").symlink_to("a")
+        antes = ce._worktree_state(str(self.wt))
+        (self.wt / "enlace").unlink()
+        (self.wt / "enlace").symlink_to("b")
+        self.assertNotEqual(antes[1], ce._worktree_state(str(self.wt))[1])
+
+
 class Plazo(Base):
     def test_plazo_vencido_es_ambiguo_y_cancel_retira_el_grupo_de_procesos(self):
         a = self.adapter(self.job("MODO:cuelga", espera_efecto=True), grace_s=0.5)
@@ -291,6 +357,25 @@ class Plazo(Base):
     def test_cancel_de_un_request_desconocido_no_mata_nada(self):
         a = self.adapter(self.job("MODO:ok"))
         self.assertEqual(a.cancel("nadie")["state"], "unknown")
+
+    def test_cancel_antes_de_lanzar_impide_el_lanzamiento(self):
+        # carrera: el plazo vence antes de que execute registre el proceso
+        a = self.adapter(self.job("MODO:ok", espera_efecto=True))
+        a.cancel("r1")
+        res = a.execute(self.request())
+        self.assertEqual(res["state"], "blocked")
+        self.assertEqual(res["reason"], "CANCELLED")
+        self.assertFalse(self.argv_log.exists(), "no debe lanzarse Codex tras cancel")
+
+    def test_wait_espera_al_recibo_tras_cancelar(self):
+        a = self.adapter(self.job("MODO:cuelga"), grace_s=0.5)
+        with self.assertRaises(ProtocolError):
+            _execute_with_deadline(a, self.request(deadline_ms=1500))
+        a.cancel("r1")
+        self.assertTrue(a.wait("r1", 30))
+        rec = a.observe("r1")
+        self.assertIsNotNone(rec, "el recibo parcial debe existir tras cancelar")
+        self.assertLess(rec["rc"], 0)
 
 
 class Equivalencia(Base):
@@ -384,6 +469,22 @@ class PuntoDeLlamada(Base):
         rec = json.loads((self.run_dir / "recibo.json").read_text())
         self.assertEqual(rec["resultado"]["state"], "unknown")
         self.assertEqual(rec["resultado"]["reason"], "AMBIGUOUS_EXECUTION")
+
+    def test_plazo_vencido_cli_retira_hijo_y_nieto_antes_de_salir(self):
+        p = self.lanzar("MODO:cuelga", "--grace", "0.5", horas="0.0005")
+        self.assertEqual(p.returncode, 3, p.stderr)
+        hijo, nieto = map(int, self.pids.read_text().split())
+        # sin espera: al salir el lanzador ya no debe quedar nadie
+        self.assertFalse(vivo(hijo), "el hijo sigue vivo tras salir el lanzador")
+        self.assertFalse(vivo(nieto), "el nieto sigue vivo tras salir el lanzador")
+        rec = json.loads((self.run_dir / "recibo.json").read_text())
+        self.assertIsNotNone(rec["observado"], "el recibo debe registrar lo observado")
+        self.assertEqual(rec["observado"]["cambios"], [])
+
+    def test_plazo_vencido_cli_mata_por_sigkill_a_quien_ignora_sigterm(self):
+        p = self.lanzar("MODO:ignora-term", "--grace", "0.5", horas="0.0005")
+        self.assertEqual(p.returncode, 3, p.stderr)
+        self.assertFalse(vivo(int(self.pids.read_text())), "quien ignora SIGTERM quedó huérfano")
 
     def test_sin_codex_en_path_sale_4_bloqueado(self):
         pf = self.root / "prompt.md"

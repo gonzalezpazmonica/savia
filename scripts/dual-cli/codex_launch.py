@@ -20,6 +20,7 @@ import codex_executor as ce  # noqa: E402
 from runtime import _execute_with_deadline  # noqa: E402
 
 FICHA = Path(__file__).resolve().parents[2] / "contracts/runtime/codex.yaml"
+RECEIPT_WAIT_S = 90.0  # dos `git` de 30 s como máximo tras matar el grupo
 EXIT = {"succeeded": 0, "failed": 1, "unknown": 3, "blocked": 4, "cancelled": 3}
 
 
@@ -52,6 +53,10 @@ def main(argv=None):
     try:
         result = execution_result(_execute_with_deadline(adapter, request))
     except ProtocolError as error:  # AMBIGUOUS_EXECUTION: plazo vencido o excepción
+        # El hilo de cancelación de runtime es daemon y moriría con el intérprete:
+        # se cancela aquí, en síncrono, y se espera al recibo parcial antes de salir.
+        adapter.cancel(request["request_id"])
+        adapter.wait(request["request_id"], RECEIPT_WAIT_S)
         result = {"request_id": request["request_id"], "state": "unknown", "reason": error.code,
                   "artifacts": [], "usage": None, "external_effect_observed": None}
     receipt = {"resultado": result, "observado": adapter.observe(request["request_id"])}

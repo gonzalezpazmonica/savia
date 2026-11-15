@@ -14,14 +14,20 @@ observable. Lo que añade:
   nunca lo que Codex declare en su último mensaje (eso va en `declarado`).
 - Ejecutor caído (señal, plazo vencido) = `unknown`, nunca `succeeded`.
 - Límite honesto: «efecto observado» es solo cambio en el worktree (`git status`
-  y HEAD). Un efecto fuera del worktree no se observa.
+  y HEAD). Un efecto fuera del worktree no se observa. `run_dir` dentro del
+  worktree se rechaza: lo que escribe el propio lanzador contaría como efecto.
+- Confinamiento: se ejecuta con `workspace-write` y red, igual que el lanzador
+  antiguo. La ficha deja `aislamiento: no_medido`, así que `exec.confined` no se
+  concede; «no confinado» NO bloquea `exec.run`, solo impide declararlo confinado.
 """
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import threading
@@ -43,6 +49,9 @@ _CAPABILITY_FROM_FICHA = (
     ("exec.confined", harness_ficha.confined),
 )
 LAST_MESSAGE_MAX = 4096
+HASH_MAX_BYTES = 64 * 1024 * 1024  # tope por fichero al tomar la huella
+EFFORTS = frozenset({"minimal", "low", "medium", "high", "xhigh"})
+_MODEL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}")
 
 
 @dataclass(frozen=True)
@@ -79,8 +88,57 @@ def load_runtime(path):
     return runtime
 
 
+def _parse_status(raw):
+    """Rutas de `git status --porcelain=v1 -z`. Un renombrado/copia (`R`/`C`) trae
+    la ruta origen como entrada siguiente, SIN prefijo XY."""
+    entries = raw.split(b"\0")
+    out, i = [], 0
+    while i < len(entries):
+        e = entries[i]
+        i += 1
+        if len(e) < 4:
+            continue
+        out.append((e[:2], e[3:].decode("utf-8", "replace")))
+        if e[0:1] in (b"R", b"C") or e[1:2] in (b"R", b"C"):
+            if i < len(entries) and entries[i]:
+                out.append((e[:2], entries[i].decode("utf-8", "replace")))
+            i += 1
+    return out
+
+
+def _file_signature(path):
+    """Huella de una ruta sin seguir enlaces ni abrir FIFOs/dispositivos."""
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return "absent"
+    if stat.S_ISLNK(st.st_mode):
+        try:
+            return "link:" + os.readlink(path)
+        except OSError:
+            return "link:?"
+    if not stat.S_ISREG(st.st_mode):
+        return f"special:{stat.S_IFMT(st.st_mode)}"
+    h = hashlib.sha256(f"{st.st_size}".encode())
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
+        with os.fdopen(fd, "rb") as f:
+            left = HASH_MAX_BYTES
+            while left > 0:
+                chunk = f.read(min(1 << 20, left))
+                if not chunk:
+                    break
+                h.update(chunk)
+                left -= len(chunk)
+        if st.st_size > HASH_MAX_BYTES:  # más allá del tope: tamaño y mtime
+            h.update(f"{st.st_mtime_ns}".encode())
+    except OSError:
+        return "unreadable"
+    return h.hexdigest()
+
+
 def _worktree_state(workdir):
-    """(HEAD, huella del estado) o None si no se puede observar."""
+    """(HEAD, huella del estado, {ruta: firma}) o None si no se puede observar."""
     try:
         head = subprocess.run(["git", "-C", workdir, "rev-parse", "HEAD"], capture_output=True,
                               text=True, timeout=30, check=True).stdout.strip()
@@ -89,14 +147,13 @@ def _worktree_state(workdir):
                                 check=True).stdout
     except (OSError, subprocess.SubprocessError):
         return None
-    files = [e[3:].decode("utf-8", "replace") for e in status.split(b"\0") if e]
+    sigs = {}
+    for xy, name in _parse_status(status):  # el contenido cuenta: un fichero ya sucio que cambia es un efecto
+        sigs[name] = xy.decode("ascii", "replace") + "|" + _file_signature(os.path.join(workdir, name))
     digest = hashlib.sha256(status)
-    for name in sorted(files):  # el contenido cuenta: un fichero ya sucio que cambia es un efecto
-        try:
-            digest.update(Path(workdir, name).read_bytes())
-        except OSError:
-            digest.update(b"\0absent")
-    return head, digest.hexdigest(), sorted(files)
+    for name in sorted(sigs):
+        digest.update(b"\0" + name.encode("utf-8", "replace") + b"\0" + sigs[name].encode())
+    return head, digest.hexdigest(), sigs
 
 
 def _result(request_id, state, reason, effect=None, artifacts=()):
@@ -113,6 +170,8 @@ class CodexAdapter:
         self._procs = {}
         self._receipts = {}
         self._seen = set()
+        self._cancelled = set()
+        self._done = {}
         self._lock = threading.Lock()
         caps = [BASE_CAPABILITY] + [cid for cid, reader in _CAPABILITY_FROM_FICHA if reader(self._runtime)]
         self._capabilities = caps
@@ -126,22 +185,32 @@ class CodexAdapter:
         return bool(self._binary) and os.access(self._binary, os.X_OK) and not Path(self._binary).is_dir()
 
     def preflight(self, context):
-        wanted = context.get("capability_ids", []) if isinstance(context, dict) else []
-        ok = (self._binary_ok() and isinstance(wanted, list)
-              and set(wanted).issubset(self._capabilities))
-        return {"ok": ok, "request_id": context.get("request_id"),
-                "policy_revision": context.get("policy_revision"), "capability_ids": wanted}
+        ctx = context if isinstance(context, dict) else {}
+        wanted = ctx.get("capability_ids", [])
+        ok = (isinstance(context, dict) and self._binary_ok() and isinstance(wanted, list)
+              and all(isinstance(w, str) for w in wanted) and set(wanted).issubset(self._capabilities))
+        return {"ok": ok, "request_id": ctx.get("request_id"),
+                "policy_revision": ctx.get("policy_revision"), "capability_ids": wanted}
 
     def observe(self, request_id):
         return self._receipts.get(request_id)
 
     def cancel(self, request_id):
+        """Síncrono: vuelve cuando el grupo ha recibido SIGTERM, gracia y SIGKILL.
+        Si aún no se lanzó, queda anotado y `execute` ya no lanzará nada."""
         with self._lock:
+            self._cancelled.add(request_id)
             proc = self._procs.get(request_id)
         if proc is None or proc.poll() is not None:
             return {"request_id": request_id, "state": "unknown"}
         self._kill_group(proc)
         return {"request_id": request_id, "state": "cancelled"}
+
+    def wait(self, request_id, timeout):
+        """True si `execute` de ese request terminó (y dejó recibo) dentro del plazo."""
+        with self._lock:
+            ev = self._done.get(request_id)
+        return True if ev is None else ev.wait(timeout)
 
     def _kill_group(self, proc):
         """SIGTERM al grupo, gracia, SIGKILL. Un descendiente que se separó del grupo escapa (D4)."""
@@ -165,16 +234,26 @@ class CodexAdapter:
         blocked = self._precheck(request)
         if blocked:
             return _result(rid, "blocked", blocked, effect=False)
-        job = self._jobs[request["input_ref"]]
+        done = threading.Event()
+        with self._lock:
+            self._done[rid] = done
+        try:
+            return self._run(rid, self._jobs[request["input_ref"]])
+        finally:
+            done.set()
+
+    def _run(self, rid, job):
         argv = build_argv(self._binary, job)
         before = _worktree_state(job.workdir)
         log_path = Path(job.run_dir) / "log.txt"
         rc, died = None, False
         try:
             with open(log_path, "ab") as log:
-                proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT,
-                                        start_new_session=True)
-                with self._lock:
+                with self._lock:  # cancel no puede colarse entre la comprobación y el registro
+                    if rid in self._cancelled:
+                        return _result(rid, "blocked", "CANCELLED", effect=False)
+                    proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT,
+                                            start_new_session=True)
                     self._procs[rid] = proc
                 rc = proc.wait()
         except OSError:
@@ -183,7 +262,8 @@ class CodexAdapter:
         if rc is not None and rc < 0:
             died = True
         effect = None if before is None or after is None else (before[:2] != after[:2])
-        changes = [] if before is None or after is None else sorted(set(after[2]) | set(before[2]))
+        changes = ([] if before is None or after is None else  # solo lo que cambió en esta ejecución
+                   sorted(n for n in set(after[2]) | set(before[2]) if before[2].get(n) != after[2].get(n)))
         last = Path(job.run_dir) / "ultimo.md"
         declared = None
         if last.is_file():
@@ -221,8 +301,32 @@ class CodexAdapter:
             return "BINARY_MISSING"
         if not isinstance(job.prompt, str) or not job.prompt or job.prompt.startswith("-"):
             return "UNSAFE_PROMPT"  # el lanzador antiguo pasa el prompt sin `--`
+        if not _safe_args(job):
+            return "UNSAFE_ARGUMENT"
+        if _inside(job.run_dir, job.workdir):
+            return "RUN_DIR_IN_WORKTREE"  # log.txt y ultimo.md contarían como efecto
         with self._lock:
+            if request["request_id"] in self._cancelled:
+                return "CANCELLED"
             if request["request_id"] in self._seen:
                 return "ALREADY_EXECUTED"
             self._seen.add(request["request_id"])
         return None
+
+
+def _safe_args(job):
+    """Lista blanca: nada que empiece por `-` ni sintaxis TOML en `-c`."""
+    if not isinstance(job.effort, str) or job.effort not in EFFORTS:
+        return False
+    if not isinstance(job.model, str) or not _MODEL_RE.fullmatch(job.model):
+        return False
+    paths = (job.workdir, job.run_dir, *job.add_dirs)
+    return all(isinstance(x, str) and x and not x.startswith("-") and "\0" not in x for x in paths)
+
+
+def _inside(child, parent):
+    try:
+        c, p = Path(child).resolve(), Path(parent).resolve()
+    except (OSError, RuntimeError):
+        return True  # sin poder resolver, se trata como dentro (fail-closed)
+    return c == p or p in c.parents
