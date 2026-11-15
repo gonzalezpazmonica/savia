@@ -75,7 +75,7 @@ cada slice de SE-515 a partir de S1 necesita su propia aprobación:
 
 | Spec | Qué es | Primer paso |
 |---|---|---|
-| SE-513 | Admisión duradera de cambios de intención y comprobación previa | Sondas de durabilidad y tabla de soporte por harness |
+| SE-513 | Admisión duradera de cambios de intención y comprobación previa (RETIRADA 2026-11-14) | Sondas de durabilidad y tabla de soporte por harness |
 | SE-514 | Atención humana: una sola cola de preguntas, con su porqué | Escenas confirmadas y medición de partida |
 | SE-515 | Aprendizaje aplicado: de la lección recuperada a la obligación comprobada | Auditoría de solo lectura y línea base |
 
@@ -415,7 +415,7 @@ Era exprés (1 día). Trigger: tras Era 186 hook ratchet closure, audit profunda
 - OK **SE-072** Verified Memory Axiom — IMPLEMENTED batch 57
 - **SE-073** Memory Index Cap Tiered — **IMPLEMENTED** (M 4h)
 - **SE-074** Parallel spec execution — **IMPLEMENTED** (M 8h Slice 1 + S 3h Slice 1.5 + S 4h Slice 2 + M 6h Slice 3 = L 21h)
-- **SE-075** Voicebox adoption — Slices 1+2 IMPLEMENTED 2026-04-27 (task-queue.py + savia-voice-chunk.sh + sentence-splitter.py, BATS 53/53 certified); Slice 3 (Kokoro 82M CPU) DEFERRED — requires explicit user authorization for ~500MB model download
+- **SE-075** Voicebox adoption — Slices 1+2 IMPLEMENTED 2026-04-27 (task-queue.py + savia-voice-chunk.sh + sentence-splitter.py, BATS 53/53 certified; task-queue.py retirado el 2026-11-14 por no tener consumidor); Slice 3 (Kokoro 82M CPU) DEFERRED — requires explicit user authorization for ~500MB model download
 - **SE-076** QueryWeaver patterns — IMPLEMENTED 2026-04-27 (3 slices: episodic memory + AzDo schema graph + LLM healer; AC-08/09/12 follow-up evolutivo)
 
 **Era 189 — OpenCode Sovereignty (CLOSED 2026-04-26)**:
@@ -635,8 +635,8 @@ Post-auditoria de alineacion OpenCode (inicio de sesion 2026-05-02). 4 gaps dete
 
 ### Sinergias documentadas
 
-- SE-074 + SE-075 Slice 1: orquestador paralelo usa cola serial intra-worktree (`task_queue.py`) — CERRADO en Era 188
-- SE-075 Slice 1 + SE-076 Slice 3: healer async usa `task_queue` para reintentos — CERRADO en Era 188
+- SE-074 + SE-075 Slice 1: orquestador paralelo usa cola serial intra-worktree (`task_queue.py`) — CERRADO en Era 188; la cola se retiró el 2026-11-14: el orquestador nunca la llamó
+- SE-075 Slice 1 + SE-076 Slice 3: healer async usa `task_queue` para reintentos — CERRADO en Era 188; la cola se retiró el 2026-11-14: el healer nunca la llamó
 - SE-076 Slice 1 + SPEC-027: episodes extienden el grafo Phase 1 ya existente — CERRADO en Era 188
 - **SPEC-SCM-COVERAGE + SPEC-SCM-FRESHCHECK + SE-084**: SCM 100% coverage + check mode funcional → auditor de skills puede validar consistencia SCM como parte del gate G14
 - **SPEC-OPC-AGENTSYNC + SPEC-OPC-CROSS-AUDIT**: sync script arregla el gap actual, cross-audit previene recurrencia
@@ -1759,13 +1759,13 @@ piezas ya existen (captura, ledger, calibración, Labs, p_consistent): falta el 
 | SCL-009 | Descubrimiento automático de instancias federadas | IMPLEMENTED 2026-08-22 |
 | SCL-010 | Reconciliación de lecciones duplicadas/conflictivas | IMPLEMENTED 2026-08-22 |
 | SCL-011/012/013 | Orquestador SAGI + pruebas P1-P6 + e2e | IMPLEMENTED 2026-08-22/23 |
-| SE-334 S1-S4 | Telemetry Intelligence (fingerprint + incidentes) | IMPLEMENTED (PR #982 + cierre #998) |
+| SE-534 S1-S4 | Telemetry Intelligence (fingerprint + incidentes) | IMPLEMENTED (PR #982 + cierre #998) |
 
 ### Orden de ejecución recomendado
 
 ```text
 SCL-001 S1 (captura) → S2 (ciclo de vida + rollback) → S3 (métrica L) → S4 (agnosticismo)
-  → SCL-002..013 → SE-334  [TODOS IMPLEMENTADOS 2026-08-17..23]
+  → SCL-002..013 → SE-534  [TODOS IMPLEMENTADOS 2026-08-17..23]
   → Labs: L11 (SAGI) y L13 (metacognición) CERRADAS
   → Siguiente: L14 circuit-closing deuda estructural (SaviaLabs)
 ```
@@ -1784,7 +1784,7 @@ SCL-001 S1 (captura) → S2 (ciclo de vida + rollback) → S3 (métrica L) → S
 - SCL consume, no rehace: SE-255, SE-268 S4, SE-292 S6, SaviaVaults, Labs L1-L6.
 - Invariante: la CONSTITUCION y CRITERIO permanecen intocables por el bucle (CRIT-031);
   "la IA propone, el humano dispone".
-- **Estado 2026-08-23**: programa SCL completo (SCL-001..013 + SE-334) en main.
+- **Estado 2026-08-23**: programa SCL completo (SCL-001..013 + SE-534) en main.
   Labs: L1-L11 y L13 cerradas, L14 deuda estructural en curso, L12 voz abierta.
 
 ---
@@ -1803,12 +1803,12 @@ SCL-001 S1 (captura) → S2 (ciclo de vida + rollback) → S3 (métrica L) → S
 
 | Spec | Concepto origen | Esfuerzo | Por qué primero |
 |---|---|---|---|
-| SE-334 Telemetry Intelligence | superlog `packages/fingerprint` + `apps/worker` | 40h (4 slices) | Hoy cada error en `telemetry-events.jsonl` es un evento aislado: no se puede decir "este error apareció 47 veces". El fingerprint determinista (S1) es la base de agrupación, alertas e incidentes |
+| SE-534 Telemetry Intelligence | superlog `packages/fingerprint` + `apps/worker` | 40h (4 slices) | Hoy cada error en `telemetry-events.jsonl` es un evento aislado: no se puede decir "este error apareció 47 veces". El fingerprint determinista (S1) es la base de agrupación, alertas e incidentes |
 
 ### Orden de ejecución
 
 ```
-SE-334 S1 (fingerprint determinista, 14h) → S2 (issues + alertas, 10h)
+SE-534 S1 (fingerprint determinista, 14h) → S2 (issues + alertas, 10h)
   → S3 (grouping LLM, 8h, opt-in) → S4 (auto-remediación PR Draft, 8h, opcional)
 ```
 
@@ -1816,9 +1816,9 @@ SE-334 S1 (fingerprint determinista, 14h) → S2 (issues + alertas, 10h)
 
 | Spec | PR | Estado | Bloqueo |
 |---|---|---|---|
-| SE-334 | #982 (S1+S2) + #998 (cierre) | PROPOSED 2026-08-17 → **IMPLEMENTED 2026-08-22** | — |
+| SE-534 | #982 (S1+S2) + #998 (cierre) | PROPOSED 2026-08-17 → **IMPLEMENTED 2026-08-22** | — |
 
-> **Cierre 2026-08-23**: SE-334 implementado con fingerprint determinista,
+> **Cierre 2026-08-23**: SE-534 implementado con fingerprint determinista,
 > issues/alertas y captura SCL. La telemetría ya alimenta el bucle de
 > aprendizaje (SE-335/336 Turn-SDLC). Siguiente prioridad: L13 metacognición
 > (cierre) + L14 circuit-closing deuda estructural.

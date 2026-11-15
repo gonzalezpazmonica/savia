@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# telemetry-alert.sh — SE-334 S2: emite alert cuando un issue cruza el umbral,
+# telemetry-alert.sh — SE-534 S2: emite alert cuando un issue cruza el umbral,
 # y opcionalmente alimenta el hook de captura SCL (cierra el círculo: el
 # bucle aprende del incidente).
 #
