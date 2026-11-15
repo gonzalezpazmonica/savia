@@ -5,7 +5,7 @@ description: "Usar cuando se necesitan subagentes en paralelo con admission-hand
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: orchestration
-  savia.maturity: beta
+  savia.maturity: stable
   savia.context: standalone
   savia.context_cost: low
   savia.priority: medium

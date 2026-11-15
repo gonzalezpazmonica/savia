@@ -1,2 +1,2 @@
-# SE-334 S2 policy
+# SE-534 S2 policy
 alert_on: count >= 5
