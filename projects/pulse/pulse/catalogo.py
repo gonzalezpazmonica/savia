@@ -13,6 +13,7 @@ El evento lleva solo nombres y huellas, nunca contenido de agentes.
 """
 import hashlib
 import os
+import re
 import subprocess
 import tempfile
 
@@ -23,6 +24,8 @@ CONVERSOR = os.path.join("scripts", "agents-opencode-convert.sh")
 ORIGEN = os.path.join(".claude", "agents")
 DESTINO = os.path.join(".opencode", "agents")
 TIMEOUT_S = 120
+NOMBRE_VALIDO = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")  # el del esquema de eventos
+MAX_AGENTES = 200
 
 
 def _nombres(directorio):
@@ -80,6 +83,10 @@ def medir(repo):
     nombres = _nombres(os.path.join(repo, ORIGEN))
     if not nombres:
         raise PulseError("catálogo vacío en %s: no hay nada que comparar" % ORIGEN)
+    malos = [n for n in nombres if not NOMBRE_VALIDO.match(n)]
+    if malos:
+        raise EntradaInvalida("nombres de agente fuera de [a-z0-9_-]{1,64}, el ledger no podría anotarlos: "
+                              + ", ".join(malos[:5]))
     esperado = _esperado(repo, nombres)
     visto = {n: _hash(os.path.join(repo, DESTINO, n + ".md")) for n in nombres}
     distintos = sorted(n for n in nombres if visto[n] is not None and visto[n] != esperado[n])
@@ -91,6 +98,8 @@ def medir(repo):
         motivo = "espejo_distinto"
     elif ausentes:
         motivo = "espejo_ausente"
+    if len(distintos) + len(ausentes) > MAX_AGENTES:
+        raise EntradaInvalida("más de %d agentes desajustados: el evento no los cabe; regenera las copias" % MAX_AGENTES)
     return {"huella_repo": huella(esperado), "huella_vista": huella(visto),
             "agentes": sorted(distintos + ausentes), "motivo": motivo}
 
@@ -112,7 +121,8 @@ def estado(evs):
 def comprobar(root, repo, nivel="N1"):
     """Una pasada: mide y emite como mucho un evento por cambio. Devuelve (accion, evento|None).
 
-    accion: `deriva`, `resuelto` o `nada`. Mismo conjunto de agentes desajustados = nada.
+    accion: `deriva`, `resuelto` o `nada`. Mismo conjunto de agentes desajustados y mismo motivo = nada
+    (una nueva edición de un agente ya desajustado no emite evento: se informa del conjunto, no de cada edición).
     """
     m = medir(repo)  # lento, fuera del cerrojo
     with store.lock(root):

@@ -111,7 +111,7 @@ def render(d):
     if c["estado"] == "con_deriva":
         L.append("Agentes desajustados con el repositorio: %s. Se resolverá al regenerar las copias." % ", ".join(c["agentes"]))
     elif c["estado"] == "sin_deriva":
-        L.append("Catálogo de agentes: sin deriva.")
+        L.append("Catálogo de agentes: sin deriva (agentes de nivel superior).")
     else:
         L.append("Catálogo de agentes: sin datos.")
     L.append("Freno: sin información (todavía no está conectado a Pulse).")

@@ -21,12 +21,12 @@ from pulse import catalogo, events, schema  # noqa: E402
 from pulse.store import EntradaInvalida, PulseError  # noqa: E402
 from test_pulse import Base  # noqa: E402
 
-SECRETO = "CONTENIDO-PRIVADO-DEL-AGENTE-12345"
+MARCA_CONTENIDO = "MARCA-DE-CONTENIDO-DEL-AGENTE-12345"
 
 
 def agente(nombre, extra=""):
     return ("---\nname: %s\ndescription: agente de prueba\ntools: [Read, Bash]\ncolor: blue\n---\n"
-            "Cuerpo %s %s\n" % (nombre, SECRETO, extra))
+            "Cuerpo %s %s\n" % (nombre, MARCA_CONTENIDO, extra))
 
 
 class CatalogoBase(Base):
@@ -146,7 +146,7 @@ class Deriva(CatalogoBase):
         catalogo.comprobar(self.root, self.repo)
         with open(os.path.join(self.root, events.EVENTS), encoding="utf-8") as fh:
             crudo = fh.read()
-        self.assertNotIn(SECRETO, crudo)
+        self.assertNotIn(MARCA_CONTENIDO, crudo)
         self.assertNotIn("editado", crudo)
         for e in self.eventos():
             self.assertLessEqual(set(e) - {"agentes", "motivo", "huella_repo", "huella_vista", "huella"},
@@ -154,6 +154,21 @@ class Deriva(CatalogoBase):
 
 
 class FalloCerrado(CatalogoBase):
+    def test_nombre_fuera_del_patron_del_esquema_falla_con_mensaje(self):
+        self.escribir("Mala.Nombre", agente("x"))
+        with self.assertRaises(EntradaInvalida) as cm:
+            catalogo.comprobar(self.root, self.repo)
+        self.assertIn("Mala.Nombre", str(cm.exception))
+        self.assertEqual(self.eventos(), [])
+
+    def test_mas_de_200_desajustados_falla_cerrado(self):
+        for i in range(catalogo.MAX_AGENTES + 1):
+            self.escribir("a%03d" % i, agente("a%03d" % i))
+        with self.assertRaises(EntradaInvalida) as cm:
+            catalogo.comprobar(self.root, self.repo)
+        self.assertIn("más de 200 agentes", str(cm.exception))
+        self.assertEqual(self.eventos(), [])
+
     def test_catalogo_vacio_no_es_sin_deriva(self):
         for n in ("alfa", "beta", "gamma"):
             os.unlink(os.path.join(self.repo, ".claude", "agents", n + ".md"))
