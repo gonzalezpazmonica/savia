@@ -5,7 +5,7 @@ ilegible es «sin señales».
 """
 import datetime as dt
 
-from . import backup, events, store
+from . import backup, catalogo, events, store
 
 LOCAL = "%H:%M"
 
@@ -62,6 +62,8 @@ def collect(root, ahora=None):
         out["problemas"].append("no puedo leer el registro de eventos")
     if rechazadas:
         out["problemas"].append("%d líneas del registro de eventos son ilegibles" % len(rechazadas))
+    cat, ult = catalogo.estado(evs) if est_l == store.OK else ("sin_datos", None)
+    out["catalogo"] = {"estado": cat, "agentes": ult["agentes"] if cat == "con_deriva" else []}
     out["trabajos"], out["terminados_hoy"] = jobs, fin_hoy
     out["pendientes"] = [{"que": p["que"], "critica": p["critica"]} for p in backup.pendientes(root, incluir_respaldo=True)]
     vigente, motivo = backup.presencia(root)
@@ -105,6 +107,13 @@ def render(d):
         L.append("Esperan algo de ti: %d%s. Detalle: pulse inbox." % (len(d["pendientes"]), " (%d crítica(s))" % crit if crit else ""))
     else:
         L.append("Esperan algo de ti: nada que conste.")
+    c = d["catalogo"]
+    if c["estado"] == "con_deriva":
+        L.append("Agentes desajustados con el repositorio: %s. Se resolverá al regenerar las copias." % ", ".join(c["agentes"]))
+    elif c["estado"] == "sin_deriva":
+        L.append("Catálogo de agentes: sin deriva.")
+    else:
+        L.append("Catálogo de agentes: sin datos.")
     L.append("Freno: sin información (todavía no está conectado a Pulse).")
     if d["soul"]["presente"]:
         L.append("Soul: presente. Los avisos los da Soul.")

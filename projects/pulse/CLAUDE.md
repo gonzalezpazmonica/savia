@@ -31,7 +31,10 @@ bin/pulse job-start|job-beat|job-finish ...            # para lanzadores externo
 bin/pulse latido --pasada N [--ttl S]                  # lo llama el bucle en cada pasada
 bin/pulse deliver                                      # una pasada del canal de respaldo
 bin/pulse status | inbox
+bin/pulse catalogo [--repo RAIZ]                       # SE-532 S3: deriva del catálogo de agentes
 ```
+
+`pulse catalogo` compara lo que generaría `scripts/agents-opencode-convert.sh` desde `.claude/agents/` con lo presente en `.opencode/agents/` (los agentes de `.opencode` sin par son de SE-253 y no cuentan). Si difieren emite `catalogo_deriva` (solo nombres de agentes, huellas y motivo; nunca contenido); al coincidir de nuevo emite `catalogo_resuelto`. Un evento por cambio: el mismo conjunto de agentes no repite. `pulse status` deriva «con deriva», «sin deriva» o «sin datos» del último evento. Fail-closed: conversor roto, catálogo vacío o ledger ilegible fallan sin escribir. Nadie lo invoca todavía de forma periódica: es una orden que el bucle puede llamar.
 
 Salidas: 0 bien, 1 rechazado por el estado, 2 entrada inválida (también un dato fuera de contrato, como un rango o una fecha imposible). Excepción: `pulse run` devuelve el código de la orden; si Pulse la rechaza antes de lanzarla, no hay `job_started` en el ledger. Si lanzó la orden pero no pudo anotar el fin (por ejemplo, `peticiones.json` ilegible o lleno), el trabajo consta en marcha y el aviso da la orden exacta: `pulse job-finish --job-id ID --rc N`. `pulse deliver` con otra pasada en curso sale con 0 sin avisar; con el ledger ilegible no avisa y sale con 1.
 

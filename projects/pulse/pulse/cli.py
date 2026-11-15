@@ -11,7 +11,7 @@ import signal
 import subprocess
 import sys
 
-from . import backup, events, schema, status, store
+from . import backup, catalogo, events, schema, status, store
 from .store import EntradaInvalida, PulseError
 
 
@@ -61,6 +61,9 @@ def _p():
 
     s = sub.add_parser("deliver", help="una pasada del canal de respaldo (solo actúa si Soul no está)")
     s.add_argument("--max-validez", type=int, default=backup.MAX_VALIDEZ_DEFECTO)
+
+    s = sub.add_parser("catalogo", help="compara el catálogo de agentes con sus copias y anota deriva o resolución")
+    s.add_argument("--repo", default=".", help="raíz del repositorio (por defecto, el directorio actual)")
 
     sub.add_parser("inbox", help="lo pendiente de ti, en llano")
     s = sub.add_parser("status", help="estado de la planta, en llano")
@@ -198,6 +201,15 @@ def main(argv=None):
                 if r["sin_canal_so"]:
                     print("Sin notificación del sistema para %d aviso(s): el único canal es «pulse inbox»."
                           % r["sin_canal_so"])
+        elif a.cmd == "catalogo":
+            accion, ev = catalogo.comprobar(root, a.repo)
+            if accion == "deriva":
+                print("Agentes desajustados con el repositorio: %s. Se resolverá al regenerar las copias."
+                      % ", ".join(ev["agentes"]))
+            elif accion == "resuelto":
+                print("El catálogo vuelve a coincidir: deriva resuelta.")
+            else:
+                print("Sin cambios respecto a la última comprobación.")
         elif a.cmd == "inbox":
             print(backup.inbox_text(root))
         elif a.cmd == "status":

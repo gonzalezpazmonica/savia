@@ -1038,7 +1038,7 @@ class Estaticas(unittest.TestCase):
 
     def test_solo_biblioteca_estandar(self):
         # D2: Python estándar >= 3.9 sin dependencias.
-        permitidos = {"argparse", "contextlib", "datetime", "fcntl", "json", "math", "os", "re", "secrets", "shutil",
+        permitidos = {"argparse", "contextlib", "datetime", "fcntl", "hashlib", "json", "math", "os", "re", "secrets", "shutil",
                       "signal", "stat", "subprocess", "sys", "tempfile", "time"}
         for fname in os.listdir(os.path.join(PROJECT, "pulse")):
             if not fname.endswith(".py"):
