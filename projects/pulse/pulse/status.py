@@ -10,13 +10,20 @@ from . import backup, events, store
 LOCAL = "%H:%M"
 
 
+MODO = "observar"
+MODO_TEXTO = ("Modo: observar. Pulse no lanza nada; quien actúa sigue siendo el bucle actual "
+              "(todavía no hay configuración de modo, así que el efectivo es siempre observar).")
+
+
 def _hace(delta):
     s = max(0, int(delta.total_seconds()))
     if s < 90:
-        return "%d segundos" % s
-    if s < 5400:
-        return "%d minutos" % round(s / 60)
-    return "%.1f horas" % (s / 3600)
+        return "%d segundo%s" % (s, "" if s == 1 else "s")
+    m = round(s / 60)
+    if m < 60:
+        return "%d minutos" % m
+    h, m = divmod(m, 60)
+    return "%d h %d min" % (h, m) if m else "%d h" % h
 
 
 def collect(root, ahora=None):
@@ -63,7 +70,10 @@ def collect(root, ahora=None):
     if rechazadas:
         out["problemas"].append("%d líneas del registro de eventos son ilegibles" % len(rechazadas))
     out["trabajos"], out["terminados_hoy"] = jobs, fin_hoy
-    out["pendientes"] = [{"que": p["que"], "critica": p["critica"]} for p in backup.pendientes(root, incluir_respaldo=True)]
+    todas = backup.pendientes(root, incluir_respaldo=True)
+    out["avisos"] = sum(1 for p in todas if backup.es_aviso(p))
+    out["pendientes"] = [{"que": p["que"], "critica": p["critica"]} for p in todas if not backup.es_aviso(p)]
+    out["modo"] = MODO
     vigente, motivo = backup.presencia(root)
     out["soul"] = {"presente": vigente, "motivo": motivo}
     return out
@@ -82,6 +92,7 @@ def render(d):
         L.append("Pulse: sin señales desde las %s. No te fíes de lo que sigue." % desde)
     else:
         L.append("Pulse: sin señales (%s). No te fíes de lo que sigue." % p["motivo"])
+    L.append(MODO_TEXTO)
     for prob in d["problemas"]:
         L.append("Aviso: " + prob + ".")
     jobs = d["trabajos"]
@@ -100,6 +111,8 @@ def render(d):
             L.append("  - %s: lleva %s; %s%s." % (j["job_id"], _hace(dt.timedelta(seconds=j["edad_s"])), s, fase))
         t = d["terminados_hoy"]
         L.append("Terminados hoy: %d bien, %d con fallo, %d interrumpidos." % (t["ok"], t["fallo"], t["interrumpido"]))
+    if d["avisos"]:
+        L.append("Avisos: %d (trabajos terminados bien, no piden nada). Detalle: pulse inbox." % d["avisos"])
     if d["pendientes"]:
         crit = sum(1 for x in d["pendientes"] if x["critica"])
         L.append("Esperan algo de ti: %d%s. Detalle: pulse inbox." % (len(d["pendientes"]), " (%d crítica(s))" % crit if crit else ""))
