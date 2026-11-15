@@ -70,7 +70,7 @@ que no está activo se dice como no activo).
 | **Modelo local ≥8B en servicio** (vLLM/Ollama) | Ollama con 3b (débil) y 26b (lenta); sin ≥8B usable | HF: Qwen2.5-7B-Instruct |
 | **Eval unificado por capa** | corpora existen; runner/score por capa no integrado en CI | DeepEval / lm-eval-harness (ecosistema HF/GitHub) |
 | **Validador skills-ref** | conformidad propia; no usa la lib de referencia | agentskills.io / agentskills/agentskills (skills-ref) |
-| **Observabilidad OTel** | base SE-313 + SE-334 fingerprint | ya cubierto (no falta) |
+| **Observabilidad OTel** | base SE-313 + SE-534 fingerprint | ya cubierto (no falta) |
 
 > Nota: HF devuelve páginas de modelos como stub en esta sesión; las
 > especificaciones de los candidatos (bge-m3, Qwen2.5-7B) se verifican en el

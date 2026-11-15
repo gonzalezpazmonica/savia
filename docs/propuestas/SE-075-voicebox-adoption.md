@@ -17,6 +17,9 @@ triage_note: "All 3 slices done. Slice 3 (Kokoro) implemented 2026-06-24"
 
 # SE-075 — Voicebox adoption
 
+> **Nota 2026-11-14:** el Slice 1 (`scripts/lib/task-queue.py`) se retiró por no tener ningún consumidor (ni el orquestador paralelo ni el healer lo llamaron nunca) junto con la admisión duradera SE-513, que se apoyaba en él. El historial de git lo conserva. Los Slices 2 y 3 no se tocan.
+
+
 ## Why
 
 Voicebox (jamiepine/voicebox, 23k stars, MIT, push diario) es alternativa OSS a ElevenLabs: Tauri+FastAPI con 7 motores TTS, voice cloning zero-shot, 23 idiomas. Análisis 2026-04-26 identifica 3 patrones específicos extraíbles sin adoptar el stack completo (Tauri, GPU, multi-track editor).

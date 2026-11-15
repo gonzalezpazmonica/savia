@@ -1,5 +1,5 @@
 skill	state	lines	clasificacion	justificacion
-adversarial-security	Incomplete	87	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+adversarial-security	Calibrated	87	CALIBRATED	2026-11-14: test de comportamiento certificado (>=80), verificado por mutación del script (cada mutante cae) y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
 agent-code-map	Incomplete	150	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 agent-file-map	Incomplete	122	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 agent-messaging	Calibrated	77	CALIBRATED	2026-10-02: test de comportamiento certificado (>=80) y maturity stable con OK de la operadora
@@ -9,7 +9,7 @@ android-autonomous-debugger	Incomplete	148	REFACTOR	completar tests/DOMAIN para 
 architecture-intelligence	Incomplete	123	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 ast-comprehension	Incomplete	143	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 ast-quality-gate	Incomplete	139	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-attack-surface-mapper	Incomplete	93	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+attack-surface-mapper	Calibrated	93	CALIBRATED	2026-11-14: test de comportamiento certificado (>=80), verificado por mutación del script (cada mutante cae) y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
 automation-scheduler	Incomplete	65	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 azure-devops-queries	Incomplete	134	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 azure-pipelines	Incomplete	125	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
@@ -25,7 +25,7 @@ codegraph	Incomplete	129	REFACTOR	completar tests/DOMAIN para calibrar (propuest
 code-improvement-loop	Incomplete	150	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 company-messaging	Incomplete	147	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 consensus-validation	Incomplete	146	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-content-fingerprint	Incomplete	67	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+content-fingerprint	Calibrated	67	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
 context-caching	Incomplete	95	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 context-dome	Incomplete	89	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 context-interview-conductor	Incomplete	132	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
@@ -42,7 +42,7 @@ diagram-generation	Incomplete	135	REFACTOR	completar tests/DOMAIN para calibrar 
 diagram-import	Incomplete	131	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 doc-quality-feedback	Incomplete	85	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 dynamic-web-tester	Incomplete	92	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-ecosystem-watcher	Incomplete	85	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+ecosystem-watcher	Calibrated	85	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
 emergency-mode	Calibrated	73	CALIBRATED	2026-10-20: test de comportamiento certificado (>=80) y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
 enterprise-analytics	Incomplete	66	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 enterprise-onboarding	Incomplete	90	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
@@ -60,11 +60,11 @@ legal-compliance	Calibrated	128	CALIBRATED	2026-10-20: test de comportamiento ce
 lightpanda-browser	Incomplete	103	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 managed-content	Incomplete	73	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 meeting-transcript-extract	Incomplete	91	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-memvid-backup	Incomplete	123	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+memvid-backup	Calibrated	123	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
 meta-reflection	Incomplete	128	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 mobile-security-scanner	Incomplete	111	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 model-upgrade-audit	Incomplete	84	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-mutation-audit	Incomplete	134	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+mutation-audit	Calibrated	134	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
 network-recon	Incomplete	97	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 nuclei-scanning	Incomplete	116	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 obscura-browser	Stub	101	DELETE	stub sin cuerpo ni DOMAIN: candidata a eliminación (propuesta, requiere revisión)
@@ -75,9 +75,9 @@ org-political-landscape	Incomplete	59	REFACTOR	completar tests/DOMAIN para calib
 org-registrar	Stub	67	DELETE	stub sin cuerpo ni DOMAIN: candidata a eliminación (propuesta, requiere revisión)
 org-stakeholder-mapper	Incomplete	67	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 overnight-sprint	Calibrated	150	CALIBRATED	2026-10-02: test de comportamiento certificado (>=80) y maturity stable con OK de la operadora
-parallel-dispatch	Incomplete	79	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+parallel-dispatch	Calibrated	79	CALIBRATED	2026-11-14: test de comportamiento certificado (>=80), verificado por mutación del script (cada mutante cae) y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
 pbi-decomposition	Incomplete	148	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-pentesting	Incomplete	132	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+pentesting	Calibrated	132	CALIBRATED	2026-11-14: test de comportamiento certificado (>=80), verificado por mutación del script (cada mutante cae) y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
 performance-audit	Incomplete	113	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 personal-vault	Incomplete	85	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 pr-agent-judge	Incomplete	84	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
@@ -114,20 +114,22 @@ tabular-intelligence	Stub	36	DELETE	stub sin cuerpo ni DOMAIN: candidata a elimi
 tdd-vertical-slices	Incomplete	137	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 team-coordination	Incomplete	133	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 team-onboarding	Incomplete	108	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-tech-research-agent	Incomplete	150	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+tech-research-agent	Calibrated	150	CALIBRATED	2026-11-14: test de comportamiento certificado (>=80), verificado por mutación del script (cada mutante cae) y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
 _template_python	Incomplete	56	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-test-architect	Incomplete	119	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+test-architect	Calibrated	119	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
 tier3-probes	Incomplete	114	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 time-tracking-report	Incomplete	131	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 tls-security-checker	Incomplete	103	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-topic-cluster	Incomplete	136	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+topic-cluster	Calibrated	136	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
 transcriptor-digest	Incomplete	50	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 understand-anything	Incomplete	118	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 verification-lattice	Incomplete	150	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 voice-inbox	Incomplete	113	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-web-research	Incomplete	95	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+web-research	Calibrated	95	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
 weekly-report	Stub	38	DELETE	stub sin cuerpo ni DOMAIN: candidata a eliminación (propuesta, requiere revisión)
 wellbeing-guardian	Incomplete	127	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 workspace-integrity	Calibrated	102	CALIBRATED	2026-10-02: test de comportamiento certificado (>=80) y maturity stable con OK de la operadora
 write-a-skill	Incomplete	125	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 zoom-out	Incomplete	59	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+knowledge-graph	Calibrated	91	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
+ubiquitous-language	Calibrated	95	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)

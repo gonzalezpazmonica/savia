@@ -228,7 +228,7 @@ test("setup de punta a punta: init, VPN, comprobaciones, arranque de usuario y p
   assert.ok(run.calls.includes("systemctl --user enable --now soul-continuity.service"));
   assert.ok(!run.calls.some((x) => x.startsWith("sudo")), "nada con sudo");
   assert.match(s.out.join("\n"), /clave de emparejamiento: soulpk_/);
-  assert.equal(s.asked.length, 4);
+  assert.equal(s.asked.length, 5, "perfil, correo, servicio, emparejar y conectar una fuente");
   assert.match(s.out.join("\n"), /Escucha configurada: 100\.101\.7\.3/);
 });
 
