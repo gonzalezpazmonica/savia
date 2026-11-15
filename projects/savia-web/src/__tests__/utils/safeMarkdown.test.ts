@@ -96,3 +96,42 @@ describe('safeMarkdown: punto único de saneado (SE-528 S1, AC-1.1/1.2/1.3)', ()
     expect(renderSafeMarkdown(undefined as unknown as string)).toBe('')
   })
 })
+
+describe('safeMarkdown: bloque de código sin resaltado disponible (mutante W10)', () => {
+  const ATAQUE = '<img src=x onerror=alert(1)>'
+  const sinResaltado = () => null
+
+  it('lenguaje desconocido y resaltador que devuelve null: los ángulos se ven como texto, sin elementos activos', () => {
+    const html = renderSafeMarkdown('```zzz\n' + ATAQUE + '\n```', { highlight: sinResaltado })
+    const host = dom(html)
+    expect(host.querySelectorAll('img')).toHaveLength(0)
+    expect(findActiveContent(host)).toEqual([])
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;')
+    expect(host.querySelector('code')?.textContent).toContain(ATAQUE)
+  })
+
+  it('sin lenguaje (vacío) y resaltador null: igual de escapado', () => {
+    const html = renderSafeMarkdown('```\n' + ATAQUE + '\n```', { highlight: sinResaltado })
+    const host = dom(html)
+    expect(host.querySelectorAll('img')).toHaveLength(0)
+    expect(html).toContain('&lt;img')
+  })
+
+  it('el lenguaje que trae el ataque tampoco se cuela por la cabecera del bloque', () => {
+    const html = renderSafeMarkdown('```<img\nx\n```', { highlight: sinResaltado })
+    expect(dom(html).querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('control positivo: código legítimo sin ángulos se conserva tal cual', () => {
+    const html = renderSafeMarkdown('```zzz\nconst a = 1\n```', { highlight: sinResaltado })
+    expect(dom(html).querySelector('code')?.textContent).toContain('const a = 1')
+    expect(html).toContain('language-plaintext')
+  })
+
+  it('control positivo: si el resaltador devuelve HTML, se usa ese HTML y no el escapado', () => {
+    const html = renderSafeMarkdown('```js\na < b\n```', { highlight: () => '<span class="hljs-k">a &lt; b</span>' })
+    const host = dom(html)
+    expect(host.querySelectorAll('span.hljs-k')).toHaveLength(1)
+    expect(host.querySelector('code')?.className).toContain('language-js')
+  })
+})

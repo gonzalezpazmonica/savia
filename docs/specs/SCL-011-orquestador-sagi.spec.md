@@ -5,7 +5,7 @@
 **Area:** Orquestación / Epistemología / SAGI (L11)
 **Línea de investigación:** L11 (SAGI por orquestación)
 **Estimación:** ~8h
-**Base verificada:** main 2026-08-22 — SCL-001..010 IMPLEMENTED, SE-334/335/336, SaviaVaults v0.2, CRITERIO.md
+**Base verificada:** main 2026-08-22 — SCL-001..010 IMPLEMENTED, SE-534/335/336, SaviaVaults v0.2, CRITERIO.md
 
 > **Renumeración (2026-08-22)**: esta spec era `labs/specs/SE-335-sagi-orchestrator.spec.md`
 > (PROPOSED, investigación). SE-335 estaba colisionado con la spec de producción
@@ -47,7 +47,7 @@ tarea ──► LEER: CRITERIO.md (human_authored) + cúpula (recall) + learning
 **Script**: `scripts/savia-orchestrator.sh`
 - Compone: `learning-recall.sh` (SCL-003/005), `learning-proposal.sh --persist`
   (SCL-001/002), `learning-metric.sh` (SCL-003), `learning-autonomy.sh` (SCL-006).
-- Agnóstico a LLM (PURE_BASH), sin vendor names (guard SCL-004/SE-334).
+- Agnóstico a LLM (PURE_BASH), sin vendor names (guard SCL-004/SE-534).
 - Límite CRIT-031: todo output es propuesta `INFERRED`; solo la operadora activa.
 
 **DECIDIR con LLM real (2026-08-22)**: `--decide llm` usa Ollama local
