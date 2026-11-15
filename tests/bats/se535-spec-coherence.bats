@@ -2,8 +2,9 @@
 # SE-535 — coherencia de la spec: cliente externo del puente con alcance solo de conversación.
 # Fija que la spec no pierda sin querer sus garantías (lista blanca, solo lectura, sin contenido en
 # registros, topes, escucha concreta con TLS, criterio de abandono) y que el repo público quede limpio.
-# Aviso: comprueba texto, no el puente (la spec no cambia código). Cada comprobación se ejecuta también
-# sobre una copia mutada y debe fallar.
+# Aviso: comprueba texto, no el puente (la spec no cambia código), y fija frases literales: una
+# reformulación legítima puede romperlo. Las garantías clave (los tests «negativo:») tienen un mutante
+# que debe fallar; el resto de comprobaciones solo se ejecutan sobre la spec real.
 
 set -o pipefail
 
@@ -54,8 +55,17 @@ check() {  # check <fichero>: 0 si la spec es coherente
   grep -q 'dirección de escucha es comodín' "$f" || { echo "escucha"; return 1; }
   grep -q 'o si no hay TLS' "$f" || { echo "TLS"; return 1; }
   grep -q 'con el CLI real, no simulado' "$f" || { echo "pruebas reales"; return 1; }
-  # Doce AC en S1 y cinco en S2, numerados sin huecos.
-  [ "$(grep -oE '^- AC-1\.[0-9]+' "$f" | paste -sd,)" = "$(printf -- '- AC-1.%s\n' 1 2 3 4 5 6 7 8 9 10 11 12 | paste -sd,)" ] \
+  # Revisión independiente: barrera de escucha también en el alta, control positivo del canario,
+  # lista blanca de campos, topes con concurrencia y persistencia, y login de SE-528.
+  grep -q 'se evalúa \*\*también en `add`\*\*' "$f" || { echo "barrera en alta"; return 1; }
+  grep -q 'la respuesta \*\*sí\*\* contiene el canario' "$f" || { echo "control positivo"; return 1; }
+  grep -q 'Solo se acepta `message`' "$f" || { echo "campos"; return 1; }
+  grep -q 'La reserva del hueco es atómica' "$f" || { echo "atomicidad"; return 1; }
+  grep -q 'sobreviven a un reinicio' "$f" || { echo "persistencia"; return 1; }
+  grep -q 'incluidas las que acaban en 5xx o en timeout' "$f" || { echo "5xx cuenta"; return 1; }
+  grep -q 'las de login de SE-528 siguen permitiendo autenticarse' "$f" || { echo "login SE-528"; return 1; }
+  # Dieciocho AC en S1 y cinco en S2, numerados sin huecos.
+  [ "$(grep -oE '^- AC-1\.[0-9]+' "$f" | paste -sd,)" = "$(printf -- '- AC-1.%s\n' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 | paste -sd,)" ] \
     || { echo "AC de S1"; return 1; }
   [ "$(grep -oE '^- AC-2\.[0-9]+' "$f" | paste -sd,)" = "- AC-2.1,- AC-2.2,- AC-2.3,- AC-2.4,- AC-2.5" ] \
     || { echo "AC de S2"; return 1; }
@@ -81,9 +91,30 @@ mutate() {  # mutate <sed-expr>: copia mutada de la spec
   [ "$status" -eq 0 ] || { echo "$output"; false; }
 }
 
-@test "planning y spec coinciden en id, estado y evidencia" {
-  run python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["id"]=="SE-535" and d["status"]=="PROPOSED" and d["evidence"].endswith("SE-535-cliente-externo-solo-conversacion.spec.md"), d' "$STATE"
-  [ "$status" -eq 0 ]
+plan_vs_spec() {  # plan_vs_spec <planning.json>: id, estado, prioridad y fase iguales a la spec
+  python3 -c '
+import json, re, sys
+d = json.load(open(sys.argv[1]))
+fm = open(sys.argv[2]).read().split("---")[1]
+g = lambda k: re.search(r"^" + k + r": *(\S+)$", fm, re.M).group(1)
+assert d["id"] == "SE-535" and d["evidence"].endswith("SE-535-cliente-externo-solo-conversacion.spec.md"), d
+assert d["status"] == g("status") == "PROPOSED", d
+assert d["priority"] == g("priority") and d["phase"] == g("phase"), (d, fm)
+' "$1" "$SPEC"
+}
+
+@test "negativo: planning con prioridad o fase distintas a la spec falla" {
+  sed 's/"priority": "P1"/"priority": "P2"/' "$STATE" > "$BATS_TEST_TMPDIR/p.json"
+  run plan_vs_spec "$BATS_TEST_TMPDIR/p.json"
+  [ "$status" -ne 0 ]
+  sed 's/"phase": "A"/"phase": "B"/' "$STATE" > "$BATS_TEST_TMPDIR/f.json"
+  run plan_vs_spec "$BATS_TEST_TMPDIR/f.json"
+  [ "$status" -ne 0 ]
+}
+
+@test "planning y spec coinciden en id, estado, prioridad, fase y evidencia" {
+  run plan_vs_spec "$STATE"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
   [ -f "$REPO_ROOT/$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["evidence"])' "$STATE")" ]
 }
 
@@ -120,6 +151,41 @@ mutate() {  # mutate <sed-expr>: copia mutada de la spec
 @test "negativo: permitir enlaces que salen de la copia falla" {
   run check "$(mutate 's/ y sin enlaces simbólicos que apunten fuera de la copia//')"
   [ "$status" -ne 0 ]; [[ "$output" == *enlaces* ]]
+}
+
+@test "negativo: quitar la barrera de escucha del alta falla" {
+  run check "$(mutate 's/se evalúa \*\*también en `add`\*\*/se evalúa al arrancar/')"
+  [ "$status" -ne 0 ]; [[ "$output" == *"barrera en alta"* ]]
+}
+
+@test "negativo: quitar el control positivo del canario falla" {
+  run check "$(mutate 's/la respuesta \*\*sí\*\* contiene/la respuesta puede contener/')"
+  [ "$status" -ne 0 ]; [[ "$output" == *"control positivo"* ]]
+}
+
+@test "negativo: volver a la lista negra de campos falla" {
+  run check "$(mutate 's/Solo se acepta `message`/Se rechazan tres campos/')"
+  [ "$status" -ne 0 ]; [[ "$output" == *campos* ]]
+}
+
+@test "negativo: topes sin reserva atómica falla" {
+  run check "$(mutate 's/La reserva del hueco es atómica/La reserva es optimista/')"
+  [ "$status" -ne 0 ]; [[ "$output" == *atomicidad* ]]
+}
+
+@test "negativo: contadores que no sobreviven al reinicio falla" {
+  run check "$(mutate 's/sobreviven a un reinicio/se pierden al reiniciar/')"
+  [ "$status" -ne 0 ]; [[ "$output" == *persistencia* ]]
+}
+
+@test "negativo: no contar los 5xx falla" {
+  run check "$(mutate 's/incluidas las que acaban en 5xx o en timeout/excepto las que acaban en 5xx/')"
+  [ "$status" -ne 0 ]; [[ "$output" == *5xx* ]]
+}
+
+@test "negativo: AC-1.12 sin excepción de login falla" {
+  run check "$(mutate 's/las de login de SE-528 siguen permitiendo autenticarse/todas devuelven 401/')"
+  [ "$status" -ne 0 ]; [[ "$output" == *login* ]]
 }
 
 @test "negativo: perder un AC falla" {

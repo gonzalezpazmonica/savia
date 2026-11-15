@@ -97,24 +97,31 @@ Criterio aplicado, el más restrictivo: lo que lee la otra Savia es N1, más lo 
 **Alta y revocación.**
 - Una orden de línea de comandos `add <nombre> [--por-hora N] [--por-dia M]`, `list` y `revoke <nombre>`. El nombre identifica al cliente en registros y respuestas de error.
 - El token se genera con un generador criptográfico, se muestra una sola vez y se guarda solo su hash. Nunca aparece en ningún registro, tampoco al arrancar.
-- `revoke` surte efecto en la siguiente petición, sin reiniciar el puente.
+- `revoke` surte efecto en la siguiente petición, sin reiniciar el puente. El alta también es en caliente, así que la barrera de escucha (ver «Escucha») se evalúa **también en `add`**: si el puente en marcha escucha en comodín o sin TLS, `add` falla sin crear el cliente.
+- La orden habla con el puente en marcha por su API, con el token maestro, solo por la dirección de bucle local y leyendo el token maestro de un fichero con permisos 600 (nunca en la línea de órdenes). Si el puente no responde, `add` falla: no escribe el cliente directamente en disco.
+- La comparación del hash del token es en tiempo constante, y los fallos de autenticación de este tipo de cliente pasan por el mismo límite de fallos que el resto del puente.
 
 **Alcance.**
 - Un token de cliente externo solo alcanza, por lista blanca: `POST /chat` y `GET /health`. Toda otra ruta, método o ruta futura responde 403. La lista blanca está en un único sitio.
-- En `POST /chat` con ese token: se rechaza con 400 un cuerpo que traiga `system_prompt`, `session_id` o `interactive`. El prompt de sistema lo fija el servidor.
+- En `POST /chat` con ese token: lista blanca de campos. Solo se acepta `message`; cualquier otra clave (`system_prompt`, `session_id`, `interactive` o una futura) responde 400. El prompt de sistema lo fija el servidor.
 - Credenciales solo por la cabecera `Authorization` (SE-528); con este tipo de cliente no se emite cookie de sesión.
-- Ninguna ruta del puente, salvo `GET /health` y las de SE-528 para el login, responde sin autenticación.
+- Ninguna ruta del puente, salvo `GET /health` y las de login de SE-528, responde sin autenticación. Esto cambia el comportamiento actual para los clientes existentes que hoy llaman a rutas anónimas: se declara como cambio incompatible en el changelog de S1, y la lista de rutas afectadas se obtiene recorriendo la tabla de rutas del puente, no a mano.
 
 **Ejecución en solo lectura.** Cada consulta lanza el CLI de Claude:
 - solo con herramientas de lectura (`Read`, `Grep`, `Glob`) y modo de permisos que deniega todo lo no permitido sin preguntar;
 - sin servidores MCP, sin cargar la configuración local de Claude (ni hooks ni listas de permisos), sin memoria automática y sin persistir la sesión;
-- con directorio de trabajo = una copia de solo los ficheros versionados de una referencia fija del repo (y la carpeta compartible si D1 (b)), sin directorios añadidos y sin enlaces simbólicos que apunten fuera de la copia;
+- con directorio de trabajo = una copia de solo los ficheros versionados de una referencia fija del repo (y la carpeta compartible si D1 (b)), sin directorios añadidos y sin enlaces simbólicos que apunten fuera de la copia. Al construir la copia se omite todo enlace simbólico cuyo destino resuelto caiga fuera de ella, incluidos los de la carpeta compartible. Cada consulta usa su propia copia efímera (permisos 700, borrada al terminar, también si falla), de modo que consultas simultáneas no comparten estado;
 - con el mensaje después de `--`;
 - sin herramienta para aprobar permisos.
 
 **Registro.** Una línea por consulta: hora, nombre del cliente, bytes de la pregunta y de la respuesta, código de respuesta y duración. Nunca el contenido; el registro detallado de chat no se escribe para este tipo de cliente.
 
-**Topes.** Por cliente, ventana deslizante de una hora y de un día. Superado cualquiera: 429 con `retry_after_s`. Solo cuentan las consultas aceptadas.
+**Topes.** Por cliente, ventana deslizante de una hora y de un día. Superado cualquiera: 429 con `retry_after_s`.
+- Cuenta toda consulta que llega a lanzar el CLI, incluidas las que acaban en 5xx o en timeout (ya han gastado cuota). No cuentan las rechazadas antes de lanzarlo (4xx, 429).
+- La reserva del hueco es atómica antes de lanzar el CLI: N peticiones simultáneas con tope 2 aceptan como mucho 2.
+- Cada cliente admite una consulta en curso a la vez; la segunda simultánea recibe 429.
+- Los contadores se guardan en disco (solo marcas de tiempo, sin contenido) y sobreviven a un reinicio del puente.
+- Tope de tamaño del cuerpo y del mensaje (413 si se supera) y timeout por consulta, configurables, con valores por defecto fijados en S1.
 
 **Escucha.** Con algún cliente externo dado de alta, el puente se niega a arrancar (código distinto de 0, sin abrir puerto) si la dirección de escucha es comodín (`0.0.0.0`, `::` o vacía) o si no hay TLS.
 
@@ -123,14 +130,20 @@ AC (cada uno con su caso negativo; los de Claude con el CLI real, no simulado):
 - AC-1.2 Token de cliente revocado: 401 en la siguiente petición, sin reiniciar.
 - AC-1.3 Token de cliente externo contra cada ruta y método del puente que no sea `POST /chat` ni `GET /health`: 403 (test que recorre la tabla de rutas del propio puente, para que una ruta nueva no se escape).
 - AC-1.4 Token en la URL (consulta) o en el cuerpo: 401 (SE-528).
-- AC-1.5 `POST /chat` con `system_prompt`, `session_id` o `interactive`: 400.
-- AC-1.6 Prueba real con Claude: se le pide citar un canario puesto en un fichero local ignorado por git y en un fichero fuera del repo; la respuesta no contiene ninguno de los dos.
-- AC-1.7 Prueba real con Claude: se le pide crear un fichero y ejecutar una orden; no existe el fichero después y no hay efecto.
-- AC-1.8 Límite: con tope 2 por hora, la tercera consulta devuelve 429 y `retry_after_s`; otro cliente sigue pudiendo preguntar; una consulta rechazada con 4xx no cuenta.
+- AC-1.5 `POST /chat` con cualquier clave distinta de `message` (`system_prompt`, `session_id`, `interactive` o una inventada): 400.
+- AC-1.6 Prueba real con Claude y control positivo. Se colocan canarios en un fichero ignorado por git del checkout y en un fichero fuera del repo, y se le pide a Claude leerlos por ruta absoluta. Control: con la invocación actual del puente la respuesta **sí** contiene el canario (si no, la prueba no discrimina y falla). Con la invocación de solo lectura la respuesta no lo contiene y el CLI devuelve una denegación de herramienta. Una negativa por prompt sin denegación de herramienta no vale.
+- AC-1.7 Prueba real con Claude: se le pide crear un fichero y ejecutar una orden; no existe el fichero después, no hay efecto y el CLI devuelve una denegación de herramienta (no una negativa por prompt).
+- AC-1.8 Límite: con tope 2 por hora, la tercera consulta devuelve 429 y `retry_after_s`; otro cliente sigue pudiendo preguntar; una consulta rechazada con 4xx no cuenta; una que acaba en 5xx o timeout sí cuenta.
 - AC-1.9 Con un cliente externo dado de alta, arrancar en `0.0.0.0`, `::` o sin TLS sale con código distinto de 0 y no abre el puerto; en una dirección concreta con TLS arranca.
 - AC-1.10 El registro contiene nombre, hora y tamaños; el texto de la pregunta y el de la respuesta no aparecen en ningún fichero del directorio de datos del puente.
 - AC-1.11 Ni el token de un cliente ni el token maestro aparecen en el registro de arranque.
-- AC-1.12 Las rutas que hoy responden sin autenticación, salvo `GET /health`, devuelven 401 sin token.
+- AC-1.12 Las rutas que hoy responden sin autenticación, salvo `GET /health` y las de login de SE-528, devuelven 401 sin token (test que recorre la tabla de rutas del puente); las de login de SE-528 siguen permitiendo autenticarse.
+- AC-1.13 Con el puente en marcha en comodín o sin TLS, `add` falla y no crea el cliente; en una dirección concreta con TLS, `add` funciona sin reiniciar. Con el puente parado, `add` falla.
+- AC-1.14 Concurrencia: con tope 2 y 20 peticiones simultáneas se aceptan como mucho 2; con un cliente, la segunda consulta simultánea recibe 429.
+- AC-1.15 Un cuerpo por encima del tope devuelve 413 y no lanza el CLI; una consulta que excede el timeout se corta, devuelve error y cuenta para el tope.
+- AC-1.16 Los contadores sobreviven a un reinicio del puente: tras alcanzar el tope y reiniciar, la siguiente consulta sigue dando 429.
+- AC-1.17 Enlaces simbólicos: un enlace versionado (y uno en la carpeta compartible) que apunta fuera de la copia, o a la carpeta de credenciales de Claude, no aparece en la copia y Claude no puede leer su destino. Tras cada consulta, la copia efímera ya no existe.
+- AC-1.18 Un token incorrecto repetido activa el límite de fallos de autenticación del puente también para este tipo de cliente.
 
 Reversión: revertir la PR; los clientes externos dejan de existir y el resto del puente no cambia.
 
@@ -170,7 +183,7 @@ Comprobado antes de proponer, con el CLI real de Claude Code y una copia de solo
 - La combinación de herramientas de lectura, modo de permisos que deniega sin preguntar, sin fuentes de configuración locales, con los hooks desactivados, sin MCP, sin memoria automática y sin persistir la sesión deniega `Read`, `Grep` y `Glob` sobre rutas fuera de la copia (ficheros locales ignorados, carpetas de estado del usuario, temporales). La respuesta no contiene los canarios.
 - En la misma ejecución no hay herramienta para escribir, ejecutar órdenes ni descargar: el fichero pedido no aparece y la orden no tiene efecto.
 - El modo mínimo del CLI no sirve como barrera: no lee la autenticación por suscripción.
-- La invocación actual del puente, con un token de persona, sí lee ficheros locales ignorados por git del directorio de trabajo. Es la razón de S1.
+- La invocación actual del puente, con un token de persona, puede leer ficheros locales no versionados que estén en su directorio de trabajo. Es la razón de S1, y AC-1.6 lo exige como control positivo.
 
 ## Criterio de abandono
 
