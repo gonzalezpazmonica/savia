@@ -25,7 +25,7 @@ DEFAULT_TEAM="${AZURE_DEVOPS_DEFAULT_TEAM:-ProyectoAlpha Team}"
 OUTPUT_DIR="${OUTPUT_DIR:-./output}"
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
-log()   { echo "[$(date '+%H:%M:%S')] $*"; }
+log()   { echo "[$(date '+%H:%M:%S')] $*" >&2; }
 error() { echo "[ERROR] $*" >&2; exit 1; }
 
 check_dependencies() {
