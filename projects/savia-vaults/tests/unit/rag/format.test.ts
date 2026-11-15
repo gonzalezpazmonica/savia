@@ -22,7 +22,7 @@ describe('formatRagResponse', () => {
     const out = formatRagResponse(response(2), { fields: 'lean', maxChars: 100000 });
     expect(out).not.toContain('\n');
     const body = JSON.parse(out);
-    expect(Object.keys(body.results[0].hits[0]).sort()).toEqual(['confidentiality', 'dome', 'heading', 'path', 'score', 'text']);
+    expect(Object.keys(body.results[0].hits[0]).sort()).toEqual(['confidentiality', 'dome', 'heading', 'modified', 'path', 'score', 'text']);
     expect(body.results[0].hits[0].score).toBe(0.0164);
     expect(body.domes[0]).toEqual({ name: 'D', status: 'ok' });
   });
@@ -33,6 +33,18 @@ describe('formatRagResponse', () => {
     const h = JSON.parse(formatRagResponse(r, { fields: 'lean', maxChars: 100000 })).results[0].hits[0];
     expect(h.supersededBy).toBe('nueva.md');
     expect(h.status).toBe('deprecated');
+  });
+
+  it('lean conserva la fecha de modificación (modified) para que el cliente muestre frescura', () => {
+    const h = JSON.parse(formatRagResponse(response(1), { fields: 'lean', maxChars: 100000 })).results[0].hits[0];
+    expect(h.modified).toBe('2026-09-01');
+  });
+
+  it('lean omite modified cuando el servicio no la conoce (cadena vacía)', () => {
+    const r = response(1);
+    r.results[0].hits[0] = hit(0, 'y', { freshness: { modified: '', decay: 1 } });
+    const h = JSON.parse(formatRagResponse(r, { fields: 'lean', maxChars: 100000 })).results[0].hits[0];
+    expect('modified' in h).toBe(false);
   });
 
   it('maxChars acota la respuesta entera y el texto es la mayor parte (AC4)', () => {
