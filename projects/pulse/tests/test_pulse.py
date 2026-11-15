@@ -487,7 +487,8 @@ class Estado(Base):
         events.job_finish(self.root, "c", 143)
         out = self.out()
         self.assertIn("Terminados hoy: 1 bien, 1 con fallo, 1 interrumpidos.", out)
-        self.assertIn("Esperan algo de ti: 3.", out)
+        self.assertIn("Avisos: 1 ", out)  # el fin correcto informa, no pide nada
+        self.assertIn("Esperan algo de ti: 2.", out)  # el fallo y la interrupción sí
         self.assertIn("Freno: sin información", out)  # honesto: el freno es S4
 
     def test_ledger_ilegible_avisa_en_vez_de_callar(self):
@@ -526,6 +527,75 @@ class Estado(Base):
         self.assertFalse(os.path.exists(os.path.join(self.root, "latido.json")))
         # dato fuera de contrato = entrada inválida (2), como el resto de rangos (revisión #1576)
         self.assertEqual(self.cli("latido", "--pasada", "1", "--fuente-vencida", "a b").returncode, 2)
+
+
+class LenguajeLlano(Base):
+    latido = Estado.latido
+    out = Estado.out
+
+    def aviso_ok(self, pid):
+        return self.peticion(pid, que="El trabajo %s terminó bien." % pid,
+                             si_no_contestas="No necesitas hacer nada hasta la revisión.")
+
+    def test_avisos_separados_de_lo_que_pide_algo(self):
+        self.latido()
+        self.publica(self.aviso_ok("a"), self.aviso_ok("b"), self.aviso_ok("c"),
+                     self.peticion("pr", fuente="PR_REVISION"))
+        out = self.out()
+        self.assertIn("Avisos: 3", out)
+        self.assertIn("Esperan algo de ti: 1.", out)
+
+    def test_sin_peticiones_que_pidan_algo_nunca_dice_esperan_n(self):
+        self.latido()
+        self.publica(self.aviso_ok("a"), self.aviso_ok("b"))
+        out = self.out()
+        self.assertIn("Esperan algo de ti: nada", out)
+        self.assertNotRegex(out, r"Esperan algo de ti: [1-9]")
+
+    def test_aviso_de_fallo_o_critico_no_es_aviso(self):
+        self.latido()
+        self.publica(self.peticion("f", si_no_contestas="Revisa el motivo antes de relanzarlo."),
+                     self.peticion("c", si_no_contestas="No necesitas hacer nada hasta la revisión.", critica=True))
+        out = self.out()
+        self.assertNotIn("Avisos:", out)
+        self.assertIn("Esperan algo de ti: 2 (1 crítica(s))", out)
+
+    def test_plural_y_horas(self):
+        from pulse import status
+        d = dt.timedelta
+        self.assertEqual(status._hace(d(seconds=1)), "1 segundo")
+        self.assertEqual(status._hace(d(seconds=2)), "2 segundos")
+        self.assertEqual(status._hace(d(seconds=7500)), "2 h 5 min")
+        self.assertEqual(status._hace(d(seconds=7200)), "2 h")
+        self.assertEqual(status._hace(d(seconds=600)), "10 minutos")
+        self.assertEqual(status._hace(d(seconds=3599)), "1 h")
+
+    def test_modo_siempre_y_nunca_actuar(self):
+        for prepara in (lambda: None, self.latido):
+            prepara()
+            out = self.out()
+            self.assertIn("Modo: observar. Pulse no lanza nada", out)
+            self.assertNotIn("actuar", out)
+            self.assertNotIn("Modo: actuar", out)
+
+    def test_inbox_agrupa_avisos_y_deja_completa_la_critica(self):
+        self.publica(*[self.aviso_ok("job%02d" % i) for i in range(20)],
+                     self.peticion("crit", critica=True, que="Decide ya X"))
+        out = self.cli("inbox").stdout
+        lineas = out.splitlines()
+        self.assertIn("20 trabajos terminaron bien: job00, job01, job02 y 17 más.", out)
+        self.assertEqual([l for l in lineas if "job" in l and "terminaron" not in l], [])
+        self.assertIn("- Decide ya X", out)
+        self.assertIn("    Si no contestas: y", out)
+        self.assertLessEqual(len(lineas), 8)  # 1 cabecera + 5 de la crítica + 1 resumen
+
+    def test_inbox_solo_avisos_cabe_en_dos_lineas(self):
+        self.publica(*[self.aviso_ok("j%d" % i) for i in range(20)])
+        self.assertLessEqual(len(self.cli("inbox").stdout.splitlines()), 2)
+
+    def test_inbox_un_solo_aviso_va_completo(self):
+        self.publica(self.aviso_ok("solo"))
+        self.assertIn("Si no contestas:", self.cli("inbox").stdout)
 
 
 class Respaldo(Base):
