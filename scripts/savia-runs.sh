@@ -625,7 +625,10 @@ cmd_derive() {
   local receipt=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --receipt) receipt="${2:-}"; shift 2 ;;
+      --receipt)
+        # sin valor, `shift 2` falla sin desplazar y el bucle no termina (sin `set -e`)
+        [[ $# -ge 2 ]] || { echo "ERROR: --receipt requires a file argument" >&2; exit 1; }
+        receipt="$2"; shift 2 ;;
       *) echo "ERROR: unknown flag '$1'" >&2; exit 1 ;;
     esac
   done
@@ -636,13 +639,16 @@ cmd_derive() {
   [[ -z "$existing" ]] && { echo "ERROR: run_id '$run_id' not found in $LEDGER" >&2; exit 1; }
   derived="$(_derive "$existing")"
   pr_status="${derived%%$'\t'*}"
-  local hv hv_out
+  local hv hv_out hv_rc="" hv_valid="no"
   if [[ -z "$receipt" ]]; then
     hv_out="declarado: sin recibo"
   elif [[ ! -f "$receipt" ]]; then
     hv_out="declarado: recibo no encontrado"
   else
-    hv_out="$(python3 "$SCRIPT_DIR/hecho-verificado.py" receipt "$receipt" 2>/dev/null)" || true
+    # la lista de orquestadoras la fija el código: el entorno no puede vaciarla
+    hv_out="$(env -u HECHO_VERIFICADO_ORCH python3 "$SCRIPT_DIR/hecho-verificado.py" receipt "$receipt" 2>/dev/null)"
+    hv_rc=$?
+    [[ $hv_rc -eq 0 || $hv_rc -eq 1 ]] && hv_valid="si"
     [[ -z "$hv_out" ]] && hv_out="declarado: no se pudo derivar el estado del recibo"
   fi
   hv="${hv_out%%:*}"
@@ -650,7 +656,12 @@ cmd_derive() {
   echo "run_id           : $run_id"
   echo "derived_status   : $pr_status"
   echo "hecho_verificado : $hv"
-  echo "hv_motivo        : ${hv_out#*: }"
+  local hv_first="${hv_out%%$'\n'*}"   # motivo = primera línea; clase=/anomalia= van aparte
+  echo "hv_motivo        : ${hv_first#*: }"
+  echo "recibo_valido    : $hv_valid"
+  [[ -n "$hv_rc" ]] && echo "hv_exit          : $hv_rc"
+  printf '%s\n' "$hv_out" | sed -n '2,$p' | grep -E '^(clase|anomalia)=' | sed 's/^/hv_detalle       : /'
+  return 0
 }
 
 # ── Subcommand: cost (SE-405 Slice 1) ────────────────────────────────────

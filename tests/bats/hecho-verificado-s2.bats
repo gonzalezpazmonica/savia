@@ -157,11 +157,29 @@ PY
   [[ "$output" == *"anomalia="* ]]
 }
 
-@test "AC-2.7 el campo de estado dentro de una verificación tampoco la sube a verificado" {
+@test "AC-2.7 el campo de estado dentro de una verificación se ignora (no se rechaza): verificador independiente, sale verificado" {
+  rec $S1 "[$(v revision reviewer-a $S1 superada '"verificado":false,"estado":"refutado"')]"
+  run rcpt
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == verificado:* ]]
+  [[ "$output" == *"anomalia=campo 'verificado' escrito por el ejecutor, ignorado"* ]]
+  [[ "$output" == *"anomalia=campo 'estado' escrito por el ejecutor, ignorado"* ]]
+}
+
+@test "AC-2.7 par negativo: el campo de estado dentro de una verificación no sube a verificado si el verificador es el ejecutor" {
   rec $S1 "[$(v revision worker-1 $S1 superada '"verificado":true')]"
   run rcpt
+  [ "$status" -eq 0 ]
   [[ "${lines[0]}" == declarado:* ]]
-  [[ "$output" == *"anomalia="* ]]
+  [[ "$output" == *"anomalia=campo 'verificado'"* ]]
+}
+
+@test "recibo sin version pero con campos S2: declarado, salida 0 y anomalía anotada" {
+  printf '{"job":"j1","ejecutor":"w","sha":"%s","verificaciones":[{"basura":1}]}\n' $S1 > "$R"
+  run rcpt
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == declarado:* ]]
+  [[ "$output" == *"anomalia=campo 'verificaciones' sin 'version'"* ]]
 }
 
 @test "AC-2.8 recibo anterior a S2 (sin version ni campos nuevos): se lee, declarado, salida 0" {
@@ -224,4 +242,45 @@ mkrun() {
   [[ "$output" == *"hecho_verificado : refutado"* ]]
   run bash "$RUNS" derive no-existe --receipt "$R"
   [ "$status" -ne 0 ]
+}
+
+@test "derive: --receipt sin valor falla con error y no se cuelga" {
+  mkrun
+  run timeout 10 bash "$RUNS" derive "$RID" --receipt
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--receipt requires"* ]]
+}
+
+@test "derive: hv_motivo es de una línea; clase y anomalía van en hv_detalle" {
+  mkrun
+  rec $S1 "[$(v revision reviewer-a $S1 superada '"verificado":true')]"
+  run bash "$RUNS" derive "$RID" --receipt "$R"
+  [[ "$output" == *"hecho_verificado : verificado"* ]]
+  [[ "$output" == *"recibo_valido    : si"* ]]
+  [[ "$output" == *"hv_detalle       : clase=revision"* ]]
+  [[ "$output" == *"hv_detalle       : anomalia=campo 'verificado'"* ]]
+  mot="$(printf '%s\n' "$output" | grep -A1 '^hv_motivo' | tail -1)"
+  [[ "$mot" != clase=* && "$mot" != anomalia=* ]]
+}
+
+@test "derive: recibo que no valida expone recibo_valido=no y la salida 2 del derivador" {
+  mkrun
+  printf '{"version":1,"job":"j1"}\n' > "$R"
+  run bash "$RUNS" derive "$RID" --receipt "$R"
+  [[ "$output" == *"recibo_valido    : no"* ]]
+  [[ "$output" == *"hv_exit          : 2"* ]]
+}
+
+@test "derive: el entorno no puede vaciar la lista de orquestadoras" {
+  mkrun
+  rec $S1 "[$(v revision savia-orquestadora $S1 superada)]"
+  HECHO_VERIFICADO_ORCH="otra-id" run bash "$RUNS" derive "$RID" --receipt "$R"
+  [[ "$output" == *"hecho_verificado : declarado"* ]]
+}
+
+@test "límite de confianza: un recibo escrito por el ejecutor puede aparentar verificado (documentado, no autenticado)" {
+  rec $S1 "[$(v revision forjado-x $S1 superada)]"
+  run rcpt
+  [[ "${lines[0]}" == verificado:* ]]
+  grep -q "no está autenticado" "$ROOT/docs/rules/domain/hecho-verificado.md"
 }

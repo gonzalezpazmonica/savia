@@ -242,6 +242,9 @@ def cmd_receipt(a):
         return 2
     if "version" not in rec:  # recibo anterior a S2 (AC-2.8, D7): legible, sin campos nuevos, estado conservador
         print("declarado: recibo anterior a S2, sin ejecutor ni verificaciones")
+        for k in ("ejecutor", "verificaciones", "sha"):  # campos S2 sin version: no se validan, se anotan
+            if k in rec:
+                print("anomalia=campo '%s' sin 'version': el recibo no se valida" % k)
         return 0
     anom = []
     clean = {k: v for k, v in rec.items() if k not in CAMPOS_ESTADO_RECIBO}

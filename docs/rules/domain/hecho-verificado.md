@@ -54,6 +54,10 @@ python3 scripts/hecho-verificado.py receipt <recibo.json> [--orchestrator IDS]
 bash scripts/savia-runs.sh derive <run_id> [--receipt <recibo.json>]
 ```
 
-`receipt`: estado en la primera línea; salida 0 verificado o declarado con recibo legible, 1 refutado, 2 recibo ilegible o que no valida contra el esquema (declarado por fallo cerrado). Un recibo sin `version` es anterior a S2: se lee y da `declarado` (salida 0). Sin `verificaciones`, `declarado`. Un campo `estado`, `verificado` o `estado_efectivo` escrito por el ejecutor se ignora y sale como `anomalia=`. Sin `jsonschema` instalado no se puede validar: `declarado`, salida 2.
+`receipt`: estado en la primera línea; salida 0 verificado o declarado con recibo legible, 1 refutado, 2 recibo ilegible o que no valida contra el esquema (declarado por fallo cerrado). Un recibo sin `version` es anterior a S2: se lee y da `declarado` (salida 0) sin validar nada; si trae `ejecutor`, `verificaciones` o `sha`, lo anota como `anomalia=`. Sin `verificaciones`, `declarado`. Un campo `estado`, `verificado` o `estado_efectivo` escrito por el ejecutor se ignora y sale como `anomalia=`. Sin `jsonschema` instalado no se puede validar: `declarado`, salida 2.
 
 `savia-runs.sh derive` imprime el estado de la PR (el del ledger) y `hecho_verificado` por separado, sin escribir nada. Una PR `approved` sin recibo es `declarado`: la aprobación de la PR no sustituye al recibo.
+
+`derive` añade `recibo_valido` (`si` si el derivador leyó y validó el recibo, salida 0 o 1; `no` en cualquier otro caso), `hv_exit` (código del derivador) y `hv_detalle` (líneas `clase=`/`anomalia=`); `hv_motivo` es una sola línea. `derive` ignora `HECHO_VERIFICADO_ORCH`: la lista de orquestadoras es la del código.
+
+**Límite de confianza (S2):** `verificado` no está autenticado. `ejecutor`, `verificador`, `propuesta_por` y `aprobada_*` los escribe quien redacta el recibo, así que un recibo escrito por el propio ejecutor puede aparentar verificación independiente. Este estado no puede alimentar ninguna puerta ni decisión de merge hasta que el recolector (S3) fije o firme esos campos.
