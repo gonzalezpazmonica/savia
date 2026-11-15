@@ -194,7 +194,7 @@ POS_BODY = re.compile(r'\[\[?\s*"?\$\{?status\}?"?\s*(?:-eq\s*0\b|==?\s*"?0"?\s*
 | #1364 S03d (257/268) | `test-se-332-handback.bats` | 31 | 0 | 89 c | 89 c | 89 c | 10 |
 | #1364 S03d (257/268) | `test-se252-bus-factor-scan.bats` | 63 | 79 | 71 | 71 | 71 | 0 |
 | #1364 S03d (257/268) | `test-se252-distribute.bats` | 37 | 78 | 66 | 71 | 71 | 0 |
-| #1364 S03d (257/268) | `test-se334-telemetry-fingerprint.bats` | 39 | 87 | 66 | 71 | 71 | 0 |
+| #1364 S03d (257/268) | `test-se534-telemetry-fingerprint.bats` | 39 | 87 | 66 | 71 | 71 | 0 |
 | #1364 S03d (257/268) | `test-sovereignty-s5.bats` | 30 | 73 | 63 | 78 | 78 | 0 |
 | #1366 S03e (474/500) | `test-audit-chain.bats` | 41 | 95 | 65 | 80 c | 80 c | 0 |
 | #1366 S03e (474/500) | `test-dco-check.bats` | 38 | 87 | 61 | 71 | 71 | 0 |
