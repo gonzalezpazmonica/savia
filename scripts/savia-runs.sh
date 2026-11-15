@@ -15,6 +15,7 @@
 #   status  [--json]                       → board derivado
 #   list    [--mode M] [--json]            → tabla de runs con estado derivado
 #   show    <run_id>                       → hechos + estado derivado + traza de precedencia
+#   derive  <run_id> [--receipt F]         → estado de la PR + hecho verificado (SE-530 S2), derivados, sin guardar
 #   cost    <run_id> --agent A --model M --tokens-in N --tokens-out N [--usd X]  → SE-405
 #   reset                                  → vacía ledger (dev/test)
 set -uo pipefail
@@ -615,6 +616,43 @@ else:
   echo "trace          : $trace"
 }
 
+# ── Subcommand: derive (SE-530 S2) ───────────────────────────────────────
+# Expone junto al estado de la PR el estado de «hecho verificado» del recibo del
+# trabajador. Ambos se derivan en lectura; nada se escribe en el ledger. Sin recibo,
+# recibo ilegible o que no valida: «declarado» (fallo cerrado), nunca «verificado».
+cmd_derive() {
+  local run_id="${1:?run_id required}"; shift
+  local receipt=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --receipt) receipt="${2:-}"; shift 2 ;;
+      *) echo "ERROR: unknown flag '$1'" >&2; exit 1 ;;
+    esac
+  done
+  [[ -f "$LEDGER" ]] || { echo "ERROR: no ledger at $LEDGER" >&2; exit 1; }
+  _py3 || { echo "ERROR: python3 required for derive" >&2; exit 1; }
+  local existing derived pr_status
+  existing="$(_read_record "$run_id")"
+  [[ -z "$existing" ]] && { echo "ERROR: run_id '$run_id' not found in $LEDGER" >&2; exit 1; }
+  derived="$(_derive "$existing")"
+  pr_status="${derived%%$'\t'*}"
+  local hv hv_out
+  if [[ -z "$receipt" ]]; then
+    hv_out="declarado: sin recibo"
+  elif [[ ! -f "$receipt" ]]; then
+    hv_out="declarado: recibo no encontrado"
+  else
+    hv_out="$(python3 "$SCRIPT_DIR/hecho-verificado.py" receipt "$receipt" 2>/dev/null)" || true
+    [[ -z "$hv_out" ]] && hv_out="declarado: no se pudo derivar el estado del recibo"
+  fi
+  hv="${hv_out%%:*}"
+  case "$hv" in verificado|declarado|refutado) ;; *) hv_out="declarado: salida inesperada del derivador"; hv="declarado" ;; esac
+  echo "run_id           : $run_id"
+  echo "derived_status   : $pr_status"
+  echo "hecho_verificado : $hv"
+  echo "hv_motivo        : ${hv_out#*: }"
+}
+
 # ── Subcommand: cost (SE-405 Slice 1) ────────────────────────────────────
 # Adds tokens (and optional USD) consumed by one agent to a run's `cost` fact.
 cmd_cost() {
@@ -781,11 +819,12 @@ case "$SUBCOMMAND" in
   status) cmd_status "$@" ;;
   list)   cmd_list   "$@" ;;
   show)   cmd_show   "$@" ;;
+  derive) cmd_derive "$@" ;;
   cost)   cmd_cost   "$@" ;;
   capture-cost) cmd_capture_cost; exit 0 ;;
   reset)  cmd_reset  "$@" ;;
   *)
-    echo "Usage: savia-runs.sh <init|start|state|pr|cost|capture-cost|finish|status|list|show|reset> [args...]" >&2
+    echo "Usage: savia-runs.sh <init|start|state|pr|cost|capture-cost|finish|status|list|show|derive|reset> [args...]" >&2
     echo "" >&2
     echo "  init" >&2
     echo "  start   <mode> <agent> <task> [--project P] [--branch B] [--url U]   → imprime run_id" >&2
@@ -797,6 +836,7 @@ case "$SUBCOMMAND" in
     echo "  status  [--json]" >&2
     echo "  list    [--mode M] [--json]" >&2
     echo "  show    <run_id>" >&2
+    echo "  derive  <run_id> [--receipt F]" >&2
     echo "  reset" >&2
     exit 1 ;;
 esac
