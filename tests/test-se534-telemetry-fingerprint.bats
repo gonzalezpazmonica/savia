@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
-# SE-334 S1/S2 — fingerprint determinista + issues + alertas
-# Spec: docs/specs/SE-334-telemetry-intelligence.spec.md (AC-1.x, AC-2.x, AC-5.x)
+# SE-534 S1/S2 — fingerprint determinista + issues + alertas
+# Spec: docs/specs/SE-534-telemetry-intelligence.spec.md (AC-1.x, AC-2.x, AC-5.x)
 # Nota: IPs de ejemplo uso IPs de documentación RFC 5737 (192.0.2.x) — nunca
 # direcciones privadas reales (crédito: shield-confidencialidad).
 

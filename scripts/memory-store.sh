@@ -297,18 +297,18 @@ _cap_bytes() {
           # Sigue leyendo tras el corte (sin exit) para no dar SIGPIPE al productor.
           if (full || used + n > max) { full = 1; next }
           print; used += n; shown++ }
-        END { if (shown == 0) print "memory-store: --max-bytes " max " menor que la primera línea; no se emite nada" > "/dev/stderr" }'
+        END { if (NR > 0 && shown == 0) print "memory-store: --max-bytes " max " menor que la primera línea; no se emite nada" > "/dev/stderr" }'
 }
 _with_max_bytes() {
     local fn="$1"; shift
-    local args=() max=""
+    local args=() max="" has_max=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --max-bytes) max="${2:-}"; shift; [[ $# -gt 0 ]] && shift ;;
+            --max-bytes) has_max=true; max="${2:-}"; shift; [[ $# -gt 0 ]] && shift ;;
             *) args+=("$1"); shift ;;
         esac
     done
-    if [[ -z "$max" ]]; then "$fn" "${args[@]}"; return; fi
+    if ! $has_max; then "$fn" "${args[@]}"; return; fi
     [[ "$max" =~ ^[0-9]+$ ]] || { echo "memory-store: --max-bytes requiere un entero" >&2; return 1; }
     "$fn" "${args[@]}" | _cap_bytes "$max"
 }
