@@ -1,5 +1,5 @@
 ---
-status: APPROVED
+status: RETIRED
 priority: P0
 developer_type: agent-single
 created: 2026-11-01
@@ -18,8 +18,15 @@ timeline:
   - from: "2026-11-09"
     learned: "2026-11-09"
     value: "APPROVED"
+  - from: "2026-11-14"
+    learned: "2026-11-14"
+    value: "RETIRED"
+    source: "spec-lifecycle:auto"
 ---
 # SE-493 — Effect Ledger y reconciliación de efectos ambiguos
+
+> **RETIRADA (2026-11-14).** La operadora retiró esta spec y su código (`scripts/effect-ledger.py`, `scripts/effect-ops.json` y sus pruebas) por la regla «conectar antes de construir». Motivos: en el último mes hubo 132 fusiones y ninguna de resultado incierto; nada llamaba al libro; GitHub ya impide fusionar dos veces el mismo PR con `--match-head-commit`; el contrato vivo es `scripts/f5-state.sh`, que sigue intacto. El texto se conserva como historia. El código se recupera del historial de git: es el de la versión anterior a la PR de retirada. Reabrir solo si aparece un caso real de fusión de resultado incierto.
+
 
 ## Problema
 

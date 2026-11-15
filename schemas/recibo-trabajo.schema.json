@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "recibo-trabajo.schema.json",
+  "title": "Recibo de trabajo (SE-530 S2)",
+  "description": "Une la marca de fin del trabajador con las comprobaciones. El estado efectivo NO se guarda: se deriva en lectura (D1). Los campos de estado escritos por el ejecutor ('estado', 'verificado', 'estado_efectivo') se ignoran y se anotan como anomalia antes de validar.",
+  "type": "object",
+  "required": ["version", "job", "ejecutor", "sha"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "job": { "type": "string", "minLength": 1 },
+    "ejecutor": { "type": "string", "minLength": 1 },
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "verificaciones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["clase", "ref", "sha", "verificador", "propuesta_por", "resultado"],
+        "additionalProperties": false,
+        "properties": {
+          "clase": { "enum": ["revision", "persona", "ci_base", "ci_propio", "postcondicion", "autodeclaracion"] },
+          "ref": { "type": "string", "minLength": 1 },
+          "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "verificador": { "type": "string", "minLength": 1 },
+          "propuesta_por": { "type": "string", "minLength": 1 },
+          "aprobada_por": { "type": "string", "minLength": 1 },
+          "contenido_hash": { "type": "string", "minLength": 1 },
+          "aprobada_hash": { "type": "string", "minLength": 1 },
+          "resultado": { "enum": ["superada", "fallida"] }
+        }
+      }
+    }
+  }
+}
