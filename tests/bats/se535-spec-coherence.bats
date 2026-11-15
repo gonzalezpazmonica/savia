@@ -64,8 +64,19 @@ check() {  # check <fichero>: 0 si la spec es coherente
   grep -q 'sobreviven a un reinicio' "$f" || { echo "persistencia"; return 1; }
   grep -q 'incluidas las que acaban en 5xx o en timeout' "$f" || { echo "5xx cuenta"; return 1; }
   grep -q 'las de login de SE-528 siguen permitiendo autenticarse' "$f" || { echo "login SE-528"; return 1; }
-  # Dieciocho AC en S1 y cinco en S2, numerados sin huecos.
-  [ "$(grep -oE '^- AC-1\.[0-9]+' "$f" | paste -sd,)" = "$(printf -- '- AC-1.%s\n' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 | paste -sd,)" ] \
+  # Segunda revisión: el alta habla por la dirección de escucha (no por bucle local), nombre validado,
+  # entorno mínimo, concurrencia configurable, detección de denegación y reversión coherente.
+  grep -q 'por la dirección de escucha configurada' "$f" || { echo "alta por dirección de escucha"; return 1; }
+  grep -q 'El puente no abre un segundo listener de administración' "$f" || { echo "sin listener de administración"; return 1; }
+  grep -qF '^[a-z0-9-]{1,32}$' "$f" || { echo "nombre validado"; return 1; }
+  grep -q 'con entorno mínimo' "$f" || { echo "entorno mínimo"; return 1; }
+  grep -q 'inconcluyente = fallo' "$f" || { echo "inconcluyente"; return 1; }
+  grep -q 'La concurrencia por cliente es configurable' "$f" || { echo "concurrencia configurable"; return 1; }
+  grep -q 'Las rutas anónimas vuelven a ser anónimas' "$f" || { echo "reversión"; return 1; }
+  grep -q 'en la carpeta de credenciales de Claude y en el entorno' "$f" || { echo "canario credenciales"; return 1; }
+  grep -q 'Tope de tamaño del cuerpo (16 KiB)' "$f" || { echo "topes por defecto"; return 1; }
+  # Veinticuatro AC en S1 y cinco en S2, numerados sin huecos.
+  [ "$(grep -oE '^- AC-1\.[0-9]+' "$f" | paste -sd,)" = "$(printf -- '- AC-1.%s\n' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 | paste -sd,)" ] \
     || { echo "AC de S1"; return 1; }
   [ "$(grep -oE '^- AC-2\.[0-9]+' "$f" | paste -sd,)" = "- AC-2.1,- AC-2.2,- AC-2.3,- AC-2.4,- AC-2.5" ] \
     || { echo "AC de S2"; return 1; }
@@ -188,6 +199,31 @@ assert d["priority"] == g("priority") and d["phase"] == g("phase"), (d, fm)
   [ "$status" -ne 0 ]; [[ "$output" == *login* ]]
 }
 
+@test "negativo: el alta solo por bucle local falla" {
+  run check "$(mutate 's/por la dirección de escucha configurada/solo por la dirección de bucle local/')"
+  [ "$status" -ne 0 ]; [[ "$output" == *"alta por dirección"* ]]
+}
+
+@test "negativo: sin validación del nombre falla" {
+  run check "$(mutate 's/\^\[a-z0-9-\]{1,32}\$/cualquier cadena/')"
+  [ "$status" -ne 0 ]; [[ "$output" == *"nombre validado"* ]]
+}
+
+@test "negativo: sin entorno mínimo falla" {
+  run check "$(mutate 's/con entorno mínimo/con el entorno completo/')"
+  [ "$status" -ne 0 ]; [[ "$output" == *"entorno"* ]]
+}
+
+@test "negativo: una prueba de Claude inconcluyente que pasa falla" {
+  run check "$(mutate 's/inconcluyente = fallo/inconcluyente = éxito/')"
+  [ "$status" -ne 0 ]; [[ "$output" == *inconcluyente* ]]
+}
+
+@test "negativo: sin canario en las credenciales de Claude falla" {
+  run check "$(mutate 's/en la carpeta de credenciales de Claude y en el entorno/en un fichero más/')"
+  [ "$status" -ne 0 ]; [[ "$output" == *"canario credenciales"* ]]
+}
+
 @test "negativo: perder un AC falla" {
   run check "$(mutate '/^- AC-1\.7 /d')"
   [ "$status" -ne 0 ]; [[ "$output" == *"AC de S1"* ]]
@@ -207,6 +243,30 @@ assert d["priority"] == g("priority") and d["phase"] == g("phase"), (d, fm)
 @test "negativo: una ruta personal falla" {
   run check "$(mutate "s|ficheros versionados del repo|ficheros de /ho""me/alguien/repo|")"
   [ "$status" -ne 0 ]; [[ "$output" == *privado* ]]
+}
+
+files_clean() {  # files_clean <ficheros...>: ninguno contiene datos privados; fichero ausente = fallo
+  local f
+  for f in "$@"; do
+    [ -s "$f" ] || { echo "ausente: $f"; return 1; }
+    if grep -qiE "$(priv_re)" "$f"; then echo "dato privado en $f"; return 1; fi
+  done
+}
+
+@test "los cinco ficheros de la PR están limpios de datos privados" {
+  run files_clean "$SPEC" "$STATE" "$BATS_TEST_FILENAME" \
+    "$REPO_ROOT/docs/propuestas/LOG.d/SE-535-PROPOSED.md" \
+    "$REPO_ROOT/CHANGELOG.d/se535-cliente-externo-conversacion.md"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+}
+
+@test "negativo: un dato privado en el registro o el changelog falla" {
+  cp "$REPO_ROOT/docs/propuestas/LOG.d/SE-535-PROPOSED.md" "$BATS_TEST_TMPDIR/log.md"
+  printf '%s\n' "ruta /ho""me/alguien/x" >> "$BATS_TEST_TMPDIR/log.md"
+  run files_clean "$BATS_TEST_TMPDIR/log.md"
+  [ "$status" -ne 0 ]; [[ "$output" == *privado* ]]
+  run files_clean "$BATS_TEST_TMPDIR/no-existe.md"
+  [ "$status" -ne 0 ]; [[ "$output" == *ausente* ]]
 }
 
 @test "límite: spec inexistente falla cerrado" {
