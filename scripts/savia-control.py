@@ -942,6 +942,43 @@ def cmd_resume(a):
 
 # ── publish-epoch (R2) ──────────────────────────────────────────────────────
 
+def build_epoch_commit(ctx, n, msg):
+    """Commit sobre origin/main que solo cambia EPOCH_PATH a n, con un índice temporal (no toca el árbol)."""
+    with tempfile.TemporaryDirectory() as td:
+        env = dict(os.environ, GIT_INDEX_FILE=os.path.join(td, "index"))
+        steps = [["read-tree", "origin/main"]]
+        for st in steps:
+            if subprocess.run(["git", "-C", ctx.root, *st], env=env, capture_output=True).returncode:
+                raise Fail(2, "PUBLISH_FAILED: read-tree")
+        blob = subprocess.run(["git", "-C", ctx.root, "hash-object", "-w", "--stdin"], input=f"{n}\n",
+                              text=True, capture_output=True).stdout.strip()
+        r1 = subprocess.run(["git", "-C", ctx.root, "update-index", "--add", "--cacheinfo",
+                             f"100644,{blob},{EPOCH_PATH}"], env=env, capture_output=True)
+        tree = subprocess.run(["git", "-C", ctx.root, "write-tree"], env=env, capture_output=True, text=True)
+        if not blob or r1.returncode or tree.returncode:
+            raise Fail(2, "PUBLISH_FAILED: no se pudo construir el árbol")
+        rc, commit, se = ctx.git("commit-tree", tree.stdout.strip(), "-p", "origin/main", "-m", msg)
+        if rc:
+            raise Fail(2, f"PUBLISH_FAILED: commit-tree: {se.strip()[:160]}")
+    return commit.strip()
+
+
+def reusable_epoch_branch(ctx, branch, n):
+    """True si origin ya tiene la rama y solo sube EPOCH_PATH a n. Si existe con otro contenido: exit 2."""
+    rc, ls, se = ctx.git("ls-remote", "--heads", "origin", f"refs/heads/{branch}", timeout=60)
+    if rc:
+        raise Fail(2, f"PUBLISH_FAILED: ls-remote: {se.strip()[:160]}")
+    if not ls.strip():
+        return False
+    rc, _, se = ctx.git("fetch", "--quiet", "origin", f"+refs/heads/{branch}:refs/savia-control/{branch}", timeout=60)
+    ref = f"refs/savia-control/{branch}"
+    rc2, names, _ = ctx.git("diff", "--name-only", f"origin/main...{ref}")
+    rc3, content, _ = ctx.git("show", f"{ref}:{EPOCH_PATH}")
+    if rc or rc2 or rc3 or names.split() != [EPOCH_PATH] or content != f"{n}\n":
+        raise Fail(2, f"BRANCH_EXISTS: {branch} ya existe en origin con otro contenido; revísala o bórrala a mano")
+    return True
+
+
 def cmd_publish_epoch(a):
     ctx = Ctx()
     rc, _, se = ctx.git("fetch", "--quiet", "origin", "main", timeout=60)
@@ -969,26 +1006,15 @@ def cmd_publish_epoch(a):
         elif head == branch:
             out(f"ALREADY_OPEN: {p.get('url') or p.get('number')} publica la época {n}")
             return 0
-    with tempfile.TemporaryDirectory() as td:
-        env = dict(os.environ, GIT_INDEX_FILE=os.path.join(td, "index"))
-        steps = [["read-tree", "origin/main"]]
-        for st in steps:
-            if subprocess.run(["git", "-C", ctx.root, *st], env=env, capture_output=True).returncode:
-                raise Fail(2, "PUBLISH_FAILED: read-tree")
-        blob = subprocess.run(["git", "-C", ctx.root, "hash-object", "-w", "--stdin"], input=f"{n}\n",
-                              text=True, capture_output=True).stdout.strip()
-        r1 = subprocess.run(["git", "-C", ctx.root, "update-index", "--add", "--cacheinfo",
-                             f"100644,{blob},{EPOCH_PATH}"], env=env, capture_output=True)
-        tree = subprocess.run(["git", "-C", ctx.root, "write-tree"], env=env, capture_output=True, text=True)
-        if not blob or r1.returncode or tree.returncode:
-            raise Fail(2, "PUBLISH_FAILED: no se pudo construir el árbol")
-        msg = f"chore(control): REVOCATION_EPOCH a {n} (SE-498)"
-        rc, commit, se = ctx.git("commit-tree", tree.stdout.strip(), "-p", "origin/main", "-m", msg)
+    msg = f"chore(control): REVOCATION_EPOCH a {n} (SE-498)"
+    if reusable_epoch_branch(ctx, branch, n):
+        # un intento anterior empujó la rama pero no abrió la PR (gh pr create falló): se reutiliza sin forzar
+        out(f"REUSE_BRANCH: {branch} ya está en origin con la época {n}")
+    else:
+        commit = build_epoch_commit(ctx, n, msg)
+        rc, _, se = ctx.git("push", "--quiet", "origin", f"{commit}:refs/heads/{branch}", timeout=120)
         if rc:
-            raise Fail(2, f"PUBLISH_FAILED: commit-tree: {se.strip()[:160]}")
-    rc, _, se = ctx.git("push", "--quiet", "origin", f"{commit.strip()}:refs/heads/{branch}", timeout=120)
-    if rc:
-        raise Fail(2, f"PUBLISH_FAILED: push: {se.strip()[:160]}")
+            raise Fail(2, f"PUBLISH_FAILED: push: {se.strip()[:160]}")
     body = (f"Sube `{EPOCH_PATH}` de {ctx.origin_epoch} a {n} tras un `revoke` local (época local {ctx.local_epoch}).\n\n"
             "Tier 4 (`config/control/**`): la fusiona a mano la operadora; el merge-sprint no la fusiona.\n")
     rc, so, se = run(["gh", "pr", "create", "--draft", "--base", "main", "--head", branch, "--title", msg,

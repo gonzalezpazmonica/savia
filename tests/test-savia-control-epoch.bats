@@ -104,3 +104,26 @@ EOF
   run sc epoch; [ "$status" -eq 0 ]; [[ "$output" != *EPOCH_CHECK_NOT_REQUIRED* ]]
   run sc status; [[ "$output" != *EPOCH_CHECK_NOT_REQUIRED* ]]
 }
+
+@test "AC-8 publish-epoch: si el push salió y gh pr create falló, el reintento reutiliza la rama y abre la PR" {
+  sc revoke --reason a
+  touch "$GH_STUB_DIR/pr-create.fail"
+  run sc publish-epoch; echo "$output"; [ "$status" -eq 2 ]; [[ "$output" == *"GH_FAILED: gh pr create"* ]]
+  first=$(git -C "$ORIGIN" rev-parse agent/control-epoch-1)
+  mv "$GH_STUB_DIR/pr-create.fail" "$GH_STUB_DIR/pr-create.ok"
+  run sc publish-epoch; echo "$output"; [ "$status" -eq 0 ]
+  [[ "$output" == *REUSE_BRANCH* ]]; [[ "$output" == *"PUBLISHED 1"* ]]
+  [ "$(cat "$GH_STUB_DIR/created")" = 1 ]
+  [ "$(git -C "$ORIGIN" rev-parse agent/control-epoch-1)" = "$first" ]
+}
+
+@test "AC-8 publish-epoch negativo: la rama ya existe con otro contenido → 2 BRANCH_EXISTS sin abrir PR" {
+  sc revoke --reason a
+  git -C "$R" checkout -q -b tmp-epoch origin/main
+  mkdir -p "$R/config/control"; printf '7\n' > "$R/config/control/REVOCATION_EPOCH"
+  git -C "$R" add -A; git -C "$R" commit -qm otro
+  git -C "$R" push -q origin tmp-epoch:refs/heads/agent/control-epoch-1
+  git -C "$R" checkout -q main
+  run sc publish-epoch; echo "$output"; [ "$status" -eq 2 ]; [[ "$output" == *BRANCH_EXISTS* ]]
+  [ ! -e "$GH_STUB_DIR/created" ]
+}

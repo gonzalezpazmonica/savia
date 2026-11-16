@@ -99,6 +99,11 @@ if text.count("actions/checkout") != text.count("persist-credentials: false"):
     errs.append("un checkout sin persist-credentials: false")
 if re.search(r"^\s*ref:.*head", text, re.M):
     errs.append("checkout de la cabeza")
+if ("HEAD_SHA: ${{ github.event.pull_request.head.sha }}" not in text
+        or not re.search(r'&& test "\$\(git -C base rev-parse refs/remotes/pr/head\)" = "\$HEAD_SHA"', text)):
+    errs.append("la cabeza traída no se contrasta con head.sha del evento (TOCTOU)")
+if "bats-core" in text and not re.search(r'test "\$\(git -C /tmp/bats rev-parse HEAD\)" = [0-9a-f]{40}\n', text):
+    errs.append("bats sin fijar por SHA")
 for l in lines:
     s = l.strip()
     if re.search(r"(^|[\s;&|])(source|\.)\s+\S", s) and not s.startswith("#"):
@@ -131,6 +136,10 @@ EOF
   mut "ref: \${{ github.event.pull_request.base.sha }}" "ref: \${{ github.event.pull_request.head.sha }}"
   run wf_safe "$m"; [ "$status" -ne 0 ]
   mut "run: bats base/tests" "run: bats tests";                       run wf_safe "$m"; [ "$status" -ne 0 ]
+  mut ' && test "$(git -C base rev-parse refs/remotes/pr/head)" = "$HEAD_SHA"' "";  run wf_safe "$m"; [ "$status" -ne 0 ]
+  [[ "$output" == *TOCTOU* ]]
+  mut 'test "$(git -C /tmp/bats rev-parse HEAD)" = 6636e2c2ef5ffe361535cb45fc61682c5ef46b71' "true"
+  run wf_safe "$m"; [ "$status" -ne 0 ]; [[ "$output" == *"bats sin fijar"* ]]
   mut "sudo /tmp/bats/install.sh /usr/local" 'sudo /tmp/bats/install.sh /usr/local
           git -C base show pr/head:scripts/x.sh > x.sh && source x.sh'
   run wf_safe "$m"; [ "$status" -ne 0 ]

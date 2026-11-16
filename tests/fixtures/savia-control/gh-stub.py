@@ -3,7 +3,8 @@
 
 gh api <ruta>  → $GH_STUB_DIR/api/<ruta con / → _ y sin llaves>.json; si falta o existe <…>.fail, sale 1.
                  Con --paginate, un elemento por línea de <…>.json y, si existe, de <…>.page2.json.
-gh pr list     → prs.json (lista). gh pr create → añade una PR y suma 1 a «created».
+gh pr list     → prs.json (lista). gh pr create → añade una PR y suma 1 a «created»
+                 (con pr-create.fail presente, falla).
 gh pr close N  → la quita de prs.json.
 """
 import json
@@ -44,6 +45,9 @@ if a[:1] == ["api"]:
 if a[:2] == ["pr", "list"]:
     print(json.dumps(load(prs_p, [])))
     sys.exit(0)
+if a[:2] == ["pr", "create"] and os.path.exists(os.path.join(d, "pr-create.fail")):
+    sys.stderr.write("gh stub: pr create falla (simulado)\n")
+    sys.exit(1)
 if a[:2] == ["pr", "create"]:
     head = a[a.index("--head") + 1]
     prs = load(prs_p, [])
