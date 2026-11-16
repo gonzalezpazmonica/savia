@@ -2,6 +2,7 @@
 """Stub de gh para los tests de SE-498. Estado en $GH_STUB_DIR.
 
 gh api <ruta>  → $GH_STUB_DIR/api/<ruta con / → _ y sin llaves>.json; si falta o existe <…>.fail, sale 1.
+                 Con --paginate, un elemento por línea de <…>.json y, si existe, de <…>.page2.json.
 gh pr list     → prs.json (lista). gh pr create → añade una PR y suma 1 a «created».
 gh pr close N  → la quita de prs.json.
 """
@@ -31,6 +32,13 @@ if a[:1] == ["api"]:
     if os.path.exists(base + ".fail") or not os.path.exists(base + ".json"):
         sys.stderr.write("gh stub: fallo simulado\n")
         sys.exit(1)
+    if "--paginate" in a:
+        # como gh api --paginate --jq '.[]': un elemento por línea; <base>.page2.json simula la página 2
+        pages = [base + ".json"] + ([base + ".page2.json"] if os.path.exists(base + ".page2.json") else [])
+        for pg in pages:
+            for item in json.load(open(pg)):
+                print(json.dumps(item))
+        sys.exit(0)
     sys.stdout.write(open(base + ".json").read())
     sys.exit(0)
 if a[:2] == ["pr", "list"]:

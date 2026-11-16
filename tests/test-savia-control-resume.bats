@@ -299,3 +299,39 @@ denied_by() {  # denied_by <comm>: salió 4 por ese ancestro concreto y el ámbi
   [ "$RES" = 0 ]
   run sc check --executor a; [ "$status" -eq 0 ]
 }
+
+# ── revisión #1593: paginación y trazabilidad de la PR de aprobación ────────
+
+@test "AC-6 gh: el fichero tier 4 en la página 2 de pulls/N/files cuenta (se pagina)" {
+  paused_a
+  approve executor:a 0 "$(seq_of executor:a)"
+  gh_api "repos_owner_repo_pulls_${APPROVAL_PR}_files" '[{"filename":"docs/x.md"}]'
+  printf '[{"filename":"%s"}]' "$APPROVAL_PATH" > "$GH_STUB_DIR/api/repos_owner_repo_pulls_${APPROVAL_PR}_files.page2.json"
+  run sc resume --scope executor:a --via-pr; echo "$output"; [ "$status" -eq 0 ]
+  grep -q "pulls/$APPROVAL_PR/files --paginate" "$GH_STUB_DIR/calls.log"
+}
+
+@test "AC-6 gh negativo: sin la página 2, la misma PR solo con docs/x.md sale TIER_NOT_4" {
+  paused_a
+  approve executor:a 0 "$(seq_of executor:a)"
+  gh_api "repos_owner_repo_pulls_${APPROVAL_PR}_files" '[{"filename":"docs/x.md"}]'
+  run sc resume --scope executor:a --via-pr; [ "$status" -eq 4 ]; [[ "$output" == *TIER_NOT_4* ]]
+}
+
+@test "AC-6 gh: un nombre de fichero con espacios en la PR → 4 TIER_UNVERIFIABLE sin consumir" {
+  paused_a
+  approve executor:a 0 "$(seq_of executor:a)"
+  gh_api "repos_owner_repo_pulls_${APPROVAL_PR}_files" "[{\"filename\":\"$APPROVAL_PATH\"},{\"filename\":\"docs/a b.md\"}]"
+  run sc resume --scope executor:a --via-pr; [ "$status" -eq 4 ]; [[ "$output" == *TIER_UNVERIFIABLE* ]]
+  run consumed "$APPROVAL_BLOB"; [ "$status" -ne 0 ]
+}
+
+@test "AC-6 gh: el commit de la aprobación en dos PR fusionadas → 4 APPROVAL_UNTRACEABLE; en una sola y otra abierta, procede" {
+  paused_a
+  approve executor:a 0 "$(seq_of executor:a)"
+  sha=$(git -C "$R" log -1 --format=%H -- "$APPROVAL_PATH")
+  gh_api "repos_owner_repo_commits_${sha}_pulls" "[{\"number\":$APPROVAL_PR,\"merged_at\":\"2026-11-16T00:00:00Z\"},{\"number\":9,\"merged_at\":\"2026-11-16T00:00:00Z\"}]"
+  run sc resume --scope executor:a --via-pr; [ "$status" -eq 4 ]; [[ "$output" == *APPROVAL_UNTRACEABLE* ]]
+  gh_api "repos_owner_repo_commits_${sha}_pulls" "[{\"number\":9,\"merged_at\":null},{\"number\":$APPROVAL_PR,\"merged_at\":\"2026-11-16T00:00:00Z\"}]"
+  run sc resume --scope executor:a --via-pr; echo "$output"; [ "$status" -eq 0 ]
+}

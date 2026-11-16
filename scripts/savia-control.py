@@ -514,12 +514,14 @@ def cmd_check(a):
     return 0
 
 
-def gh_api(ctx, path):
-    rc, so, se = run(["gh", "api", path], cwd=ctx.root, timeout=20)
+def gh_api(ctx, path, paginate=False):
+    """gh api. Con paginate, recorre todas las páginas de una lista (un elemento JSON por línea)."""
+    cmd = ["gh", "api", path, "--paginate", "--jq", ".[]"] if paginate else ["gh", "api", path]
+    rc, so, se = run(cmd, cwd=ctx.root, timeout=60 if paginate else 20)
     if rc:
         raise Fail(4, f"GH_API_FAILED: {path}: {se.strip()[:160]}")
     try:
-        return json.loads(so)
+        return [json.loads(x) for x in so.splitlines() if x.strip()] if paginate else json.loads(so)
     except ValueError:
         raise Fail(4, f"GH_API_FAILED: {path}: respuesta no JSON")
 
@@ -832,18 +834,24 @@ def verify_pr(ctx, scope, entry):
     rc, commit, _ = ctx.git("log", "origin/main", "--format=%H", "-1", "--", path)
     if rc or not commit.strip():
         raise Fail(4, "APPROVAL_UNTRACEABLE: no se encuentra el commit que fijó la aprobación")
-    pulls = gh_api(ctx, f"repos/{{owner}}/{{repo}}/commits/{commit.strip()}/pulls")
-    merged = [p for p in pulls if isinstance(p, dict) and p.get("merged_at")] if isinstance(pulls, list) else []
+    pulls = gh_api(ctx, f"repos/{{owner}}/{{repo}}/commits/{commit.strip()}/pulls", paginate=True)
+    merged = [p for p in pulls if isinstance(p, dict) and p.get("merged_at")]
     if not merged:
         raise Fail(4, "APPROVAL_UNTRACEABLE: la aprobación no llegó por una PR fusionada")
+    if len(merged) > 1:
+        raise Fail(4, "APPROVAL_UNTRACEABLE: el commit de la aprobación figura en varias PR fusionadas: "
+                   + ",".join(str(p.get("number")) for p in merged))
     n = merged[0].get("number")
     pr = gh_api(ctx, f"repos/{{owner}}/{{repo}}/pulls/{n}")
     if not isinstance(pr, dict) or ((pr.get("merged_by") or {}).get("login")) != login:
         raise Fail(4, f"MERGED_BY_OTHER: la PR #{n} no la fusionó {login}")
-    files = gh_api(ctx, f"repos/{{owner}}/{{repo}}/pulls/{n}/files")
-    names = [f.get("filename") for f in files if isinstance(f, dict)] if isinstance(files, list) else []
+    files = gh_api(ctx, f"repos/{{owner}}/{{repo}}/pulls/{n}/files", paginate=True)
+    names = [f.get("filename") for f in files if isinstance(f, dict)]
     if not names or not all(isinstance(x, str) for x in names):
         raise Fail(4, f"APPROVAL_UNTRACEABLE: sin ficheros para la PR #{n}")
+    if any(re.search(r"\s", x) for x in names):
+        # risk-tier.py --diff separa por espacios: un nombre con espacios no se puede clasificar fiable
+        raise Fail(4, f"TIER_UNVERIFIABLE: la PR #{n} tiene ficheros con espacios en el nombre")
     if origin_tier(ctx, names) != 4:
         raise Fail(4, f"TIER_NOT_4: la PR #{n} no sale tier 4 con el risk-tier.py de origin/main")
     if merge_sprint_merged(n):
