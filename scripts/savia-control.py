@@ -791,9 +791,10 @@ def verify_pr(ctx, scope, entry):
         raise Fail(4, f"OPERATOR_UNKNOWN: {OPERATOR_PATH} ausente o inválido en origin/main")
     if not any(isinstance(r, dict) and r.get("type") == "pull_request" for r in main_rules(ctx)):
         raise Fail(4, "RULE_INACTIVE: main no exige PR")
-    rc, commit, _ = ctx.git("log", "origin/main", "--diff-filter=A", "--format=%H", "-1", "--", path)
+    # La última PR que tocó la aprobación (la que la añadió o una posterior que la cambió) es la que se verifica.
+    rc, commit, _ = ctx.git("log", "origin/main", "--format=%H", "-1", "--", path)
     if rc or not commit.strip():
-        raise Fail(4, "APPROVAL_UNTRACEABLE: no se encuentra el commit que añadió la aprobación")
+        raise Fail(4, "APPROVAL_UNTRACEABLE: no se encuentra el commit que fijó la aprobación")
     pulls = gh_api(ctx, f"repos/{{owner}}/{{repo}}/commits/{commit.strip()}/pulls")
     merged = [p for p in pulls if isinstance(p, dict) and p.get("merged_at")] if isinstance(pulls, list) else []
     if not merged:
