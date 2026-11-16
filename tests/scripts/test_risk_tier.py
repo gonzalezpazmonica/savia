@@ -155,3 +155,32 @@ def test_vecinos_del_nucleo_no_son_gobernanza(rt):
     assert not rt.is_governance("docs/rules/domain/savia-core-notes.md")
     assert not rt.is_governance("scripts/generate-savia-core-helper.py")
     assert rt.classify(["docs/rules/domain/savia-core-notes.md"])["tier"] == 1
+
+
+# SE-498 F0 (R6.1): todo config/control/** es gobernanza en tier 4 (aprobaciones de resume,
+# operator.json, executors-remote.json, REVOCATION_EPOCH, gate.json). El merge-sprint nunca
+# fusiona tier 4, así que esos ficheros solo llegan a main por fusión manual de la operadora.
+# Antes: tier 3 (fail-closed por extensión desconocida) o 2 (.json).
+CONTROL_FILES = [
+    "config/control/resume/3-7-0123456789abcdef.json",
+    "config/control/operator.json",
+    "config/control/executors-remote.json",
+    "config/control/REVOCATION_EPOCH",
+    "config/control/gate.json",
+]
+
+
+@pytest.mark.parametrize("path", CONTROL_FILES)
+def test_plano_de_control_es_tier_4(rt, path):
+    assert rt.is_governance(path)
+    assert rt.classify([path])["tier"] == 4
+    res = rt.classify(["docs/guide.md", path, "tests/test-x.bats"])
+    assert res["tier"] == 4
+    assert "gobernanza" in res["rationale"]
+
+
+def test_vecinos_del_plano_de_control_no_son_gobernanza(rt):
+    # Caso negativo: el prefijo es el directorio, no un nombre que empiece igual.
+    assert not rt.is_governance("config/control-notes.json")
+    assert not rt.is_governance("docs/config/control/operator.json")
+    assert rt.classify(["config/control-notes.json"])["tier"] == 2
