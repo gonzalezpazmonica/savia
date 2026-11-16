@@ -29,7 +29,7 @@ verdict() {  # verdict [fichero-de-test] → status del check sobre main..pr
 @test "CI época: falla si la PR la baja, la deja no entera o la sube más de 1" {
   main_epoch $'3\n'
   for bad in $'2\n' 'x' $'3; rm\n' $'5\n' $'999999999\n' $'1234567890\n' ' 4'; do
-    git -C "$G" branch -q -D pr 2>/dev/null || true
+    if git -C "$G" rev-parse -q --verify pr >/dev/null; then git -C "$G" branch -q -D pr; fi
     set_pr "$bad"; verdict; [ "$status" -ne 0 ]
   done
 }
