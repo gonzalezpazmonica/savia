@@ -206,20 +206,65 @@ EOF
   run sc revoke --reason z < /dev/null; [ "$status" -eq 0 ]
 }
 
-@test "AC-6 pseudo-terminal: resume con script -qc bajo un padre llamado claude sale 4" {
-  command -v script >/dev/null || skip "sin util-linux script"
-  paused_a
-  cp "$(command -v bash)" "$T/claude"
-  run "$T/claude" -c "printf 'executor:a\n1\n' | script -qec 'python3 -I $R/scripts/savia-control.py resume --scope executor:a' /dev/null"
-  echo "$output"; [ "$status" -eq 4 ]
-  run sc check --executor a; [ "$status" -eq 6 ]
+pty_run() {  # pty_run <entradas separadas por |> <orden...>: en una pseudo-terminal desacoplada del árbol
+  local inputs="$1"; shift
+  python3 "$SRC_ROOT/tests/fixtures/savia-control/pty-detached.py" "$T/res" "$inputs" "$@"
+  for _ in $(seq 75); do [ -f "$T/res" ] && break; sleep 0.2; done
+  cat "$T/res.out"; RES=$(cat "$T/res"); OUT=$(cat "$T/res.out"); rm -f "$T/res"
 }
 
 terminal_resume() {  # terminal_resume <ámbito> <entradas separadas por |>
-  python3 "$SRC_ROOT/tests/fixtures/savia-control/pty-detached.py" "$T/res" "$2" \
-    python3 -I "$R/scripts/savia-control.py" resume --scope "$1"
-  for _ in $(seq 75); do [ -f "$T/res" ] && break; sleep 0.2; done
-  cat "$T/res.out"; RES=$(cat "$T/res"); rm -f "$T/res"
+  pty_run "$2" python3 -I "$R/scripts/savia-control.py" resume --scope "$1"
+}
+
+# wrapped_resume <nombre> [args tras -c]: resume executor:a por terminal dentro de una copia de bash con ese
+# nombre, ya fuera del árbol del ejecutor que lanza los tests. Sin `script` en la cadena, para que cada test
+# aísle una sola rama de forbidden(). `; exit $?` impide que bash haga exec y desaparezca del árbol.
+wrapped_resume() {
+  local w="$T/w/$1"; shift
+  mkdir -p "$T/w"; cp "$(command -v bash)" "$w"
+  pty_run "executor:a|1" "$w" -c "python3 -I $R/scripts/savia-control.py resume --scope executor:a; exit \$?" "$@"
+}
+
+denied_by() {  # denied_by <comm>: salió 4 por ese ancestro concreto y el ámbito sigue parado
+  [ "$RES" = 4 ]; [[ "$OUT" == *"ancestro es un ejecutor conocido ($1, pid"* ]]
+  run sc check --executor a; [ "$status" -eq 6 ]
+}
+
+@test "AC-6 ancestros (control): el mismo envoltorio con un nombre neutro deja reanudar" {
+  paused_a; wrapped_resume operadora-sh
+  [ "$RES" = 0 ]
+  run sc check --executor a; [ "$status" -eq 0 ]
+}
+
+@test "AC-6 ancestros: un padre con comm claude bloquea la vía terminal (sin script en la cadena)" {
+  paused_a; wrapped_resume claude; denied_by claude
+}
+
+@test "AC-6 ancestros: un padre con comm opencode bloquea la vía terminal" {
+  paused_a; wrapped_resume opencode; denied_by opencode
+}
+
+@test "AC-6 ancestros: script -qec como padre bloquea la vía terminal" {
+  command -v script >/dev/null || skip "sin util-linux script"
+  paused_a
+  pty_run "executor:a|1" script -qec "python3 -I $R/scripts/savia-control.py resume --scope executor:a" /dev/null
+  denied_by script
+}
+
+@test "AC-6 ancestros: node con claude u opencode en la cmdline bloquea; node sin ellos no" {
+  paused_a
+  wrapped_resume node claude-code; denied_by node
+  wrapped_resume node opencode-cli; denied_by node
+  wrapped_resume node otra-herramienta; [ "$RES" = 0 ]
+}
+
+@test "AC-6 ancestros: comm overnight-sprin… (truncado) bloquea aunque la cmdline no diga overnight-sprint-loop" {
+  paused_a; wrapped_resume overnight-sprint-x; denied_by overnight-sprin
+}
+
+@test "AC-6 ancestros: overnight-sprint-loop en la cmdline bloquea con un comm neutro" {
+  paused_a; wrapped_resume worker overnight-sprint-loop.sh; denied_by worker
 }
 
 @test "AC-6 vía débil: resume por terminal deja ancestros y via terminal; WEAK_RESUME hasta la siguiente parada" {
