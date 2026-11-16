@@ -41,7 +41,7 @@ devops-validation	Incomplete	119	REFACTOR	completar tests/DOMAIN para calibrar (
 diagram-generation	Incomplete	135	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 diagram-import	Incomplete	131	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 doc-quality-feedback	Incomplete	85	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-dynamic-web-tester	Incomplete	92	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+dynamic-web-tester	Incomplete	92	REFACTOR	2026-11-16: test de comportamiento certificado (>=80, 27 casos), mutación verificada (11 mutantes caen, uno exigió endurecer el test de dalfox); falta solo savia.maturity: stable (edita .claude/, pendiente de la operadora)
 ecosystem-watcher	Calibrated	85	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
 emergency-mode	Calibrated	73	CALIBRATED	2026-10-20: test de comportamiento certificado (>=80) y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
 enterprise-analytics	Incomplete	66	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
@@ -65,14 +65,14 @@ meta-reflection	Incomplete	128	REFACTOR	completar tests/DOMAIN para calibrar (pr
 mobile-security-scanner	Incomplete	111	REFACTOR	2026-11-15: test de comportamiento certificado (>=80), mutación verificada; falta solo savia.maturity: stable (edita .claude/, pendiente de la operadora)
 model-upgrade-audit	Incomplete	84	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 mutation-audit	Calibrated	134	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
-network-recon	Incomplete	97	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+network-recon	Incomplete	97	REFACTOR	2026-11-16: test de comportamiento certificado (>=80, 25 casos), mutación verificada (11 mutantes caen); falta solo savia.maturity: stable (edita .claude/, pendiente de la operadora)
 nuclei-scanning	Incomplete	116	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 obscura-browser	Stub	101	DELETE	stub sin cuerpo ni DOMAIN: candidata a eliminación (propuesta, requiere revisión)
 onboarding-dev	Incomplete	136	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 orgchart-import	Incomplete	148	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 org-meeting-capture	Incomplete	60	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 org-political-landscape	Incomplete	59	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-org-registrar	Stub	67	DELETE	stub sin cuerpo ni DOMAIN: candidata a eliminación (propuesta, requiere revisión)
+org-registrar	Incomplete	67	REFACTOR	2026-11-16: test de comportamiento certificado (>=80, 30 casos) de validador, índice, consulta y propuesta, 30 mutantes caen (1 equivalente); falta solo savia.maturity: stable (edita .claude/, pendiente de la operadora)
 org-stakeholder-mapper	Incomplete	67	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 overnight-sprint	Calibrated	150	CALIBRATED	2026-10-02: test de comportamiento certificado (>=80) y maturity stable con OK de la operadora
 parallel-dispatch	Calibrated	79	CALIBRATED	2026-11-14: test de comportamiento certificado (>=80), verificado por mutación del script (cada mutante cae) y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
@@ -117,9 +117,9 @@ team-onboarding	Incomplete	108	REFACTOR	completar tests/DOMAIN para calibrar (pr
 tech-research-agent	Calibrated	150	CALIBRATED	2026-11-14: test de comportamiento certificado (>=80), verificado por mutación del script (cada mutante cae) y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
 _template_python	Incomplete	56	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 test-architect	Calibrated	119	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
-tier3-probes	Incomplete	114	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+tier3-probes	Incomplete	114	REFACTOR	2026-11-16: test de comportamiento certificado (>=80) de scrapling-probe y oumi-probe con python3/df simulados, 20 mutantes caen; los otros 4 probes del agregador no tienen prueba propia; falta savia.maturity: stable (edita .claude/, pendiente de la operadora)
 time-tracking-report	Incomplete	131	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-tls-security-checker	Incomplete	103	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+tls-security-checker	Incomplete	103	REFACTOR	2026-11-16: test de comportamiento certificado (>=80, 58 casos) de tls-security-check y web-headers-check, 23 mutantes caen (uno exigió añadir el límite de HSTS); falta solo savia.maturity: stable (edita .claude/, pendiente de la operadora)
 topic-cluster	Calibrated	136	CALIBRATED	2026-11-14: contada Calibrated por el auditor (stable + test >=80); alta en el inventario sin verificar aqui que sus pruebas discriminen (pendiente de revision)
 transcriptor-digest	Incomplete	50	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 understand-anything	Incomplete	118	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
