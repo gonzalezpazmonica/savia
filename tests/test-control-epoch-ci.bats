@@ -28,9 +28,13 @@ verdict() {  # verdict [fichero-de-test] → status del check sobre main..pr
 
 @test "CI época: falla si la PR la baja, la deja no entera o la sube más de 1" {
   main_epoch $'3\n'
-  for bad in $'2\n' 'x' $'3; rm\n' $'5\n' $'999999999\n' $'1234567890\n' ' 4'; do
+  # cada valor malo con la causa que debe dar: un fallo por otra razón (base ilegible…) no vale
+  NI="no es un entero de 1-9 cifras"
+  for case in $'2\n|no a 2' "x|$NI" $'3; rm\n|'"$NI" $'5\n|no a 5' $'999999999\n|no a 999999999' \
+              $'1234567890\n|'"$NI" " 4|$NI"; do
+    bad="${case%%|*}"; why="${case#*|}"
     if git -C "$G" rev-parse -q --verify pr >/dev/null; then git -C "$G" branch -q -D pr; fi
-    set_pr "$bad"; verdict; [ "$status" -ne 0 ]
+    set_pr "$bad"; verdict; [ "$status" -ne 0 ]; [[ "$output" == *"FALLO: "*"$why"* ]]
   done
 }
 
@@ -43,7 +47,7 @@ verdict() {  # verdict [fichero-de-test] → status del check sobre main..pr
 
 @test "CI época: fichero ausente en main vale 0; la PR solo puede crearlo con 1" {
   set_pr $'1\n'; verdict; [ "$status" -eq 0 ]
-  git -C "$G" branch -q -D pr; set_pr $'2\n'; verdict; [ "$status" -ne 0 ]
+  git -C "$G" branch -q -D pr; set_pr $'2\n'; verdict; [ "$status" -ne 0 ]; [[ "$output" == *"main está en 0"*"no a 2"* ]]
 }
 
 @test "CI época: una PR que no la toca pero parte de un main anterior no falla" {
@@ -55,10 +59,13 @@ verdict() {  # verdict [fichero-de-test] → status del check sobre main..pr
 
 @test "CI época: con el fichero en main, falla si la PR lo borra, renombra, cambia a symlink o a ejecutable" {
   main_epoch $'3\n'
-  branch; git -C "$G" rm -q "$F"; commit_pr; verdict; [ "$status" -ne 0 ]
+  branch; git -C "$G" rm -q "$F"; commit_pr; verdict; [ "$status" -ne 0 ]; [[ "$output" == *"FALLO: la PR borra o renombra"* ]]
   git -C "$G" branch -q -D pr; branch; git -C "$G" mv "$F" "$G/config/control/EPOCH"; commit_pr; verdict; [ "$status" -ne 0 ]
+  [[ "$output" == *"FALLO: la PR borra o renombra"* ]]
   git -C "$G" branch -q -D pr; branch; rm "$G/$F"; ln -s /tmp/4 "$G/$F"; commit_pr; verdict; [ "$status" -ne 0 ]
+  [[ "$output" == *"FALLO: $F debe ser un fichero regular 100644 (120000 blob)"* ]]
   git -C "$G" branch -q -D pr; branch; printf '4\n' > "$G/$F"; chmod +x "$G/$F"; commit_pr; verdict; [ "$status" -ne 0 ]
+  [[ "$output" == *"FALLO: $F debe ser un fichero regular 100644 (100755 blob)"* ]]
 }
 
 @test "CI época: una PR que sube de 3 a 5 y reescribe el test sigue fallando con el test de la base" {
@@ -67,7 +74,7 @@ verdict() {  # verdict [fichero-de-test] → status del check sobre main..pr
   printf '@test "trampa" { true; }\n' > "$G/tests/test-control-epoch-monotonic.bats"; commit_pr
   git -C "$G" show main:tests/test-control-epoch-monotonic.bats > "$BATS_TEST_TMPDIR/base.bats"
   git -C "$G" show pr:tests/test-control-epoch-monotonic.bats > "$BATS_TEST_TMPDIR/head.bats"
-  verdict "$BATS_TEST_TMPDIR/base.bats"; [ "$status" -ne 0 ]
+  verdict "$BATS_TEST_TMPDIR/base.bats"; [ "$status" -ne 0 ]; [[ "$output" == *"FALLO: main está en 3"*"no a 5"* ]]
   # Mutación: ejecutar el test de la cabeza la deja pasar. Por eso el workflow usa el de la base.
   verdict "$BATS_TEST_TMPDIR/head.bats"; [ "$status" -eq 0 ]
 }

@@ -87,6 +87,11 @@ def atomic_write(path, text):
         os.close(dfd)
 
 
+def nat(v):
+    """Entero >= 0 de verdad: True/False no cuentan como 1/0."""
+    return isinstance(v, int) and not isinstance(v, bool) and v >= 0
+
+
 def valid_scope(s):
     if s == "global":
         return True
@@ -146,7 +151,7 @@ class Ctx:
                 with open(self.marker_path) as f:
                     m = json.load(f)
                 assert isinstance(m, dict) and isinstance(m.get("control_dir"), str)
-                assert isinstance(m.get("epoch_hwm"), int) and isinstance(m.get("stop_seq_hwm"), int)
+                assert nat(m.get("epoch_hwm")) and nat(m.get("stop_seq_hwm"))
                 assert isinstance(m.get("consumed"), list)
                 self.marker = m
             except (OSError, ValueError, AssertionError):
@@ -171,16 +176,27 @@ class Ctx:
         if not os.path.exists(self.journal_path):
             return None
         recs, prev = [], "genesis"
+        self._journal_cut = None
         try:
             with open(self.journal_path, "rb") as f:
-                for raw in f.read().splitlines():
-                    if not raw.strip():
-                        continue
-                    rec = json.loads(raw)
-                    if not isinstance(rec, dict) or rec.get("prev_sha256") != prev:
-                        raise ValueError("cadena rota")
-                    prev = sha256(raw)
-                    recs.append(rec)
+                data = f.read()
+            cut = data.rfind(b"\n") + 1
+            body, tail = data[:cut], data[cut:]
+            if tail.strip():
+                # Última línea sin \n final: un append interrumpido (crash, ENOSPC) o en curso. Solo esa se
+                # ignora; begin_write la aparta antes de escribir. Cualquier otra línea rota sigue siendo exit 2.
+                self._journal_cut = cut
+                self.warnings.append("JOURNAL_TRUNCATED_TAIL")
+            for raw in body.splitlines():
+                if not raw.strip():
+                    continue
+                rec = json.loads(raw)
+                if not isinstance(rec, dict) or rec.get("prev_sha256") != prev:
+                    raise ValueError("cadena rota")
+                if not all(nat(rec[k]) for k in ("epoch", "stop_seq") if k in rec):
+                    raise ValueError("epoch o stop_seq no enteros")
+                prev = sha256(raw)
+                recs.append(rec)
         except (OSError, ValueError):
             raise Fail(2, f"JOURNAL_UNREADABLE: {self.journal_path}")
         self._journal_tail = prev
@@ -243,15 +259,15 @@ class Ctx:
 
     @staticmethod
     def _valid_state(st):
-        if not isinstance(st, dict) or set(st) != STATE_KEYS or st["version"] != VERSION:
+        if not isinstance(st, dict) or set(st) != STATE_KEYS or not nat(st["version"]) or st["version"] != VERSION:
             return False
-        if not all(isinstance(st[k], int) and not isinstance(st[k], bool) and st[k] >= 0
-                   for k in ("epoch", "stop_seq")) or not isinstance(st["stops"], dict):
+        if not (nat(st["epoch"]) and nat(st["stop_seq"]) and isinstance(st["stops"], dict)):
             return False
         for scope, e in st["stops"].items():
             if not valid_scope(scope) or not isinstance(e, dict) or set(e) != ENTRY_KEYS:
                 return False
-            if e["mode"] not in STOP_MODES or not isinstance(e["stop_seq"], int):
+            if not (isinstance(e["mode"], str) and e["mode"] in STOP_MODES and nat(e["stop_seq"])
+                    and isinstance(e["since"], str) and isinstance(e["reason"], str) and isinstance(e["actor"], dict)):
                 return False
         return True
 
@@ -306,6 +322,13 @@ class Ctx:
                if self.journal is not None else "genesis"}
         line = json.dumps(rec, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
         os.makedirs(self.cdir, exist_ok=True)
+        if getattr(self, "_journal_cut", None) is not None:
+            with open(self.journal_path, "rb") as f:
+                f.seek(self._journal_cut)
+                tail = f.read()
+            atomic_write(f"{self.journal_path}.truncated-{sha256(tail)[:12]}", tail.decode(errors="replace"))
+            os.truncate(self.journal_path, self._journal_cut)
+            self._journal_cut = None
         with open(self.journal_path, "a") as f:
             f.write(line + "\n")
             f.flush()
@@ -359,10 +382,22 @@ def lock(ctx):
 
 # ── adaptadores (R4; los concretos son F1) ──────────────────────────────────
 
+def ack_timeout():
+    """Segundos de espera del acuse. Un valor inválido no puede dejar la parada sin propagar: se avisa y se usa 10."""
+    raw = os.environ.get("SAVIA_CONTROL_ACK_TIMEOUT_S", "10")
+    try:
+        t = float(raw)
+        assert 0 < t < float("inf")
+        return t
+    except (ValueError, AssertionError):
+        print(f"WARN ACK_TIMEOUT_INVALID: SAVIA_CONTROL_ACK_TIMEOUT_S={raw[:40]!r}; se usan 10 s", file=sys.stderr)
+        return 10.0
+
+
 def call_adapter(ctx, name, spec, args):
     """Invoca el adaptador con reintento único. Devuelve el dict de respuesta o None."""
     adapter = spec.get("adapter")
-    timeout = float(os.environ.get("SAVIA_CONTROL_ACK_TIMEOUT_S", "10"))
+    timeout = ack_timeout()
     attempts = []
     for _ in range(2):
         if not isinstance(adapter, str) or not os.path.isabs(adapter) or not os.access(adapter, os.X_OK):
@@ -733,6 +768,8 @@ def verify_terminal(scope, entry):
 
 
 def blob_consumed(ctx, blob):
+    if not isinstance(blob, str) or not re.fullmatch(r"[0-9a-f]{40,64}", blob):
+        raise Fail(4, "APPROVAL_UNTRACEABLE: no se pudo resolver el blob de la aprobación")
     return any(r.get("approval_blob") == blob for r in ctx.journal or []) or blob in (ctx.marker or {}).get("consumed", [])
 
 

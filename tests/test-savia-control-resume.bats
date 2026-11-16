@@ -30,15 +30,20 @@ paused_a() { sc pause --scope executor:a --reason x; sc reconcile --scope execut
   grep -q "\"approval_blob\":\"$APPROVAL_BLOB\"" "$SAVIA_CONTROL_DIR/control.jsonl"
 }
 
-@test "AC-6: fichero de una época anterior, de otro ámbito o ausente → 4" {
+@test "AC-6: ausente, de una época anterior o de otro ámbito → 4 APPROVAL_MISSING; contenido con época o stop_seq viejos → 4 APPROVAL_INVALID" {
   sc revoke --reason r; sc reconcile
   S=$(seq_of global)
-  approve global 0 "$S"                     # época anterior (la vigente es 1)
-  run sc resume --via-pr; [ "$status" -eq 4 ]
-  approve executor:a 1 "$S"                 # otro ámbito
-  run sc resume --via-pr; [ "$status" -eq 4 ]
-  rm -f "$GH_STUB_DIR"/api/*commits*
-  run sc resume --scope global --via-pr; [ "$status" -eq 4 ]
+  run sc resume --via-pr; [ "$status" -eq 4 ]; [[ "$output" == *APPROVAL_MISSING* ]]   # ausente
+  approve global 0 "$S"                     # época anterior (la vigente es 1): el nombre no casa
+  run sc resume --via-pr; [ "$status" -eq 4 ]; [[ "$output" == *APPROVAL_MISSING* ]]
+  approve executor:a 1 "$S"                 # otro ámbito: tampoco casa el nombre
+  run sc resume --via-pr; [ "$status" -eq 4 ]; [[ "$output" == *APPROVAL_MISSING* ]]
+  # nombre vigente con época o stop_seq anteriores en el contenido → APPROVAL_INVALID
+  P="config/control/resume/1-$S-$(printf global | sha256sum | cut -c1-16).json"
+  origin_put "$P" "{\"epoch\":0,\"stop_seq\":$S,\"scope\":\"global\",\"reason\":\"ok\",\"accept\":[]}"
+  run sc resume --via-pr; [ "$status" -eq 4 ]; [[ "$output" == *APPROVAL_INVALID* ]]
+  origin_put "$P" "{\"epoch\":1,\"stop_seq\":$((S - 1)),\"scope\":\"global\",\"reason\":\"ok\",\"accept\":[]}"
+  run sc resume --via-pr; [ "$status" -eq 4 ]; [[ "$output" == *APPROVAL_INVALID* ]]
   run sc check --executor a; [ "$status" -eq 6 ]
 }
 

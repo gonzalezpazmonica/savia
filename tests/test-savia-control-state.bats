@@ -130,7 +130,11 @@ EOF
   rm -f "$SAVIA_CONTROL_DIR/state.json" "$SAVIA_CONTROL_DIR/control.jsonl"
   run sc check --executor a; [ "$status" -eq 6 ]; [[ "$output" == *REVOKED* ]]
   run sc epoch; [ "${lines[0]}" = 1 ]
-  run sc check --executor a --issued-epoch 0; [ "$status" -ne 0 ]
+  # la parada global da 6 antes de mirar la época: se levanta por la vía aprobada para probar la época sola
+  operator_setup; sc reconcile; approve global 1 2
+  run sc resume --via-pr; [ "$status" -eq 0 ]
+  run sc check --executor a --issued-epoch 0; [ "$status" -eq 8 ]; [[ "$output" == *STALE_EPOCH* ]]
+  run sc check --executor a --issued-epoch 1; [ "$status" -eq 0 ]
 }
 
 @test "AC-14: borrar todo SAVIA_CONTROL_DIR tampoco la deshace" {
@@ -244,8 +248,75 @@ lose_after_revoke() {  # deja S y E en variables y borra estado y diario (marca 
 @test "R1: bajar la época en state.json no baja la efectiva (diario y marca mandan)" {
   sc revoke --reason x; sc revoke --reason y
   python3 - "$SAVIA_CONTROL_DIR/state.json" <<'EOF'
-import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["epoch"]=0; json.dump(d,open(p,"w"))
+import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["epoch"]=0; d["stops"]={}; json.dump(d,open(p,"w"))
 EOF
+  # sin paradas en el estado, check llega a comparar la época: la efectiva sigue en 2
   run sc epoch; [ "${lines[0]}" = 2 ]
-  run sc check --executor a --issued-epoch 0; [ "$status" -ne 0 ]
+  run sc check --executor a --issued-epoch 0; [ "$status" -eq 8 ]; [[ "$output" == *STALE_EPOCH* ]]
+  run sc check --executor a --issued-epoch 2; [ "$status" -eq 0 ]
+}
+
+# ── revisión #1593: tipos y diario truncado ─────────────────────────────────
+
+@test "R1 tipos: state.json con tipos incorrectos es UNREADABLE_STATE (check 6, status sin traceback)" {
+  sc pause --scope executor:a --reason x
+  cp "$SAVIA_CONTROL_DIR/state.json" "$T/ok.json"
+  for mut in 'd["version"]=True' 'd["epoch"]=False' 'd["stops"]["executor:a"]["actor"]="yo"' \
+             'd["stops"]["executor:a"]["stop_seq"]=True' 'd["stops"]["executor:a"]["since"]=1' \
+             'd["stops"]["executor:a"]["reason"]=None' 'd["stops"]["executor:a"]["mode"]=["PAUSED"]'; do
+    python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); exec(sys.argv[2]); json.dump(d,open(sys.argv[3],"w"))' \
+      "$T/ok.json" "$mut" "$SAVIA_CONTROL_DIR/state.json"
+    run sc check --executor b; echo "$mut → $output"; [ "$status" -eq 6 ]; [[ "$output" == *UNREADABLE_STATE* ]]
+    run sc status; [ "$status" -eq 0 ]; [[ "$output" == *UNREADABLE_STATE* ]]; [[ "$output" != *Traceback* ]]
+  done
+  cp "$T/ok.json" "$SAVIA_CONTROL_DIR/state.json"
+  run sc check --executor b; [ "$status" -eq 0 ]
+}
+
+@test "R1 tipos: un registro del diario con epoch o stop_seq no enteros y cadena válida → check 2 JOURNAL_UNREADABLE" {
+  sc pause --scope executor:a --reason x
+  sc pause --scope executor:b --reason y
+  J="$SAVIA_CONTROL_DIR/control.jsonl"; cp "$J" "$T/ok.jsonl"
+  # solo se toca la última línea: ninguna posterior cita su hash, así que la cadena sigue válida
+  for mut in 'r["epoch"]="1"' 'r["stop_seq"]=True' 'r["epoch"]=-1'; do
+    python3 -c 'import json,sys; L=open(sys.argv[1]).read().splitlines(); r=json.loads(L[-1]); exec(sys.argv[2]); L[-1]=json.dumps(r,sort_keys=True,separators=(",",":")); open(sys.argv[3],"w").write("\n".join(L)+"\n")' \
+      "$T/ok.jsonl" "$mut" "$J"
+    run sc check --executor c; echo "$mut → $output"; [ "$status" -eq 2 ]; [[ "$output" == *JOURNAL_UNREADABLE* ]]
+  done
+  # control: reescribir la última línea sin cambiar tipos mantiene el diario legible
+  python3 -c 'import json,sys; L=open(sys.argv[1]).read().splitlines(); r=json.loads(L[-1]); L[-1]=json.dumps(r,sort_keys=True,separators=(",",":")); open(sys.argv[2],"w").write("\n".join(L)+"\n")' "$T/ok.jsonl" "$J"
+  run sc check --executor c; [ "$status" -eq 0 ]
+}
+
+@test "R1 diario: una última línea sin \\n (append interrumpido) no deja sin freno; se aparta al escribir" {
+  sc pause --scope executor:a --reason x
+  J="$SAVIA_CONTROL_DIR/control.jsonl"
+  printf '{"op":"pause","sco' >> "$J"
+  run sc check --executor a; [ "$status" -eq 6 ]
+  run sc check --executor b; [ "$status" -eq 0 ]
+  run sc status; [[ "$output" == *JOURNAL_TRUNCATED_TAIL* ]]
+  run sc pause --scope executor:b --reason y; [ "$status" -eq 0 ]
+  [ "$(cat "$SAVIA_CONTROL_DIR"/control.jsonl.truncated-*)" = '{"op":"pause","sco' ]
+  run sc status; [[ "$output" != *JOURNAL_TRUNCATED_TAIL* ]]
+  run sc check --executor b; [ "$status" -eq 6 ]
+  [ "$(wc -l < "$J")" -eq 2 ]
+}
+
+@test "R1 diario negativo: la misma línea rota CON \\n final, o en mitad del diario, sigue siendo exit 2" {
+  sc pause --scope executor:a --reason x
+  J="$SAVIA_CONTROL_DIR/control.jsonl"; cp "$J" "$T/ok.jsonl"
+  printf '{"op":"pause","sco\n' >> "$J"
+  run sc check --executor b; [ "$status" -eq 2 ]; [[ "$output" == *JOURNAL_UNREADABLE* ]]
+  run sc pause --scope executor:b --reason y; [ "$status" -eq 2 ]
+  { printf '{"op":"pause","sco\n'; cat "$T/ok.jsonl"; } > "$J"
+  run sc check --executor b; [ "$status" -eq 2 ]
+}
+
+@test "R4: SAVIA_CONTROL_ACK_TIMEOUT_S no numérico no rompe la parada: avisa, usa 10 s y propaga" {
+  register a
+  SAVIA_CONTROL_ACK_TIMEOUT_S=abc run sc pause --reason x
+  echo "$output"; [ "$status" -eq 0 ]; [[ "$output" == *ACK_TIMEOUT_INVALID* ]]; [[ "$output" != *Traceback* ]]
+  grep -q '^halt' "$T/adapter-a.log"
+  SAVIA_CONTROL_ACK_TIMEOUT_S=-1 run sc status; [[ "$output" == *ACK_TIMEOUT_INVALID* ]]; [[ "$output" != *Traceback* ]]
+  SAVIA_CONTROL_ACK_TIMEOUT_S=5 run sc status; [[ "$output" != *ACK_TIMEOUT_INVALID* ]]
 }
