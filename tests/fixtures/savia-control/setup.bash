@@ -63,3 +63,27 @@ register() {  # register a b c → executors.json con adaptadores de prueba
   for n in "$@"; do make_adapter "$n"; json+="$sep\"$n\":{\"adapter\":\"$T/adapters/$n\"}"; sep=","; done
   mkdir -p "$SAVIA_CONTROL_DIR"; printf '%s}' "$json" > "$SAVIA_CONTROL_DIR/executors.json"
 }
+
+# Aprobación de resume por PR (R6.1) con su rastro en el gh simulado.
+# operator_setup: operator.json en origin/main y regla de PR activa en main.
+operator_setup() {
+  origin_put config/control/operator.json '{"login":"operadora"}'
+  gh_api repos_owner_repo_rules_branches_main '[{"type":"pull_request"}]'
+}
+
+# approve <ámbito> <época> <stop_seq> [accept-json] [login-de-quien-fusiona] [ámbito-en-el-contenido]
+APPROVAL_N=500
+approve() {
+  local scope="$1" h path sha n
+  h=$(printf '%s' "$scope" | sha256sum | cut -c1-16)
+  path="config/control/resume/$2-$3-$h.json"
+  origin_put "$path" "{\"epoch\":$2,\"stop_seq\":$3,\"scope\":\"${6:-$scope}\",\"reason\":\"ok\",\"accept\":${4:-[]}}"
+  sha=$(git -C "$R" rev-parse HEAD); APPROVAL_N=$((APPROVAL_N + 1)); n=$APPROVAL_N
+  gh_api "repos_owner_repo_commits_${sha}_pulls" "[{\"number\":$n,\"merged_at\":\"2026-11-16T00:00:00Z\"}]"
+  gh_api "repos_owner_repo_pulls_$n" "{\"number\":$n,\"merged_by\":{\"login\":\"${5:-operadora}\"}}"
+  gh_api "repos_owner_repo_pulls_${n}_files" "[{\"filename\":\"$path\"}]"
+  APPROVAL_PATH="$path"; APPROVAL_PR="$n"; APPROVAL_BLOB=$(git -C "$R" rev-parse "HEAD:$path")
+}
+
+# jget <fichero json> <expresión python sobre d>
+jget() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' "$1" "$2"; }
