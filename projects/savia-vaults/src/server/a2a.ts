@@ -3,7 +3,9 @@ import * as http from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { isIP } from 'node:net';
 import { NoteNotFoundError, VaultStorage } from '../storage/index.js';
+import { SecurityError } from '../security/index.js';
 import { resolveRagConfig } from '../rag/policy.js';
 import { SearchEngine } from '../search/index.js';
 import { RateLimiter } from './ratelimit.js';
@@ -16,9 +18,34 @@ import type { AccessController, AuthAction } from '../auth/controller.js';
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost']);
 const PUBLIC_LEVELS = new Set(['N1', 'N2']);
 
+/**
+ * SE-424 H5: cabecera Host admitida. Una página web que reasigna su nombre DNS a 127.0.0.1 envía
+ * su propio nombre en Host; se admiten solo los nombres de bucle local, IP literales (no sirven para
+ * reasignar DNS), el host de escucha y los configurados. Sin Host, o con un nombre ajeno: no.
+ */
+export function hostAllowed(header: string | undefined, allowed: ReadonlySet<string>): boolean {
+  if (!header) return false;
+  let name = header.trim().toLowerCase();
+  if (name.startsWith('[')) {
+    const end = name.indexOf(']');
+    if (end < 0) return false;
+    name = name.slice(1, end);
+  } else {
+    const colon = name.lastIndexOf(':');
+    if (colon >= 0) {
+      if (name.indexOf(':') !== colon) return false; // IPv6 sin corchetes no es un Host válido
+      name = name.slice(0, colon);
+    }
+  }
+  if (name === '') return false;
+  return LOOPBACK.has(name) || isIP(name) !== 0 || allowed.has(name);
+}
+
 export interface A2AOptions {
   /** Orígenes de navegador permitidos (CORS). Sin ellos, toda petición con `Origin` se rechaza. */
   corsOrigins?: string[];
+  /** SE-424 H5: nombres admitidos en la cabecera Host además de bucle local e IP literales. */
+  allowedHosts?: string[];
   /** SE-423: con fichero de usuarios, cada petición se autoriza como en MCP y HTTP (token personal). */
   access?: AccessController;
 }
@@ -40,6 +67,7 @@ export class A2AServer {
   private domeSearches = new Map<string, SearchEngine>();
   private domeStorages = new Map<string, VaultStorage>();
   private corsOrigins: Set<string>;
+  private allowedHosts: Set<string>;
   private access?: AccessController;
   private server?: http.Server;
   /** SE-480 R2: lo llama refreshRegistry() tras una recarga (el autosync se entera de cúpulas nuevas). */
@@ -49,6 +77,7 @@ export class A2AServer {
 
   constructor(config: VaultConfig, domeReg?: DomeRegistry, options: A2AOptions = {}) {
     this.corsOrigins = new Set(options.corsOrigins ?? []);
+    this.allowedHosts = new Set((options.allowedHosts ?? []).map((h) => h.trim().toLowerCase()).filter(Boolean));
     this.access = options.access;
     this.config = config;
     this.storage = new VaultStorage(config);
@@ -199,8 +228,17 @@ export class A2AServer {
     if (authToken) {
       console.warn(`AVISO: SAVIA_VAULTS_TOKEN está obsoleto (SE-423)${loopback ? '' : ' y se ignora fuera de loopback'}; usa tokens personales: savia-vaults user create / token-create`);
     }
+    const hosts = new Set(this.allowedHosts);
+    if (host !== '0.0.0.0' && host !== '::') hosts.add(host.toLowerCase());
     const server = http.createServer(async (req, res) => {
       res.setHeader('Content-Type', 'application/json');
+
+      // SE-424 H5: antes que nada (también /health), Host admitido; protege de la reasignación de DNS.
+      if (!hostAllowed(req.headers.host, hosts)) {
+        res.writeHead(403);
+        res.end(JSON.stringify({ error: 'Host not allowed' }));
+        return;
+      }
 
       // Un navegador envía Origin: solo se aceptan orígenes permitidos (ni lectura ni escritura cruzada).
       const origin = req.headers.origin;
@@ -266,6 +304,12 @@ export class A2AServer {
         } catch { return false; }
       };
       const denied = async (dome: string | undefined, action: AuthAction): Promise<boolean> => {
+        // SE-424 H5 («sin escritura sin contraseña»): sin credencial no se escribe en ningún nivel.
+        if (mode === 'public' && action !== 'read') {
+          res.writeHead(401);
+          res.end(JSON.stringify({ error: 'Unauthorized: escribir exige credencial (token personal: savia-vaults user token-create)' }));
+          return true;
+        }
         if (await allowed(dome, action)) return false;
         if (mode === 'user') {
           res.writeHead(dome ? 403 : 400);
@@ -321,6 +365,7 @@ export class A2AServer {
           try {
             note = dome ? await this.readDome(dome, notePath) : await this.storage.read(notePath);
           } catch (e) {
+            if (e instanceof SecurityError) { res.writeHead(400); res.end(JSON.stringify({ error: 'Invalid path' })); return; }
             if (!(e instanceof NoteNotFoundError)) throw e;
           }
           if (!note) { res.writeHead(404); res.end(JSON.stringify({ error: `Not found in dome ${dome || this.config.name}` })); return; }
