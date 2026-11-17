@@ -400,7 +400,8 @@ jobs:
         run: |
           bats tests/test-savia-control-state.bats tests/test-savia-control-scopes.bats \
                tests/test-savia-control-epoch.bats tests/test-savia-control-resume.bats \
-               tests/test-savia-control-reconcile.bats tests/test-control-epoch-ci.bats
+               tests/test-savia-control-reconcile.bats tests/test-savia-control-refutacion.bats \
+               tests/test-control-epoch-ci.bats
 
       # Sus tests viven en tests/*.bats (ci-select-bats no los elige); sin este paso no se ejecutan.
       - name: Tests de frescura de artefactos (validate-ci-local)

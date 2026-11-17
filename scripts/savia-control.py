@@ -30,7 +30,7 @@ VERSION = 1
 RANK = {"RUNNING": 0, "PAUSED": 1, "QUARANTINED": 2, "REVOKED": 3}
 STOP_MODES = ("PAUSED", "QUARANTINED", "REVOKED")
 ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
-EPOCH_RE = re.compile(r"^[0-9]{1,9}\n?$")
+EPOCH_RE = re.compile(r"[0-9]{1,9}\n?")  # siempre con fullmatch
 LOGIN_RE = re.compile(r"^[A-Za-z0-9-]{1,39}$")
 EPOCH_PATH = "config/control/REVOCATION_EPOCH"
 REMOTE_PATH = "config/control/executors-remote.json"
@@ -41,6 +41,24 @@ STATE_KEYS = {"version", "epoch", "stop_seq", "stops"}
 ENTRY_KEYS = {"mode", "stop_seq", "since", "reason", "actor"}
 FORBIDDEN_ANCESTORS = {"claude", "opencode", "script"}
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+# Variables de Git que redirigen qué repositorio, índice, objetos o configuración usa un subproceso. `git -C` no las
+# anula: con GIT_DIR ajeno, `check` leería la marca de otro repo y daría RUNNING. Se descartan al arrancar.
+GIT_REDIRECT_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
+                     "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_PREFIX", "GIT_CEILING_DIRECTORIES",
+                     "GIT_DISCOVERY_ACROSS_FILESYSTEM", "GIT_CONFIG", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS",
+                     "GIT_EXEC_PATH", "GIT_REPLACE_REF_BASE", "GIT_NO_REPLACE_OBJECTS", "GIT_SHALLOW_FILE",
+                     "GIT_GRAFT_FILE")
+
+
+def scrub_git_env(env=None):
+    env = os.environ if env is None else env
+    for k in list(env):
+        if k in GIT_REDIRECT_VARS or re.fullmatch(r"GIT_CONFIG_(KEY|VALUE)_[0-9]+", k):
+            del env[k]
+    return env
+
+
+scrub_git_env()
 
 
 class Fail(Exception):
@@ -57,7 +75,8 @@ def out(msg):
 
 def run(cmd, cwd=None, timeout=30, inp=None):
     try:
-        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, input=inp)
+        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, errors="replace",
+                           timeout=timeout, input=inp)
         return r.returncode, r.stdout, r.stderr
     except (OSError, subprocess.TimeoutExpired) as e:
         return 127, "", str(e)
@@ -182,7 +201,7 @@ class Ctx:
                 data = f.read()
             cut = data.rfind(b"\n") + 1
             body, tail = data[:cut], data[cut:]
-            if tail.strip():
+            if tail:
                 # Última línea sin \n final: un append interrumpido (crash, ENOSPC) o en curso. Solo esa se
                 # ignora; begin_write la aparta antes de escribir. Cualquier otra línea rota sigue siendo exit 2.
                 self._journal_cut = cut
@@ -219,7 +238,7 @@ class Ctx:
         if mode != "100644" or typ != "blob":
             raise Fail(2, f"ORIGIN_EPOCH_UNREADABLE: {EPOCH_PATH} no es un fichero regular ({mode} {typ})")
         rc, content, _ = self.git("show", f"origin/main:{EPOCH_PATH}")
-        if rc or not EPOCH_RE.match(content):
+        if rc or not EPOCH_RE.fullmatch(content):
             raise Fail(2, f"ORIGIN_EPOCH_UNREADABLE: {EPOCH_PATH} en origin/main no es un entero de 1-9 cifras")
         return int(content)
 
@@ -315,7 +334,11 @@ class Ctx:
 
     # escritura
     def append(self, rec):
-        reg, reg_sha = self.executors()
+        try:
+            reg, reg_sha = self.executors()
+        except Fail:
+            # Un registro ilegible no puede impedir dejar constancia de una parada (R1): se anota como tal.
+            reg, reg_sha = {}, "REGISTRY_UNREADABLE"
         rec = {"ts": now(), **rec, "epoch": rec.get("epoch", self.epoch),
                "stop_seq": rec.get("stop_seq", self.stop_seq), "executors_sha256": reg_sha,
                "executors": sorted(reg), "prev_sha256": getattr(self, "_journal_tail", "genesis")
@@ -462,7 +485,13 @@ def stop_order(scope, mode, reason, op):
     try:
         ctx = Ctx()
         ctx.begin_write()
-        reg, _ = ctx.executors()
+        try:
+            reg, _ = ctx.executors()
+            reg_error = None
+        except Fail as e:
+            # La parada no depende de poder leer los adaptadores (como `check`, que no los consulta):
+            # se persiste primero y el fallo de propagación se notifica después con exit 2.
+            reg, reg_error = {}, e
         before = {n: ctx.executor_mode(n) for n in reg}
         if op == "revoke":
             ctx.epoch += 1
@@ -478,6 +507,9 @@ def stop_order(scope, mode, reason, op):
         if op == "revoke" and ctx.epoch > ctx.origin_epoch:
             out(f"EPOCH_PENDING_PUBLISH: época local {ctx.epoch}, origin/main {ctx.origin_epoch}; "
                 "publica con `savia-control.py publish-epoch`")
+        if reg_error is not None:
+            out(f"PROPAGATION_SKIPPED: {reg_error.msg}; la parada está registrada pero ningún adaptador recibió la orden")
+            return reg_error.code
         if not scope.startswith(("principal:", "contract:")):
             targets = {scope.split(":", 1)[1]} if scope.startswith("executor:") else None
             for line in propagate(ctx, before, "halt", reason, targets):
@@ -501,7 +533,7 @@ def cmd_check(a):
     if mode != "RUNNING":
         e = ctx.stops[cause]
         extra = f" {ctx.kind}" if ctx.kind not in ("OK", "NEW") else ""
-        out(f"{mode} por {cause} (stop_seq={e['stop_seq']}): {e['reason']}{extra}")
+        out(f"{mode} por {cause} (stop_seq={e['stop_seq']}): {e['reason']!r}{extra}")
         return 6
     if a.issued_epoch is not None:
         if a.issued_epoch < ctx.epoch:
@@ -641,26 +673,42 @@ def ledger_records():
     """Ledger de efectos (SE-493). Interino en F0: JSONL, el último registro de cada effect_id manda."""
     p = os.environ.get("SAVIA_EFFECT_LEDGER") or os.path.join(os.path.expanduser("~"), ".savia", "effect-ledger",
                                                               "ledger.jsonl")
-    if not os.path.exists(p):
-        return {}
     recs = {}
-    try:
-        with open(p) as f:
-            for line in f:
-                if line.strip():
-                    r = json.loads(line)
-                    if not isinstance(r, dict) or not isinstance(r.get("effect_id"), str):
-                        raise ValueError
-                    recs[r["effect_id"]] = r
-    except (OSError, ValueError):
-        raise Fail(2, f"LEDGER_UNREADABLE: {p}")
+    if os.path.exists(p):
+        try:
+            with open(p) as f:
+                for line in f:
+                    if line.strip():
+                        r = json.loads(line)
+                        if not isinstance(r, dict) or not isinstance(r.get("effect_id"), str):
+                            raise ValueError
+                        # El último registro manda en los campos que trae, pero uno incompleto no borra los
+                        # anteriores (si no, perdería su ámbito y el efecto desaparecería de la reconciliación).
+                        recs[r["effect_id"]] = {**recs.get(r["effect_id"], {}), **r}
+        except (OSError, ValueError):
+            raise Fail(2, f"LEDGER_UNREADABLE: {p}")
     return recs
+
+
+def known_indeterminate(ctx, scopes):
+    """Efectos que un reconcile anterior dejó INDETERMINATE para paradas que siguen abiertas (diario encadenado)."""
+    ids = set()
+    for r in ctx.journal or []:
+        if r.get("op") == "reconcile":
+            for c in r.get("scopes", []):
+                cur = ctx.stops.get(c.get("scope"))
+                if c.get("scope") in scopes and cur and cur["stop_seq"] == c.get("stop_seq"):
+                    ids.update(x for x in c.get("indeterminate", []) if isinstance(x, str))
+    return ids
 
 
 def covers(scope, rec):
     if scope == "global":
         return True
     kind, _, ident = scope.partition(":")
+    owners = [rec.get(k) for k in ("executor", "principal", "contract")]
+    if not any(isinstance(o, str) and o for o in owners):
+        return True  # sin atribución no se puede descartar de ningún ámbito: fail-closed
     return rec.get(kind) == ident
 
 
@@ -701,9 +749,16 @@ def cmd_reconcile(a):
     try:
         ctx = Ctx()
         ctx.begin_write()
+        if ctx.kind == "NEW":
+            ctx.save_state()  # sin esto la marca y el diario existirían sin estado y el siguiente check daría LOST_STATE
         effects = ledger_records()
         scopes = [a.scope] if a.scope else sorted(ctx.stops)
         scopes = [s for s in scopes if s in ctx.stops]
+        gone = sorted(known_indeterminate(ctx, scopes) - set(effects))
+        if gone:
+            # Un ledger ausente o sin efectos ya reconocidos como inciertos no prueba que estén resueltos.
+            raise Fail(2, "LEDGER_UNREADABLE: faltan en el ledger efectos INDETERMINATE de un reconcile "
+                          f"anterior ({', '.join(gone[:5])}); no se da por vacío")
         report, covered, any_indet = [], [], False
         for eid, rec in sorted(effects.items()):
             hit = [s for s in scopes if covers(s, rec)]
@@ -847,6 +902,8 @@ def verify_pr(ctx, scope, entry):
         raise Fail(4, f"MERGED_BY_OTHER: la PR #{n} no la fusionó {login}")
     files = gh_api(ctx, f"repos/{{owner}}/{{repo}}/pulls/{n}/files", paginate=True)
     names = [f.get("filename") for f in files if isinstance(f, dict)]
+    # Un renombrado desde un ámbito protegido: el nombre antiguo también cuenta para el tier.
+    names += [f["previous_filename"] for f in files if isinstance(f, dict) and f.get("previous_filename")]
     if not names or not all(isinstance(x, str) for x in names):
         raise Fail(4, f"APPROVAL_UNTRACEABLE: sin ficheros para la PR #{n}")
     if any(re.search(r"\s", x) for x in names):
