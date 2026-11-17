@@ -94,14 +94,14 @@ EOF
   rechaza 'd["tiers"]=[4]'
 }
 
-@test "AC-1 ventana explícita: 12 h exactas se aceptan; 12 h y 1 s y 18 h se rechazan" {
+@test "AC-1 boundary de ventana explícita: 12 h exactas se aceptan; 12 h y 1 s y 18 h se rechazan" {
   rechaza 'd["not_after"]="2026-11-11T10:00:01Z"'
   rechaza 'd["not_after"]="2026-11-11T16:00:00Z"'
   plan_at "$(borrador 'd["not_after"]="2026-11-11T10:00:00Z"')" 2026-11-10T22:00:00Z
   [ "$status" -eq 0 ]
 }
 
-@test "AC-1 not_before explícito: 1 h exacta se acepta; 1 h y 1 s y una semana se rechazan" {
+@test "AC-1 boundary de not_before explícito: 1 h exacta se acepta; 1 h y 1 s y una semana se rechazan" {
   rechaza 'd["not_before"]="2026-11-10T23:00:01Z"'
   rechaza 'd["not_before"]="2026-11-17T22:00:00Z"'
   plan_at "$(borrador 'd["not_before"]="2026-11-10T23:00:00Z"')" 2026-11-10T22:00:00Z
@@ -140,7 +140,7 @@ EOF
   rechaza 'pass'
 }
 
-@test "AC-1 main_pending_timeout < 5 o > 60 → rechazada; 5 y 60 se aceptan" {
+@test "AC-1 boundary de main_pending_timeout: < 5 o > 60 → rechazada; 5 y 60 se aceptan" {
   rechaza 'd["main_pending_timeout"]=4'
   rechaza 'd["main_pending_timeout"]=61'
   plan_at "$(borrador 'd["main_pending_timeout"]=5')" 2026-11-10T22:00:00Z
@@ -202,4 +202,49 @@ EOF
   run bash "$SCRIPT" policy-verify --politica "$f" --aprobacion "$T/cfg.json" --ahora 2026-11-10T23:00:00Z
   [ "$status" -eq 3 ]
   [[ "$output" == *SIN_GRANT* ]]
+}
+
+@test "policy-plan con borrador nonexistent o JSON invalid → error 2 y nada escrito" {
+  run bash "$SCRIPT" policy-plan --borrador "$T/no-existe.json" --ahora 2026-11-10T22:00:00Z
+  [ "$status" -eq 2 ]
+  sin_politica
+  printf '{"repos": [' > "$T/roto.json"
+  run bash "$SCRIPT" policy-plan --borrador "$T/roto.json" --ahora 2026-11-10T22:00:00Z
+  [ "$status" -eq 2 ]
+  sin_politica
+  echo '[]' > "$T/lista.json"
+  run bash "$SCRIPT" policy-plan --borrador "$T/lista.json" --ahora 2026-11-10T22:00:00Z
+  [ "$status" -eq 2 ]
+  sin_politica
+}
+
+@test "policy-verify con política nonexistent o invalid → sin grant (3), nunca 0" {
+  echo '{}' > "$T/cfg.json"
+  run bash "$SCRIPT" policy-verify --politica "$T/no-existe.json" --aprobacion "$T/cfg.json"
+  [ "$status" -eq 3 ]
+  [[ "$output" == *SIN_GRANT* ]]
+  printf 'no es json' > "$T/pol.json"
+  run bash "$SCRIPT" policy-verify --politica "$T/pol.json" --aprobacion "$T/cfg.json"
+  [ "$status" -eq 3 ]
+  echo '[]' > "$T/pol.json"
+  run bash "$SCRIPT" policy-verify --politica "$T/pol.json" --aprobacion "$T/cfg.json"
+  [ "$status" -eq 3 ]
+}
+
+@test "policy-request con política invalid (tier 3 editado a mano) → error 2, sin petición" {
+  plan_at "$T/base.json" 2026-11-10T22:00:00Z
+  f=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["politica"])' "$output")
+  python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p["tiers"]=[1,3]; open(sys.argv[1],"w").write(json.dumps(p))' "$f"
+  echo '{}' > "$T/cfg.json"
+  run bash "$SCRIPT" policy-request --politica "$f" --aprobacion "$T/cfg.json" --ahora 2026-11-10T22:00:00Z
+  [ "$status" -eq 2 ]
+  [ -z "$(ls "$MERGE_SPRINT_HOME/policy/"*.request.json 2>/dev/null)" ]
+}
+
+@test "safety: el ejecutor sigue con set -uo pipefail y el módulo de política sale con error ante argumentos missing" {
+  grep -q '^set -uo pipefail' "$SCRIPT"
+  run bash "$SCRIPT" policy-plan
+  [ "$status" -ne 0 ]
+  run bash "$SCRIPT" policy-verify --politica "$T/x.json"
+  [ "$status" -ne 0 ]
 }
