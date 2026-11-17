@@ -16,7 +16,7 @@ Contrato de salida: código 0 solo si el dato quedó íntegro y recuperable; ant
 cualquier duda, código != 0, mensaje en stderr y el almacén intacto.
 """
 import argparse
-import contextlib
+from contextlib import contextmanager, suppress
 import datetime as dt
 import fcntl
 import hashlib
@@ -44,7 +44,7 @@ def _strict(value, name):
     return value
 
 
-@contextlib.contextmanager
+@contextmanager
 def locked(store):
     os.makedirs(os.path.dirname(os.path.abspath(store)), exist_ok=True)
     fd = os.open(store + ".lock", os.O_CREAT | os.O_RDWR, 0o600)
@@ -85,7 +85,7 @@ def atomic_write(path, lines):
             os.chmod(tmp, os.stat(path).st_mode & 0o777)
         os.replace(tmp, path)
     except BaseException:
-        with contextlib.suppress(OSError):
+        with suppress(OSError):
             os.unlink(tmp)
         raise
 
