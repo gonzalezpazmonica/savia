@@ -304,7 +304,7 @@ Otros: identidad propia para los pushes de Pulse cuando el forge lo permita, dis
 | AC-31 | Todas | La métrica de HOLD por familia, nivel y verificado y la de consultivos abiertos se recalculan idénticas desde el ledger. **Negativo:** con el ledger vacío dan «sin datos»; un consultivo cuyo `seguimiento` sigue abierto no desaparece de la métrica | S5 |
 | AC-32 | Todas | El contrato de revisora (primera línea `VERDICT:` y cuerpo) con `familia=`, `nivel=`, `verificado=`, `origen=`, `clase=` y `seguimiento=` tiene esquema y validador, y el cómputo de `p0/p1/p2_blocking` excluye los consultivos. **Negativo:** una primera línea sin la forma exigida, o con un campo fuera del conjunto cerrado, equivale a HOLD. **Negativo:** el cambio del contrato no se fusiona sin la revisión humana del PR concreto (tier 4, SE-362) | S5c |
 
-## Enmienda A1 (PROPUESTA) — Revisión diaria de la comprobación nocturna
+## Enmienda A1 (APROBADA 2026-11-17) — Revisión diaria de la comprobación nocturna
 
 > Estado: **escena E11 confirmada y enmienda A1 aprobada por la operadora el 2026-11-17**, por pregunta interactiva; registrado en un comentario de la PR #1602 (puerta de comprensión cumplida). Implementada como slice S1n en esa misma PR. No cambia el `status` de la spec.
 
@@ -325,7 +325,7 @@ No pasa: que un rojo repetido quede en una sola línea antigua, que un fallo de 
 
 ### Alcance
 
-- Fuente nueva de solo lectura que consulta con la herramienta de línea de órdenes del forge ya instalada y ya autenticada por la persona; sin credenciales nuevas, sin escribir en el forge. Repositorio y nombre del flujo salen de configuración; sin configuración no consulta y lo dice (fail-closed).
+- Fuente nueva de solo lectura que consulta con la herramienta de línea de órdenes del forge ya instalada y ya autenticada por la persona; sin credenciales nuevas, sin escribir en el forge. Repositorio y nombre del flujo salen de configuración; sin configuración no consulta y lo dice (fail-closed). Solo cuentan las ejecuciones de la rama vigilada (configurable, por defecto `main`): una ejecución manual en otra rama no tapa un rojo.
 - Orden `pulse` para lanzar desde un temporizador de usuario (systemd `--user` en Linux; launchd en macOS queda para S7). Se entrega una unidad y un temporizador de ejemplo en `projects/pulse/`; **no se instalan**. Activarlos es un acto de la persona.
 - Contadores y estado de la racha en el ledger de eventos (eventos nuevos con esquema), nunca contenido de la ejecución ni salida de pruebas.
 

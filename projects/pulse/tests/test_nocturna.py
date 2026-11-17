@@ -28,12 +28,13 @@ UTC = dt.timezone.utc
 ENV = {"PULSE_NOCTURNA_REPO": "acme/widgets", "PULSE_NOCTURNA_FLUJO": "Suite nocturna"}
 URL = "https://forge.example/acme/widgets/actions/runs/42"
 T0 = dt.datetime(2026, 3, 10, 8, 0, 0, tzinfo=UTC)
+INSTALA = re.compile(r"\b(?:systemctl|loginctl)\b")  # los .example no nombran ninguna orden de instalación
 
 
 def corrida(edad, conclusion="failure", status_="completed", url=URL, dias=0, **extra):
     """Una ejecución del forge creada hace `edad` (timedelta) respecto a la pasada de T0 + `dias` días."""
     d = {"status": status_, "conclusion": conclusion,
-         "createdAt": store.fmt(T0 + dt.timedelta(days=dias) - edad), "url": url}
+         "createdAt": store.fmt(T0 + dt.timedelta(days=dias) - edad), "url": url, "headBranch": "main"}
     d.update(extra)
     return d
 
@@ -176,8 +177,8 @@ class Rojo(NocturnaBase):  # AC-34
     def test_la_peticion_valida_contra_el_contrato(self):
         self.rojo()
         self.assertEqual(self.cli("validate", "peticiones", self.root + "/peticiones.json").returncode, 0)
-        for ev in self.comprobadas():
-            self.assertEqual(self.cli("validate", "evento", self.root + "/eventos.jsonl").returncode, 0)
+        self.assertTrue(self.comprobadas())
+        self.assertEqual(self.cli("validate", "evento", self.root + "/eventos.jsonl").returncode, 0)
 
 
 class Racha(NocturnaBase):  # AC-35
@@ -371,6 +372,34 @@ class Configuracion(NocturnaBase):  # AC-38
         self.assertEqual(argv[:3], ["gh", "run", "list"])
         self.assertEqual(argv[argv.index("--repo") + 1], "acme/widgets")
         self.assertEqual(argv[argv.index("--workflow") + 1], "Suite nocturna")
+        self.assertEqual(argv[argv.index("--branch") + 1], "main")  # rama por defecto
+        self.assertIn("headBranch", argv[argv.index("--json") + 1].split(","))
+
+    def test_la_rama_sale_de_configuracion(self):
+        r = respuesta(corrida(horas(1), "success", headBranch="trunk"))
+        self.assertEqual(self.paso(r, env=dict(ENV, PULSE_NOCTURNA_RAMA="trunk"))[0], "verde")
+        (argv,) = r.llamadas
+        self.assertEqual(argv[argv.index("--branch") + 1], "trunk")
+        for rama in ("-x", "--json", "a b", "x;y", "a" * 101):
+            with self.subTest(rama):
+                r = respuesta()
+                with self.assertRaises(EntradaInvalida):
+                    self.paso(r, env=dict(ENV, PULSE_NOCTURNA_RAMA=rama))
+                self.assertEqual(r.llamadas, [])
+
+    def test_un_verde_en_otra_rama_no_tapa_el_rojo_de_la_rama_vigilada(self):
+        # una ejecución manual en otra rama, más reciente y en verde, no cuenta
+        r = respuesta(corrida(horas(1), "success", headBranch="parche-que-pasa"), corrida(horas(5), "failure"))
+        self.assertEqual(self.paso(r)[0], "rojo")
+        self.setUp()
+        r = respuesta(corrida(horas(1), "success", headBranch="parche-que-pasa"))
+        self.assertEqual(self.paso(r)[0], "sin_ejecucion")
+
+    def test_sin_rama_en_la_respuesta_no_se_fia(self):
+        c = corrida(horas(1), "success")
+        del c["headBranch"]
+        self.assertEqual(self.paso(respuesta(c))[0], "no_consultable")
+        self.assertEqual(self.comprobadas()[0]["motivo"], "respuesta_ilegible")
 
     def test_la_fuente_se_niega_a_ejecutar_cualquier_otra_orden_de_gh(self):
         for argv in (["run", "rerun", "1"], ["run", "cancel", "1"], ["workflow", "run", "x"], ["api", "-X", "POST", "/x"],
@@ -402,8 +431,8 @@ class Configuracion(NocturnaBase):  # AC-38
     def test_estatico_la_fuente_solo_nombra_run_list(self):
         src = leer(os.path.join(PROJECT, "pulse", "nocturna.py"))
         for palabra in ("rerun", "gh run cancel", "workflow run", "pr merge", "--method", "POST", "PATCH", "DELETE", "gh api", '"api"', '"delete"'):
-            self.assertNotIn(palabra, src.replace("_gh_permitido", ""), palabra)
-        self.assertIn('"run", "list"', src)
+            self.assertNotIn(palabra, src, palabra)
+        self.assertEqual(nocturna._PERMITIDO, (("run", "list"),))
 
 
 class Cierre(NocturnaBase):  # AC-39
@@ -508,7 +537,8 @@ class CLI(NocturnaBase):
 
     def salida_gh(self, edad_h, conclusion):
         t = dt.datetime.now(UTC) - dt.timedelta(hours=edad_h)
-        return json.dumps([{"status": "completed", "conclusion": conclusion, "createdAt": store.fmt(t), "url": URL}])
+        return json.dumps([{"status": "completed", "conclusion": conclusion, "createdAt": store.fmt(t), "url": URL,
+                            "headBranch": "main"}])
 
     def test_orden_nocturna_rojo_deja_peticion_y_sale_con_0(self):
         b = self.gh_falso("cat <<'EOF'\n%s\nEOF\n" % self.salida_gh(5, "failure"))
@@ -578,7 +608,14 @@ class Ejemplos(unittest.TestCase):
         # ejemplo, no instalado: ninguna orden que lo instale ni ruta personal
         for txt in (unidad, temp):
             self.assertNotRegex(txt, r"/home/[a-z]")
-            self.assertNotIn("systemctl", txt.replace("systemctl --user", "") if False else "")
+            self.assertIsNone(INSTALA.search(txt), INSTALA.pattern)
+
+    def test_el_detector_de_ordenes_de_instalacion_no_es_ciego(self):
+        for orden in ("ExecStartPre=systemctl --user enable pulse-nocturna.timer", "systemctl start x",
+                      "ExecStartPost=/usr/bin/systemctl --user daemon-reload", "loginctl enable-linger"):
+            with self.subTest(orden):
+                self.assertIsNotNone(INSTALA.search(orden))
+        self.assertIsNone(INSTALA.search("# Ver README.md de esta carpeta."))
 
     def test_ninguna_unidad_activa_en_el_repo(self):
         d = os.path.join(PROJECT, "systemd")

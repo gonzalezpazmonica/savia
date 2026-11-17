@@ -4,6 +4,8 @@ Una vez al día mira el resultado de la última ejecución de un flujo del forge
 si no es verde, deja una petición que pide algo a la persona. Solo lectura:
 la única orden que se ejecuta es `gh run list`. Repositorio y flujo salen de
 configuración (`PULSE_NOCTURNA_REPO`, `PULSE_NOCTURNA_FLUJO`), nunca del código.
+Solo cuentan las ejecuciones de la rama vigilada (`PULSE_NOCTURNA_RAMA`, por
+defecto `main`): una ejecución manual en otra rama no puede tapar un rojo.
 
 Fail-closed: sin configuración no se consulta; si no se puede consultar, es una
 petición («no he podido mirar»), nunca «bien». Al ledger solo van contadores y
@@ -21,12 +23,15 @@ from .store import EntradaInvalida, PulseError
 
 ENV_REPO = "PULSE_NOCTURNA_REPO"
 ENV_FLUJO = "PULSE_NOCTURNA_FLUJO"
+ENV_RAMA = "PULSE_NOCTURNA_RAMA"
+RAMA_POR_DEFECTO = "main"
 TIMEOUT_S = 60
 MAX_EDAD = dt.timedelta(hours=26)
 CADUCIDAD = dt.timedelta(hours=30)  # algo más de un día: la pasada siguiente la sustituye
 PREFIJO = "nocturna-"
 REPO = re.compile(r"^(?:[A-Za-z0-9][A-Za-z0-9.-]*/)?[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$")
 FLUJO = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.-]{0,99}$")
+RAMA = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_./-]{0,99}$")
 URL_OK = re.compile(r"^https://[^\s\x00-\x1f\x7f]{1,200}$")
 CONCLUSIONES = ("failure", "cancelled", "timed_out", "startup_failure", "action_required", "stale", "neutral", "skipped")
 ROJOS = ("rojo", "sin_ejecucion")
@@ -51,16 +56,19 @@ def _gh(args, runner=None):
 
 
 def configuracion(env=None):
-    """(repo, flujo) o None si falta alguno. Valores con forma no válida: EntradaInvalida."""
+    """(repo, flujo, rama) o None si falta repo o flujo. Valores con forma no válida: EntradaInvalida."""
     env = os.environ if env is None else env
     repo, flujo = (env.get(ENV_REPO) or "").strip(), (env.get(ENV_FLUJO) or "").strip()
+    rama = (env.get(ENV_RAMA) or "").strip() or RAMA_POR_DEFECTO
     if not repo or not flujo:
         return None
     if not REPO.match(repo):
         raise EntradaInvalida("%s no tiene la forma [HOST/]PROPIETARIO/REPOSITORIO" % ENV_REPO)
     if not FLUJO.match(flujo):
         raise EntradaInvalida("%s no es un nombre de flujo válido" % ENV_FLUJO)
-    return repo, flujo
+    if not RAMA.match(rama):
+        raise EntradaInvalida("%s no es un nombre de rama válido" % ENV_RAMA)
+    return repo, flujo, rama
 
 
 def _motivo_fallo(stderr):
@@ -70,11 +78,11 @@ def _motivo_fallo(stderr):
     return "consulta_fallida"
 
 
-def consultar(repo, flujo, ahora, runner=None):
-    """Última ejecución terminada: dict conclusion/at/url, o None si no hay. Imposible: Consulta(motivo)."""
+def consultar(repo, flujo, ahora, runner=None, rama=RAMA_POR_DEFECTO):
+    """Última ejecución terminada en `rama`: dict conclusion/at/url, o None si no hay. Imposible: Consulta(motivo)."""
     try:
-        r = _gh(["run", "list", "--repo", repo, "--workflow", flujo, "--limit", "10",
-                 "--json", "status,conclusion,createdAt,url"], runner)
+        r = _gh(["run", "list", "--repo", repo, "--workflow", flujo, "--branch", rama, "--limit", "10",
+                 "--json", "status,conclusion,createdAt,url,headBranch"], runner)
     except subprocess.TimeoutExpired:
         raise Consulta("tiempo_agotado")
     except OSError:
@@ -87,8 +95,11 @@ def consultar(repo, flujo, ahora, runner=None):
             raise ValueError
         terminadas = []
         for c in datos:
-            if not isinstance(c, dict) or not isinstance(c.get("status"), str):
+            if not isinstance(c, dict) or not isinstance(c.get("status"), str) \
+                    or not isinstance(c.get("headBranch"), str):
                 raise ValueError
+            if c["headBranch"] != rama:
+                continue  # otra rama: aunque `--branch` ya filtra, no se fía de que lo haga
             if c["status"] != "completed":
                 continue  # en curso: no cuenta todavía; si se atasca, la edad de la terminada vencerá
             if not isinstance(c.get("conclusion"), str) or not isinstance(c.get("createdAt"), str):
@@ -176,7 +187,7 @@ def comprobar(root, ahora=None, env=None, runner=None):
         raise PulseError("sin configuración: define %s y %s; no consulto nada" % (ENV_REPO, ENV_FLUJO))
     dia = ahora.astimezone(dt.timezone.utc).date().isoformat()  # jornada UTC: determinista
     try:
-        ult = consultar(cfg[0], cfg[1], ahora, runner)
+        ult = consultar(cfg[0], cfg[1], ahora, runner, rama=cfg[2])
         resultado, conclusion = evaluar(ult, ahora)
         motivo = None
     except Consulta as exc:

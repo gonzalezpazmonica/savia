@@ -18,6 +18,8 @@ Unidad y temporizador de **ejemplo** de systemd de usuario. No se instalan solos
    ```
    PULSE_NOCTURNA_REPO=propietario/repositorio
    PULSE_NOCTURNA_FLUJO=nombre del flujo o su fichero .yml
+   # opcional; por defecto main
+   PULSE_NOCTURNA_RAMA=main
    ```
 
 2. Copiar los ejemplos y ajustar la ruta de `ExecStart` a tu checkout:
@@ -47,5 +49,6 @@ systemctl --user disable --now pulse-nocturna.timer
 ## Notas
 
 - Sin configuración, `pulse nocturna` sale con 1, no consulta nada y `pulse status` dice «sin configurar».
-- La racha cuenta jornadas UTC con una pasada en rojo; dos pasadas el mismo día no suman. Si el equipo estuvo apagado varios días, esos días no cuentan.
+- La racha cuenta jornadas UTC con una pasada en rojo; dos pasadas el mismo día no suman. Si el equipo estuvo apagado varios días, esos días no cuentan. Límite aceptado: una pasada a las 23:5x UTC y otra a las 00:0x UTC del día siguiente suman dos noches aunque solo haya habido una ejecución; programa el temporizador lejos de la medianoche UTC.
+- Solo cuentan las ejecuciones de la rama vigilada (`PULSE_NOCTURNA_RAMA`, por defecto `main`). Una ejecución manual en otra rama, aunque sea más reciente y verde, no tapa el rojo. Una ejecución manual en la rama vigilada sí cuenta: es una ejecución real de esa rama.
 - Si la última pasada de Pulse tiene más de 26 h, `pulse status` no dice «bien»: dice que no sabe cómo está ahora.
