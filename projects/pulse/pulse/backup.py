@@ -89,6 +89,31 @@ def pendientes(root, ahora=None, incluir_respaldo=False):
             if store.parse_ts(p["caduca"]) > ahora and p["id"] not in acusados and p["id"] not in por_respaldo]
 
 
+def es_aviso(p):
+    """Fin correcto de un trabajo: informa, no pide nada (su propia petición dice que no hay que hacer nada)."""
+    return p["fuente"] == "AVISO_RUN" and not p["critica"] and p["si_no_contestas"] == events.NADA_QUE_HACER
+
+
+_TRABAJO_OK = re.compile(r"^El trabajo (\S+) terminó bien\.$")
+MAX_NOMBRES = 3
+
+
+def resumen_avisos(avisos):
+    """Una sola línea para los fines correctos: cuántos y cuáles (los primeros)."""
+    nombres = []
+    for p in avisos:
+        m = _TRABAJO_OK.match(p["que"])
+        if m:
+            nombres.append(_mostrable(m.group(1)))
+    n = len(avisos)
+    txt = "%d trabajos terminaron bien" % n if n != 1 else "1 trabajo terminó bien"
+    if nombres:
+        txt += ": " + ", ".join(nombres[:MAX_NOMBRES])
+        if n > len(nombres[:MAX_NOMBRES]):
+            txt += " y %d más" % (n - len(nombres[:MAX_NOMBRES]))
+    return txt + "."
+
+
 DELIVER_LOCK = ".deliver.lock"
 
 
@@ -134,19 +159,24 @@ def entregar(root, max_validez=MAX_VALIDEZ_DEFECTO, maximo=MAX_POR_PASADA, notif
 
 def inbox_text(root):
     """Lo pendiente, en llano, con las cinco cosas de cada petición."""
-    pend = pendientes(root, incluir_respaldo=True)
-    if not pend:
+    todas = pendientes(root, incluir_respaldo=True)
+    avisos = [p for p in todas if es_aviso(p)] if len(todas) else []
+    avisos = avisos if len(avisos) >= 2 else []  # uno solo se muestra completo
+    pend = [p for p in todas if p not in avisos]
+    if not todas:
         estado, _snap = store.read_json(root + "/" + events.PETICIONES, "peticiones")
         if estado == store.FALLIDA:
             return "No puedo leer la lista de pendientes (fichero dañado o inseguro). No asumas que no hay nada."
         if estado == store.SIN_CONECTAR:
             return "Todavía no hay lista de pendientes: Pulse no ha publicado ninguna."
         return "No hay nada pendiente de ti."
-    out = ["Pendiente de ti (%d):" % len(pend)]
+    out = ["Pendiente de ti (%d):" % len(pend)] if pend else ["Nada que decidir."]
     for p in pend:
         out += ["- " + _mostrable(p["que"]),
                 "    Por qué ahora: " + _mostrable(p["por_que_ahora"]),
                 "    Si no contestas: " + _mostrable(p["si_no_contestas"]),
                 "    Si aplazas: " + _mostrable(p["si_aplazas"]),
                 "    Vale hasta: " + store.parse_ts(p["caduca"]).astimezone().strftime("%d/%m %H:%M")]
+    if avisos:
+        out.append("Avisos, no piden nada: " + resumen_avisos(avisos))
     return "\n".join(out)

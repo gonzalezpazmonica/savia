@@ -54,7 +54,7 @@ todo Savia Space. La cola se ha reconstruido entera y se genera en
 1. **S22 — Gemelo operativo y Savia usable** (SE-490, SE-504, SE-505).
 2. **S26 — Coste por turno** (SE-511, SE-510, aprobadas): la cuota semanal se agotó dos
    noches seguidas y paró la cola. SE-511 mide ya; el recorte espera al experimento EXP-509.
-3. **S23 — Fundamentos de efectos y autoridad** (SE-488, SE-508, SE-493, SE-498, SE-496):
+3. **S23 — Fundamentos de efectos y autoridad** (SE-488, SE-508, SE-493 retirada el 2026-11-14, SE-498, SE-496):
    aprobadas el 2026-11-09; de ellas dependen el sprint nocturno, el modo mediado y Savia Viva.
 4. **S27 — Revisión de graduación**: 22 specs con sus artefactos ya en main. Se revisan
    AC por AC; no se reimplementa nada.

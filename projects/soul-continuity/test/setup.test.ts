@@ -17,6 +17,7 @@ import { emptyConfig, loadConfig, saveConfig } from "../src/core/config.ts";
 import { serveFromCli } from "../src/api/serve.ts";
 import { ensureInstallCert } from "../src/api/cert.ts";
 import { servePinned } from "../src/cli/setup.ts";
+import { escapeRegExp } from "./regex-escape.ts";
 
 const v4 = (address: string, internal = false) => ({ address, family: "IPv4" as const, internal, netmask: "255.192.0.0", mac: "00:00:00:00:00:00", cidr: null });
 const VPN = "100.101.7.3";
@@ -66,7 +67,7 @@ test("init con VPN detectada fija api.listen en la IP de la VPN y lo dice", asyn
   const s = mk(conVpn());
   assert.equal(await runCli(["init", "trabajo"], s.deps), 0, s.err.join("\n"));
   assert.deepEqual(loadConfig(s.deps.dataDir).api.listen, [VPN]);
-  assert.match(s.out.join("\n"), new RegExp(`Escucharé solo en tu VPN: ${VPN.replace(/\./g, "\\.")}`));
+  assert.match(s.out.join("\n"), new RegExp(`Escucharé solo en tu VPN: ${escapeRegExp(VPN)}`));
 });
 
 test("init sin VPN (negativo): api.listen queda vacía y explica qué hacer; nunca 0.0.0.0", async () => {
@@ -176,6 +177,212 @@ test("doctor: falta secret-tool => 1 con la orden de instalación; sin perfil ta
   const t = mk(conVpn());
   assert.equal(await runCli(["doctor"], t.deps), 1);
   assert.match(t.out.join("\n"), /FALLO Soul no está instalado[\s\S]*arreglo: soul setup/);
+});
+
+// ------------------------------------------------------------------ doctor en macOS (SE-490)
+
+/** Llavero de mentira con estado: imita `security` (add por `-i` y stdin, find, delete). */
+function fakeKeychain(mode: "ok" | "otra-cosa" | "cuelga" | "cuelga-leer" | "ausente" | "no-borra" | "borrar-error" | "falla-relectura", extra: Record<string, { code: number; stdout?: string }> = {}) {
+  const items = new Map<string, string>();
+  const calls: string[] = [];
+  const inputs: string[] = [];
+  let borrado = false;
+  const run = (async (cmd: string, args: string[], input?: string) => {
+    calls.push([cmd, ...args].join(" "));
+    if (input) inputs.push(input);
+    if (cmd !== "security") {
+      const r = extra[cmd];
+      return r ? { code: r.code, stdout: r.stdout ?? "", stderr: "" } : { code: 127, stdout: "", stderr: "no existe" };
+    }
+    if (mode === "ausente") return { code: 127, stdout: "", stderr: "spawn security ENOENT" };
+    const key = (a: string, sv: string) => `${a}|${sv}`;
+    const opt = (n: string) => args[args.indexOf(n) + 1];
+    if (args[0] === "-i") {
+      if (mode === "cuelga") return new Promise(() => {});
+      const m = /-a "([^"]+)" -s "([^"]+)" -w "([^"]*)"/.exec(input ?? "");
+      if (!m) return { code: 1, stdout: "", stderr: "mal" };
+      items.set(key(m[1], m[2]), m[3]);
+      return { code: 0, stdout: "", stderr: "" };
+    }
+    if (args[0] === "find-generic-password") {
+      if (mode === "cuelga-leer") return new Promise(() => {});
+      if (mode === "falla-relectura" && borrado) return { code: 1, stdout: "", stderr: "llavero bloqueado" };
+      const v = items.get(key(opt("-a"), opt("-s")));
+      if (v === undefined) return { code: 44, stdout: "", stderr: "not found" };
+      return { code: 0, stdout: `${mode === "otra-cosa" ? "otra-cosa" : v}\n`, stderr: "" };
+    }
+    if (args[0] === "delete-generic-password") {
+      borrado = true;
+      if (mode === "borrar-error") return { code: 1, stdout: "", stderr: "denegado" };
+      if (mode !== "no-borra") items.delete(key(opt("-a"), opt("-s")));
+      return { code: 0, stdout: "", stderr: "" };
+    }
+    return { code: 1, stdout: "", stderr: "?" };
+  }) as Run;
+  return { run, items, calls, inputs };
+}
+
+const UTUN = { lo: [v4("127.0.0.1", true)], utun4: [v4(VPN)] };
+const TSCALE = { "tailscale ip -4": { code: 0, stdout: `${VPN}\n` } };
+
+/** Mac con carpeta personal propia, LaunchAgents escribible y `launchctl` en el PATH. */
+function mac(o: { kc?: ReturnType<typeof fakeKeychain>; ifaces?: Interfaces; agents?: "carpeta" | "falta" | "fichero" | "sin-library"; launchctl?: boolean; listen?: string[]; timeoutMs?: number } = {}) {
+  const kc = o.kc ?? fakeKeychain("ok", TSCALE);
+  const s = mk({ ifaces: o.ifaces ?? UTUN, run: kc.run, env: { PATH: pathWith(...(o.launchctl === false ? [] : ["launchctl"])) } });
+  s.deps.platform = "darwin";
+  s.deps.probeTimeoutMs = o.timeoutMs ?? 50;
+  const lib = join(s.dir, "Library");
+  const agents = join(lib, "LaunchAgents");
+  const a = o.agents ?? "carpeta";
+  if (a !== "sin-library") mkdirSync(lib, { recursive: true });
+  if (a === "carpeta") mkdirSync(agents, { recursive: true });
+  if (a === "fichero") writeFileSync(agents, "no soy una carpeta");
+  withConfig(s, o.listen ?? [VPN]);
+  return { ...s, kc, agents, lib };
+}
+
+test("doctor macOS: llavero que funciona, arranque y VPN => 0 y todo «ok»; el elemento de prueba se borra", async () => {
+  const m = mac();
+  assert.equal(await runCli(["doctor"], m.deps), 0, m.out.join("\n"));
+  const o = m.out.join("\n");
+  assert.doesNotMatch(o, /FALLO|AVISO/);
+  assert.match(o, /llavero de macOS: guarda, lee y borra/);
+  assert.equal(m.kc.items.size, 0, "no debe quedar el elemento de prueba");
+  assert.ok(m.kc.calls.some((c) => c.startsWith("security delete-generic-password")));
+});
+
+test("doctor macOS: el secreto de prueba no viaja por la línea de órdenes", async () => {
+  const m = mac();
+  await runCli(["doctor"], m.deps);
+  const put = m.kc.calls.find((c) => c.startsWith("security -i"));
+  assert.ok(put);
+  const secret = /add-generic-password .* -w "([0-9a-f]{32})"/.exec(m.kc.inputs.join("\n"))?.[1];
+  assert.ok(secret, "el secreto aleatorio llega por stdin a «security -i»");
+  assert.equal(m.kc.calls.filter((c) => c.includes(secret)).length, 0, "el secreto no aparece en ningún argv");
+  assert.equal(m.kc.calls.filter((c) => /add-generic-password/.test(c)).length, 0, "add-generic-password solo por stdin");
+});
+
+test("doctor macOS: guarda pero lee otra cosa => FALLO, y se borra igualmente", async () => {
+  const m = mac({ kc: fakeKeychain("otra-cosa", TSCALE) });
+  assert.equal(await runCli(["doctor"], m.deps), 1);
+  assert.match(m.out.join("\n"), /FALLO llavero de macOS: guarda el elemento de prueba pero devuelve otra cosa/);
+  assert.ok(m.kc.calls.some((c) => c.startsWith("security delete-generic-password")), "el borrado se llama aunque la lectura no cuadre");
+  assert.equal(m.kc.items.size, 0);
+});
+
+test("doctor macOS: el llavero espera un diálogo (no responde) => FALLO con el arreglo, nunca ok", async () => {
+  for (const [mode, lecturas] of [["cuelga", 0], ["cuelga-leer", 1]] as const) {
+    const m = mac({ kc: fakeKeychain(mode, TSCALE) });
+    assert.equal(await runCli(["doctor"], m.deps), 1, mode);
+    const o = m.out.join("\n");
+    assert.match(o, /FALLO llavero de macOS: no respondió/, mode);
+    assert.match(o, /arreglo: .*diálogo/, mode);
+    assert.match(o, /puede quedar el elemento de prueba «doctor-[0-9a-f]{8}»/, mode);
+    assert.doesNotMatch(o, /llavero de macOS: guarda, lee y borra/, mode);
+    // Tras un tiempo agotado no se relee para comprobar el borrado: sería otra espera entera.
+    assert.equal(m.kc.calls.filter((c) => c.startsWith("security find-generic-password")).length, lecturas, mode);
+  }
+});
+
+test("doctor macOS: falta «security» => FALLO", async () => {
+  const m = mac({ kc: fakeKeychain("ausente", TSCALE) });
+  assert.equal(await runCli(["doctor"], m.deps), 1);
+  assert.match(m.out.join("\n"), /FALLO llavero de macOS: no pude guardar/);
+});
+
+test("doctor macOS: guarda y lee bien pero no borra => FALLO (revocar o desinstalar fallarían), con cómo quitarlo", async () => {
+  // «no-borra»: el borrado sale bien pero el elemento sigue; «borrar-error»: el borrado da error;
+  // «falla-relectura»: no se puede comprobar el borrado. Ninguno se da por borrado.
+  for (const mode of ["no-borra", "borrar-error", "falla-relectura"] as const) {
+    const m = mac({ kc: fakeKeychain(mode, TSCALE) });
+    assert.equal(await runCli(["doctor"], m.deps), 1, mode);
+    const o = m.out.join("\n");
+    assert.match(o, /FALLO llavero de macOS: guarda y lee, pero no pude borrar el elemento de prueba «doctor-[0-9a-f]{8}»/, mode);
+    assert.match(o, /arreglo: bórralo/, mode);
+    assert.doesNotMatch(o, /guarda, lee y borra/, mode);
+  }
+});
+
+test("doctor macOS: sin ~/Library/LaunchAgents escribible => AVISO con el arreglo (el arranque automático es opcional)", async () => {
+  // SE-490: el modo por defecto es bajo demanda; sin arranque automático Soul funciona con «soul serve».
+  const f = mac({ agents: "fichero" });
+  assert.equal(await runCli(["doctor"], f.deps), 0, "un aviso no es un fallo");
+  assert.match(f.out.join("\n"), /AVISO .*existe pero no es una carpeta[\s\S]*arreglo: crea la carpeta con «mkdir -p ~\/Library\/LaunchAgents»/);
+  assert.doesNotMatch(f.out.join("\n"), /FALLO/);
+  const n = mac({ agents: "sin-library" });
+  assert.equal(await runCli(["doctor"], n.deps), 0);
+  assert.match(n.out.join("\n"), /AVISO .*no existe y no puedo crearla/);
+  // Los casos de permisos usan chmod POSIX: en Windows chmod no quita la escritura de una carpeta
+  // (solo el atributo de solo lectura de ficheros) y root escribe siempre. Fuera de ahí no se prueban.
+  if (process.platform !== "win32" && process.getuid?.() !== 0) {
+    const ro = mac();
+    chmodSync(ro.agents, 0o500);
+    try {
+      assert.equal(await runCli(["doctor"], ro.deps), 0);
+      assert.match(ro.out.join("\n"), /AVISO no puedo escribir en /);
+    } finally { chmodSync(ro.agents, 0o700); }
+    const crear = mac({ agents: "falta" });
+    chmodSync(crear.lib, 0o500);
+    try {
+      assert.equal(await runCli(["doctor"], crear.deps), 0, "sin LaunchAgents y con Library no escribible");
+      assert.match(crear.out.join("\n"), /AVISO .*no existe y no puedo crearla/);
+    } finally { chmodSync(crear.lib, 0o700); }
+  }
+});
+
+test("doctor macOS: LaunchAgents ausente pero ~/Library escribible => se podrá crear, ok; doctor no la crea", async () => {
+  const m = mac({ agents: "falta" });
+  assert.equal(await runCli(["doctor"], m.deps), 0, m.out.join("\n"));
+  assert.equal(existsSync(m.agents), false, "doctor no crea nada");
+  assert.ok(!m.kc.calls.some((c) => c.startsWith("launchctl")), "doctor no carga nada");
+});
+
+test("doctor macOS: sin launchctl => AVISO, no fallo", async (t) => {
+  if (existsSync("/bin/launchctl")) return t.skip("este equipo tiene /bin/launchctl");
+  const m = mac({ launchctl: false });
+  assert.equal(await runCli(["doctor"], m.deps), 0);
+  assert.match(m.out.join("\n"), /AVISO no encuentro «launchctl»/);
+});
+
+test("doctor macOS: sin VPN (ninguna utun en 100.64/10) => FALLO de escucha con el texto de macOS", async () => {
+  const m = mac({ ifaces: { lo: [v4("127.0.0.1", true)], en0: [v4("192.0.2.10")] }, kc: fakeKeychain("ok"), listen: [] });
+  assert.equal(await runCli(["doctor"], m.deps), 1);
+  const o = m.out.join("\n");
+  assert.match(o, /FALLO sin dirección de escucha/);
+  assert.match(o, /Sin VPN el móvil no puede hablar con el Mac/);
+  assert.match(o, /administrador o el permiso de tu equipo de TI: lo decides tú/);
+  assert.doesNotMatch(o, /0\.0\.0\.0.*0\.0\.0\.0/s);
+});
+
+test("doctor macOS: IP configurada que ya no está en ninguna interfaz => FALLO con el texto de macOS", async () => {
+  const m = mac({ ifaces: { lo: [v4("127.0.0.1", true)] }, kc: fakeKeychain("ok") });
+  assert.equal(await runCli(["doctor"], m.deps), 1);
+  assert.match(m.out.join("\n"), /FALLO la IP configurada .* no está en ninguna interfaz[\s\S]*Sin VPN el móvil no puede hablar con el Mac/);
+});
+
+test("doctor macOS: con una utun en 100.x y sin IP fijada => FALLO que da la orden «soul listen»", async () => {
+  const m = mac({ listen: [] });
+  assert.equal(await runCli(["doctor"], m.deps), 1);
+  assert.match(m.out.join("\n"), new RegExp(`arreglo: soul listen ${escapeRegExp(VPN)}`));
+});
+
+test("doctor Linux (control): con secret-tool sigue en ok y no prueba llavero ni arranque de macOS", async () => {
+  const kc = fakeKeychain("ok", TSCALE);
+  const s = mk({ ifaces: { lo: [v4("127.0.0.1", true)], tailscale0: [v4(VPN)] }, run: kc.run });
+  withConfig(s, [VPN]);
+  assert.equal(await runCli(["doctor"], s.deps), 0, s.out.join("\n"));
+  const o = s.out.join("\n");
+  assert.match(o, /ok    secret-tool disponible/);
+  assert.doesNotMatch(o, /llavero|LaunchAgents/);
+  assert.equal(kc.calls.filter((c) => c.startsWith("security")).length, 0);
+});
+
+test("init en macOS no toca el llavero (la prueba real es de doctor)", async () => {
+  const kc = fakeKeychain("ok", TSCALE);
+  const s = mk({ ...conVpn(), run: kc.run });
+  s.deps.platform = "darwin";
+  assert.equal(await runCli(["init", "p"], s.deps), 0, s.err.join("\n"));
+  assert.equal(kc.calls.filter((c) => c.startsWith("security")).length, 0);
 });
 
 // ------------------------------------------------------------------ serve

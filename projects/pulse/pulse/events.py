@@ -121,10 +121,13 @@ def job_beat(root, job_id, fase, nivel="N4"):
         return ev
 
 
+NADA_QUE_HACER = "No necesitas hacer nada hasta la revisión."
+
+
 def _resumen_fin(job_id, resultado, clase):
     if resultado == "ok":
         return ("El trabajo %s terminó bien." % job_id,
-                "No necesitas hacer nada hasta la revisión.")
+                NADA_QUE_HACER)
     if resultado == "interrumpido":
         return ("El trabajo %s se interrumpió (el equipo se durmió o lo pararon)." % job_id,
                 "Se puede relanzar una vez sin coste para el límite de intentos.")
