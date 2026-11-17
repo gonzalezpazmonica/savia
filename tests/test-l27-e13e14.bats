@@ -16,7 +16,7 @@ assert d['revisor_good']['auc'] >= 0.6
 }
 
 @test "L27-E13: piloto sobre un audit log de savia-gates (resumen sin contenido)" {
-  # El piloto leía el log real de la persona (HOME/.savia/audit): inexistente en CI y privado.
+  # El piloto leía el log real de la persona (carpeta de auditoría del HOME): inexistente en CI y privado.
   # Se prueba con un log sintético pasado por --audit; sin eventos de gate no hay resumen.
   log="$BATS_TEST_TMPDIR/savia-gates.jsonl"
   {
