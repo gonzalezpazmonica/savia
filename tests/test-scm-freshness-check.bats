@@ -56,8 +56,11 @@ teardown() {
 }
 
 @test "check #7 mentions remediation command in error message" {
-  run grep -c "generate-capability-map.py.*commit" "$CHECK"
+  # SE-501: .scm ya no se versiona; la remediación es regenerar con derived.sh, no commitear.
+  run grep -c "stale — run 'bash scripts/derived.sh ensure'" "$CHECK"
   [[ "$output" -ge 1 ]]
+  run grep -c "generate-capability-map.py.*commit" "$CHECK"
+  [[ "$output" -eq 0 ]]
 }
 
 # ── Behaviour of the full check (single run in setup_file) ──────────────────
