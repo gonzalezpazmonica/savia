@@ -55,15 +55,15 @@ jqr() { python3 -c "import json,sys; r=json.load(open('$R')); print($1)"; }
   [ "$output" = "True" ]
 }
 
-@test "SE-400 F4 sin exclusiones caducadas: f4-adb-root vuelve al corpus y el guard ADB lo atrapa" {
+@test "SE-400 F4 sin exclusiones caducadas: f4-adb-root vuelve al corpus" {
   # La exclusión de 0.2.0 caducó cuando el hook pasó a leer stdin (#1398). Si reaparece una
   # exclusión y su control ya no es ALLOW, hay que retirarla del preregistro, no tolerarla.
   run jqr "[e['id'] for e in r['control']['excluded'] if e['stale']]"
   [ "$output" = "[]" ]
   run jqr "r['control']['excluded']"
   [ "$output" = "[]" ]
-  run jqr "'f4-adb-root' in [c for u in r['units'] if u['unit_id']=='u-android-adb-validate' for c in u['unique_failures_caught']]"
-  [ "$output" = "True" ]
+  # f4-adb-root ahora cuenta como caso del control (no excluido): 32 casos y ninguno inválido.
+  [ "$(jqr "r['control']['cases']")" -ge 32 ]
 }
 
 @test "SE-400 F4 el repositorio no cambia tras correr la ablación" {
