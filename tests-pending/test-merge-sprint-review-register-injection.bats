@@ -1,12 +1,13 @@
 #!/usr/bin/env bats
-# PENDIENTE DE ACTIVAR — vive en tests/pending-fix/ para que la suite normal (tests/*.bats) no la ejecute.
+# PENDIENTE DE ACTIVAR — vive en tests-pending/, fuera de tests/, para que ningún runner la recoja
+# (tests/run-all.sh, test-auditor.sh y ci-reliability-gate.sh buscan *.bats de forma recursiva bajo tests/).
 # Describe el comportamiento CORRECTO de `merge-sprint.sh review-register` ante un informe con comillas o
 # caracteres raros en reviewer/author (defecto de inyección en el registro de revisiones, S-MS1). HOY FALLA: el defecto existe.
 # Activación: en la misma PR que arregle el ejecutor (restringir reviewer/author a [A-Za-z0-9._-]+, montar la
 # línea del registro con json.dumps y salir ≠ 0 si chain_append falla):
-#   git mv tests/pending-fix/test-merge-sprint-review-register-injection.bats tests/
+#   git mv tests-pending/test-merge-sprint-review-register-injection.bats tests/
 # No se marcan como saltadas ni se debilitan: tienen que fallar hasta que el arreglo exista.
-# Ejecución manual: bats tests/pending-fix/test-merge-sprint-review-register-injection.bats
+# Ejecución manual: bats tests-pending/test-merge-sprint-review-register-injection.bats
 
 SCRIPT="scripts/merge-sprint.sh"
 
@@ -88,23 +89,6 @@ sha_of() { printf '%040d' "$1" | tr 0 a; }
 mkpr() {  # mkpr <n> <ficheros>
   sha_of "$1" > "$FAKE/$1.head"; echo "$2" > "$FAKE/$1.files"
 }
-
-review() {  # review <n> <verdict> <role> [reviewer] [p1]
-  local f="$TMPDIR_T/rev-$1-$3.md"
-  echo "VERDICT: $2 pr=$1 sha=$(sha_of "$1") role=$3 tier=2 reviewer=${4:-rev-agent} author=impl-agent p0=0 p1=${5:-0} p2=0 p2_blocking=0" > "$f"
-  bash "$SCRIPT" review-register "$1" "$f"
-}
-
-regrant() {  # grant nuevo sobre el mismo manifiesto: un sprint parado solo se reanuda así
-  bash "$SCRIPT" grant "$(sha256sum < "$MERGE_SPRINT_HOME/manifest.json" | cut -d' ' -f1)" >/dev/null
-}
-
-plan_and_grant() {
-  run bash "$SCRIPT" plan; [ "$status" -eq 0 ]
-  local d; d=$(echo "$output" | sed -n 's/^digest: //p')
-  run bash "$SCRIPT" grant "$d"; [ "$status" -eq 0 ]
-}
-
 
 # Informe con campos controlados; se insertan tal cual, sin escapar
 report() {  # report <pr> <verdict> <reviewer> <author> <p0> → ruta

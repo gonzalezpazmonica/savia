@@ -91,10 +91,6 @@ review() {  # review <n> <verdict> <role> [reviewer] [p1]
   bash "$SCRIPT" review-register "$1" "$f"
 }
 
-regrant() {  # grant nuevo sobre el mismo manifiesto: un sprint parado solo se reanuda así
-  bash "$SCRIPT" grant "$(sha256sum < "$MERGE_SPRINT_HOME/manifest.json" | cut -d' ' -f1)" >/dev/null
-}
-
 plan_and_grant() {
   run bash "$SCRIPT" plan; [ "$status" -eq 0 ]
   local d; d=$(echo "$output" | sed -n 's/^digest: //p')
@@ -117,14 +113,17 @@ verdict_file() {  # verdict_file <pr-en-el-informe> <verdict> <p0> <p1> <p2b> �
   [[ "$output" == *"correctness HOLD"* ]]
   grep -q '"verdict":"HOLD"' "$MERGE_SPRINT_HOME/reviews.jsonl"
   run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
   [[ "$output" != *"#40"* ]]
 }
 
 @test "K2 positivo: el mismo informe sin p2_blocking sí es APPROVE y entra en el plan" {
   mkpr 41 "scripts/m2.sh"
   run bash "$SCRIPT" review-register 41 "$(verdict_file 41 APPROVE 0 0 0)"
+  [ "$status" -eq 0 ]
   [[ "$output" == *"correctness APPROVE"* ]]
   run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
   [[ "$output" == *"#41"* ]]
 }
 
@@ -136,6 +135,7 @@ verdict_file() {  # verdict_file <pr-en-el-informe> <verdict> <p0> <p1> <p2b> �
   [[ "$output" == *"≠ 42"* ]]
   [ ! -s "$MERGE_SPRINT_HOME/reviews.jsonl" ]
   run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
   [[ "$output" != *"#42"* && "$output" != *"#43"* ]]
 }
 
@@ -165,6 +165,12 @@ verdict_file() {  # verdict_file <pr-en-el-informe> <verdict> <p0> <p1> <p2b> �
 
 # ── K4 / K8 / K10: main tras el merge solo sigue si hay check-runs y todos son verdes ──
 # Dos PR; el primero se mergea y main queda como diga main_ci.json; si no es verde el segundo no se mergea.
+# El sprint queda parado de verdad: salida 0, fichero STOP con el motivo y evento STOP en el ledger
+main_halted() {  # main_halted <fail|pending>
+  [ "$status" -eq 0 ]
+  [ "$(cat "$MERGE_SPRINT_HOME/STOP")" = "main_$1" ]
+  grep -q "\"reason\":\"main_$1\"" "$MERGE_SPRINT_HOME/ledger.jsonl"
+}
 two_prs() { mkpr 50 "scripts/n1.sh"; mkpr 51 "scripts/n2.sh"; review 50 APPROVE correctness; review 51 APPROVE correctness; plan_and_grant; }
 
 @test "K4 block: check-run de main 'cancelled' para el sprint tras el primer merge" {
@@ -173,6 +179,7 @@ two_prs() { mkpr 50 "scripts/n1.sh"; mkpr 51 "scripts/n2.sh"; review 50 APPROVE 
   run bash "$SCRIPT" run
   [ "$(paste -sd, "$FAKE/merged")" = "50" ]
   [[ "$output" == *"STOP: main 'fail'"* ]]
+  main_halted fail
 }
 
 @test "K8 block: check-run de main 'timed_out' para el sprint tras el primer merge" {
@@ -181,6 +188,7 @@ two_prs() { mkpr 50 "scripts/n1.sh"; mkpr 51 "scripts/n2.sh"; review 50 APPROVE 
   run bash "$SCRIPT" run
   [ "$(paste -sd, "$FAKE/merged")" = "50" ]
   [[ "$output" == *"STOP: main 'fail'"* ]]
+  main_halted fail
 }
 
 @test "K10 block: main sin ningún check-run no cuenta como verde (agota y para)" {
@@ -189,6 +197,7 @@ two_prs() { mkpr 50 "scripts/n1.sh"; mkpr 51 "scripts/n2.sh"; review 50 APPROVE 
   run bash "$SCRIPT" run
   [ "$(paste -sd, "$FAKE/merged")" = "50" ]
   [[ "$output" == *"STOP: main 'pending'"* ]]
+  main_halted pending
 }
 
 @test "K10 block: check-run de main sin conclusión (en curso) agota y para" {
@@ -197,6 +206,7 @@ two_prs() { mkpr 50 "scripts/n1.sh"; mkpr 51 "scripts/n2.sh"; review 50 APPROVE 
   run bash "$SCRIPT" run
   [ "$(paste -sd, "$FAKE/merged")" = "50" ]
   [[ "$output" == *"STOP: main 'pending'"* ]]
+  main_halted pending
 }
 
 @test "K4/K8/K10 control: main con todos los check-runs en success deja pasar los dos PR" {
@@ -212,4 +222,17 @@ two_prs() { mkpr 50 "scripts/n1.sh"; mkpr 51 "scripts/n2.sh"; review 50 APPROVE 
   run bash "$SCRIPT" run
   [ "$(paste -sd, "$FAKE/merged")" = "50" ]
   [[ "$output" == *"STOP: main 'fail'"* ]]
+  main_halted fail
+}
+
+# ── Las pruebas pendientes de activar (fallan a propósito) no pueden vivir bajo tests/ ──
+# tests/run-all.sh (fallback FULL de la CI de PR), test-auditor.sh y ci-reliability-gate.sh buscan *.bats
+# de forma recursiva bajo tests/: una suite roja a propósito ahí pondría en rojo cualquier ejecución completa.
+@test "pendientes: ninguna suite marcada PENDIENTE DE ACTIVAR vive bajo tests/" {
+  run bash -c "find tests -name '*.bats' -type f -print0 | xargs -0 grep -l '^# PENDIENTE DE ACTIVAR'"
+  [ -z "$output" ]
+}
+
+@test "pendientes: la suite de inyección en review-register sigue existiendo fuera de tests/" {
+  grep -q '^# PENDIENTE DE ACTIVAR' tests-pending/test-merge-sprint-review-register-injection.bats
 }
