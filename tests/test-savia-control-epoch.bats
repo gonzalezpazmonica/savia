@@ -83,7 +83,7 @@ EOF
 
 @test "AC-8: publish-epoch cierra una PR de época que main ya alcanzó" {
   sc revoke --reason a; sc revoke --reason b
-  echo '[{"number":7,"headRefName":"agent/control-epoch-1","url":"u7"}]' > "$GH_STUB_DIR/prs.json"
+  echo '[{"number":7,"headRefName":"agent/control-epoch-1","url":"u7","isCrossRepository":false}]' > "$GH_STUB_DIR/prs.json"
   origin_put config/control/REVOCATION_EPOCH 1
   run sc publish-epoch; [ "$status" -eq 0 ]
   grep -q '^pr close 7' "$GH_STUB_DIR/calls.log"

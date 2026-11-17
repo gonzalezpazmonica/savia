@@ -29,9 +29,9 @@ import time
 VERSION = 1
 RANK = {"RUNNING": 0, "PAUSED": 1, "QUARANTINED": 2, "REVOKED": 3}
 STOP_MODES = ("PAUSED", "QUARANTINED", "REVOKED")
-ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+ID_RE = re.compile(r"[A-Za-z0-9._-]{1,64}")  # siempre con fullmatch: $ admite un \n final
 EPOCH_RE = re.compile(r"[0-9]{1,9}\n?")  # siempre con fullmatch
-LOGIN_RE = re.compile(r"^[A-Za-z0-9-]{1,39}$")
+LOGIN_RE = re.compile(r"[A-Za-z0-9-]{1,39}")  # siempre con fullmatch
 EPOCH_PATH = "config/control/REVOCATION_EPOCH"
 REMOTE_PATH = "config/control/executors-remote.json"
 OPERATOR_PATH = "config/control/operator.json"
@@ -115,7 +115,7 @@ def valid_scope(s):
     if s == "global":
         return True
     kind, sep, ident = s.partition(":")
-    return bool(sep) and kind in ("executor", "principal", "contract") and bool(ID_RE.match(ident))
+    return bool(sep) and kind in ("executor", "principal", "contract") and bool(ID_RE.fullmatch(ident))
 
 
 def ancestors(full=False):
@@ -311,7 +311,7 @@ class Ctx:
             with open(p, "rb") as f:
                 raw = f.read()
             reg = json.loads(raw)
-            assert isinstance(reg, dict) and all(ID_RE.match(k) and isinstance(v, dict) for k, v in reg.items())
+            assert isinstance(reg, dict) and all(ID_RE.fullmatch(k) and isinstance(v, dict) for k, v in reg.items())
         except (OSError, ValueError, AssertionError):
             raise Fail(2, f"REGISTRY_UNREADABLE: {p}")
         return reg, sha256(raw)
@@ -327,7 +327,7 @@ class Ctx:
         try:
             data = json.loads(content)
             names = data.get("executors", []) if isinstance(data, dict) else data
-            assert isinstance(names, list) and all(isinstance(n, str) and ID_RE.match(n) for n in names)
+            assert isinstance(names, list) and all(isinstance(n, str) and ID_RE.fullmatch(n) for n in names)
         except (ValueError, AssertionError):
             raise Fail(2, f"REMOTE_REGISTRY_UNREADABLE: {REMOTE_PATH} en origin/main")
         return set(names)
@@ -523,7 +523,7 @@ def stop_order(scope, mode, reason, op):
 
 def cmd_check(a):
     for v in (a.executor, a.principal, a.contract):
-        if v is not None and not ID_RE.match(v):
+        if v is not None and not ID_RE.fullmatch(v):
             raise Fail(2, f"ID_INVALID: {v}")
     ctx = Ctx()
     scopes = ["global", f"executor:{a.executor}"]
@@ -692,14 +692,14 @@ def ledger_records():
 
 def known_indeterminate(ctx, scopes):
     """Efectos que un reconcile anterior dejó INDETERMINATE para paradas que siguen abiertas (diario encadenado)."""
-    ids = set()
+    last = {}  # solo cuenta el último reconcile de cada ámbito: uno posterior pudo resolver los inciertos
     for r in ctx.journal or []:
         if r.get("op") == "reconcile":
             for c in r.get("scopes", []):
                 cur = ctx.stops.get(c.get("scope"))
                 if c.get("scope") in scopes and cur and cur["stop_seq"] == c.get("stop_seq"):
-                    ids.update(x for x in c.get("indeterminate", []) if isinstance(x, str))
-    return ids
+                    last[c["scope"]] = {x for x in c.get("indeterminate", []) if isinstance(x, str)}
+    return set().union(*last.values())
 
 
 def covers(scope, rec):
@@ -869,6 +869,7 @@ def verify_pr(ctx, scope, entry):
         assert isinstance(ap, dict) and set(ap) == {"epoch", "stop_seq", "scope", "reason", "accept"}
         assert isinstance(ap["scope"], str) and valid_scope(ap["scope"]) and ap["scope"] == scope
         assert scope_hash(ap["scope"]) == path.rsplit("-", 1)[1][:-5]
+        assert nat(ap["epoch"]) and nat(ap["stop_seq"])  # True o 1.0 no valen por 1
         assert ap["epoch"] == ctx.epoch and ap["stop_seq"] == entry["stop_seq"]
         assert isinstance(ap["accept"], list) and all(isinstance(x, str) for x in ap["accept"])
     except (ValueError, AssertionError, TypeError):
@@ -880,7 +881,7 @@ def verify_pr(ctx, scope, entry):
     rc, op, _ = ctx.git("show", f"origin/main:{OPERATOR_PATH}")
     try:
         login = json.loads(op)["login"] if rc == 0 else None
-        assert isinstance(login, str) and LOGIN_RE.match(login)
+        assert isinstance(login, str) and LOGIN_RE.fullmatch(login)
     except (ValueError, KeyError, TypeError, AssertionError):
         raise Fail(4, f"OPERATOR_UNKNOWN: {OPERATOR_PATH} ausente o inválido en origin/main")
     if not any(isinstance(r, dict) and r.get("type") == "pull_request" for r in main_rules(ctx)):
@@ -1047,7 +1048,8 @@ def cmd_publish_epoch(a):
         return 0
     n = ctx.origin_epoch + 1
     branch = f"agent/control-epoch-{n}"
-    rc, so, se = run(["gh", "pr", "list", "--state", "open", "--json", "number,headRefName,url", "--limit", "200"],
+    rc, so, se = run(["gh", "pr", "list", "--state", "open", "--json", "number,headRefName,url,isCrossRepository",
+                      "--limit", "200"],
                      cwd=ctx.root)
     try:
         prs = json.loads(so) if rc == 0 else None
@@ -1055,6 +1057,8 @@ def cmd_publish_epoch(a):
     except (ValueError, AssertionError):
         raise Fail(2, f"GH_FAILED: gh pr list: {se.strip()[:160]}")
     for p in prs:
+        if not isinstance(p, dict) or p.get("isCrossRepository") is not False:
+            continue  # una PR desde un fork (o sin el dato) no es nuestra: ni se cierra ni cuenta como publicada
         head = str(p.get("headRefName", ""))
         m = re.match(r"^agent/control-epoch-([0-9]{1,9})$", head)
         if m and int(m.group(1)) <= ctx.origin_epoch:
@@ -1126,7 +1130,7 @@ def main(argv):
         if a.cmd == "revoke":
             return stop_order("global", "REVOKED", a.reason, "revoke")
         if a.cmd == "quarantine":
-            if not ID_RE.match(a.executor):
+            if not ID_RE.fullmatch(a.executor):
                 raise Fail(2, f"ID_INVALID: {a.executor}")
             return stop_order(f"executor:{a.executor}", "QUARANTINED", a.reason, "quarantine")
         if a.cmd == "reconcile":

@@ -16,15 +16,28 @@ ledger() { printf '%s\n' "$@" > "$SAVIA_EFFECT_LEDGER"; }
   git init -q "$T/ajeno"
   GIT_DIR="$T/ajeno/.git" GIT_WORK_TREE="$T/ajeno" SAVIA_CONTROL_DIR="$T/vacio" run sc check --executor a
   echo "$output"
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 2 ]; [[ "$output" == *CONTROL_DIR_MISMATCH* ]]
   GIT_DIR="$T/ajeno/.git" GIT_WORK_TREE="$T/ajeno" run sc check --executor a
   [ "$status" -eq 6 ]; [[ "$output" == *REVOKED* ]]
 }
 
-@test "P1-2: GIT_CONFIG_COUNT con core.worktree tampoco redirige" {
+@test "P1-2: GIT_COMMON_DIR ajeno tampoco redirige la marca" {
   sc revoke --reason x
-  GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.worktree GIT_CONFIG_VALUE_0="$T" run sc check --executor a
-  [ "$status" -eq 6 ]
+  git init -q "$T/ajeno"
+  GIT_COMMON_DIR="$T/ajeno/.git" SAVIA_CONTROL_DIR="$T/vacio" run sc check --executor a
+  echo "$output"
+  [ "$status" -eq 2 ]; [[ "$output" == *CONTROL_DIR_MISMATCH* ]]
+}
+
+@test "P1-2: GIT_CONFIG_COUNT/KEY/VALUE no llegan a los git del script" {
+  # remote.origin.url apuntando a un remoto ajeno: si la variable llegase a git, el push iría allí
+  git init -q --bare -b main "$T/ajeno.git"
+  sc revoke --reason x
+  GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.url GIT_CONFIG_VALUE_0="$T/ajeno.git" run sc publish-epoch
+  echo "$output"; [ "$status" -eq 0 ]
+  git -C "$ORIGIN" rev-parse -q --verify refs/heads/agent/control-epoch-1
+  run git -C "$T/ajeno.git" rev-parse -q --verify refs/heads/agent/control-epoch-1
+  [ "$status" -ne 0 ]
 }
 
 @test "P1-2 (negativo): sin variables de Git, el repositorio se resuelve igual que antes" {
@@ -144,4 +157,75 @@ ledger() { printf '%s\n' "$@" > "$SAVIA_EFFECT_LEDGER"; }
   approve executor:a 0 1
   gh_api "repos_owner_repo_pulls_${APPROVAL_PR}_files" "[{\"filename\":\"docs/x.md\",\"previous_filename\":\"docs/y.md\"}]"
   run sc resume --scope executor:a --via-pr; [ "$status" -eq 4 ]; [[ "$output" == *TIER_NOT_4* ]]
+}
+
+# ── P2 de la revisión de seguridad y corrección sobre 9b59a736b ─────────────
+
+@test "security P2-2: un ámbito con salto de línea final no es válido" {
+  run sc pause --scope $'executor:foo\n' --reason x; echo "$output"
+  [ "$status" -eq 2 ]; [[ "$output" == *SCOPE_INVALID* ]]
+  run sc check --executor a; [ "$status" -eq 0 ]
+}
+
+@test "security P2-2 (negativo): el mismo ámbito sin salto de línea sí vale" {
+  run sc pause --scope executor:foo --reason x; [ "$status" -eq 0 ]
+  run sc check --executor foo; [ "$status" -eq 6 ]
+}
+
+@test "security P2-2: un login de operadora con salto de línea final es OPERATOR_UNKNOWN" {
+  origin_put config/control/operator.json '{"login":"operadora\n"}'
+  gh_api repos_owner_repo_rules_branches_main '[{"type":"pull_request"}]'
+  sc pause --scope executor:a --reason x; sc reconcile
+  approve executor:a 0 1
+  run sc resume --scope executor:a --via-pr; echo "$output"
+  [ "$status" -eq 4 ]; [[ "$output" == *OPERATOR_UNKNOWN* ]]
+}
+
+@test "security P2-3: publish-epoch no cierra ni da por suya una PR de época desde un fork" {
+  sc revoke --reason a; sc revoke --reason b
+  origin_put config/control/REVOCATION_EPOCH 1
+  echo '[{"number":7,"headRefName":"agent/control-epoch-1","url":"u7","isCrossRepository":true},
+         {"number":8,"headRefName":"agent/control-epoch-2","url":"u8","isCrossRepository":true}]' > "$GH_STUB_DIR/prs.json"
+  run sc publish-epoch; echo "$output"; [ "$status" -eq 0 ]
+  run grep -c '^pr close' "$GH_STUB_DIR/calls.log"; [ "$output" = 0 ]
+  [ "$(cat "$GH_STUB_DIR/created")" = 1 ]
+  [ "$(git -C "$ORIGIN" show agent/control-epoch-2:config/control/REVOCATION_EPOCH)" = 2 ]
+}
+
+@test "security P2-3 (negativo): la PR propia de la misma rama sí cuenta como ALREADY_OPEN" {
+  sc revoke --reason a
+  echo '[{"number":9,"headRefName":"agent/control-epoch-1","url":"u9","isCrossRepository":false}]' > "$GH_STUB_DIR/prs.json"
+  run sc publish-epoch; [ "$status" -eq 0 ]; [[ "$output" == *ALREADY_OPEN* ]]
+  [ ! -e "$GH_STUB_DIR/created" ]
+}
+
+@test "security P2-5: una aprobación con epoch true o stop_seq 1.0 es APPROVAL_INVALID" {
+  operator_setup
+  sc revoke --reason r; sc reconcile
+  S=$(jget "$SAVIA_CONTROL_DIR/state.json" 'd["stops"]["global"]["stop_seq"]')
+  P="config/control/resume/1-$S-$(printf global | sha256sum | cut -c1-16).json"
+  origin_put "$P" "{\"epoch\":true,\"stop_seq\":$S,\"scope\":\"global\",\"reason\":\"ok\",\"accept\":[]}"
+  run sc resume --via-pr; echo "$output"; [ "$status" -eq 4 ]; [[ "$output" == *APPROVAL_INVALID* ]]
+  origin_put "$P" "{\"epoch\":1,\"stop_seq\":$S.0,\"scope\":\"global\",\"reason\":\"ok\",\"accept\":[]}"
+  run sc resume --via-pr; echo "$output"; [ "$status" -eq 4 ]; [[ "$output" == *APPROVAL_INVALID* ]]
+}
+
+@test "correctness P2-1: un incierto que un reconcile posterior resolvió no bloquea si el ledger desaparece" {
+  ledger '{"effect_id":"e1","state":"DISPATCHED","executor":"a"}'
+  sc pause --scope executor:a --reason x
+  run sc reconcile; [ "$status" -eq 5 ]
+  ledger '{"effect_id":"e1","state":"SUCCEEDED","receipt":"r1","executor":"a"}'
+  run sc reconcile; [ "$status" -eq 0 ]
+  mv "$SAVIA_EFFECT_LEDGER" "$T/ledger.guardado"
+  run sc reconcile; echo "$output"; [ "$status" -eq 0 ]
+}
+
+@test "correctness P2-1 (negativo): si el último reconcile lo dejó incierto, sigue bloqueando" {
+  ledger '{"effect_id":"e1","state":"SUCCEEDED","receipt":"r1","executor":"a"}'
+  sc pause --scope executor:a --reason x
+  run sc reconcile; [ "$status" -eq 0 ]
+  ledger '{"effect_id":"e1","state":"DISPATCHED","executor":"a"}'
+  run sc reconcile; [ "$status" -eq 5 ]
+  mv "$SAVIA_EFFECT_LEDGER" "$T/ledger.guardado"
+  run sc reconcile; [ "$status" -eq 2 ]; [[ "$output" == *LEDGER_UNREADABLE* ]]
 }

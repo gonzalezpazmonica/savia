@@ -53,7 +53,7 @@ if a[:2] == ["pr", "create"]:
     prs = load(prs_p, [])
     c = int(load(created_p, 0)) + 1
     n = 100 + c
-    prs.append({"number": n, "headRefName": head, "url": f"https://example.invalid/pr/{n}"})
+    prs.append({"number": n, "headRefName": head, "url": f"https://example.invalid/pr/{n}", "isCrossRepository": False})
     json.dump(prs, open(prs_p, "w"))
     json.dump(c, open(created_p, "w"))
     print(f"https://example.invalid/pr/{n}")
