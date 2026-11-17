@@ -1,3 +1,7 @@
+---
+context_tier: L2
+token_budget: 855
+---
 # Regla: guards de seguridad con `blocking: true` (D23-5)
 
 > Decisión de la operadora D-T2 (2026-10-03). Fuente de verdad de la lista:
