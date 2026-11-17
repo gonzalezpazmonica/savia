@@ -26,7 +26,9 @@ EOF
   printf 'name: ci\non:\n  push:\n    branches: [main]\n  pull_request:\njobs: {}\n' > "$T/repo/.github/workflows/ci.yml"
   git -C "$T/repo" add -A
   git -C "$T/repo" -c user.name=t -c user.email=t@t.invalid commit -q -m init
-  git -C "$T/repo" remote add origin "$T/origin.git"
+  # origin declara el repo org/savia; insteadOf lo resuelve al bare local (nunca toca GitHub).
+  git -C "$T/repo" remote add origin "https://github.com/org/savia.git"
+  git -C "$T/repo" config "url.$T/origin.git.insteadOf" "https://github.com/org/savia.git"
   git -C "$T/repo" push -q origin main
   git -C "$T/repo" fetch -q origin
   export MERGE_SPRINT_GIT_ROOT="$T/repo"
@@ -49,9 +51,10 @@ plan_at() { run bash "$SCRIPT" policy-plan --borrador "$1" --ahora "$2"; }
 
 sin_politica() { [ -z "$(ls -A "$MERGE_SPRINT_HOME/policy" 2>/dev/null)" ]; }
 
-rechaza() {  # rechaza <expresión> [ahora]
-  plan_at "$(borrador "$1")" "${2:-2026-11-10T22:00:00Z}"
+rechaza() {  # rechaza <expresión> <motivo esperado> [ahora]
+  plan_at "$(borrador "$1")" "${3:-2026-11-10T22:00:00Z}"
   [ "$status" -eq 2 ] || { echo "esperaba rechazo de: $1 (status $status) $output"; return 1; }
+  [[ "$output" == *"policy-plan: rechazada: "*"$2"* ]] || { echo "rechazo de $1 por otro motivo: $output"; return 1; }
   sin_politica || { echo "escribió la política pese al rechazo: $1"; return 1; }
 }
 
@@ -89,60 +92,62 @@ EOF
 }
 
 @test "AC-1 tiers vacío o con 3 o 4 → rechazada" {
-  rechaza 'd["tiers"]=[]'
-  rechaza 'd["tiers"]=[1,3]'
-  rechaza 'd["tiers"]=[4]'
+  rechaza 'd["tiers"]=[]' 'tiers debe ser'
+  rechaza 'd["tiers"]=[1,3]' 'tiers debe ser'
+  rechaza 'd["tiers"]=[4]' 'tiers debe ser'
 }
 
 @test "AC-1 boundary de ventana explícita: 12 h exactas se aceptan; 12 h y 1 s y 18 h se rechazan" {
-  rechaza 'd["not_after"]="2026-11-11T10:00:01Z"'
-  rechaza 'd["not_after"]="2026-11-11T16:00:00Z"'
+  rechaza 'd["not_after"]="2026-11-11T10:00:01Z"' 'not_after explícito da una ventana'
+  rechaza 'd["not_after"]="2026-11-11T16:00:00Z"' 'not_after explícito da una ventana'
   plan_at "$(borrador 'd["not_after"]="2026-11-11T10:00:00Z"')" 2026-11-10T22:00:00Z
   [ "$status" -eq 0 ]
 }
 
 @test "AC-1 boundary de not_before explícito: 1 h exacta se acepta; 1 h y 1 s y una semana se rechazan" {
-  rechaza 'd["not_before"]="2026-11-10T23:00:01Z"'
-  rechaza 'd["not_before"]="2026-11-17T22:00:00Z"'
+  rechaza 'd["not_before"]="2026-11-10T23:00:01Z"' 'en más de 1 h'
+  rechaza 'd["not_before"]="2026-11-17T22:00:00Z"' 'en más de 1 h'
   plan_at "$(borrador 'd["not_before"]="2026-11-10T23:00:00Z"')" 2026-11-10T22:00:00Z
   [ "$status" -eq 0 ]
   [[ "$output" == *'"2026-11-10T23:00:00Z", "2026-11-11T08:00:00Z"'* ]]
 }
 
 @test "AC-1 max_merges ausente, > 40 o < 1 → rechazada; 40 se acepta" {
-  rechaza 'del d["max_merges"]'
-  rechaza 'd["max_merges"]=41'
-  rechaza 'd["max_merges"]=0'
+  rechaza 'del d["max_merges"]' 'max_merges es obligatorio'
+  rechaza 'd["max_merges"]=41' 'max_merges debe ser'
+  rechaza 'd["max_merges"]=0' 'max_merges debe ser'
   plan_at "$(borrador 'd["max_merges"]=40')" 2026-11-10T22:00:00Z
   [ "$status" -eq 0 ]
 }
 
 @test "AC-1 max_parks_in_row > 3 y max_reviews_per_pr > 4 → rechazada" {
-  rechaza 'd["max_parks_in_row"]=4'
-  rechaza 'd["max_reviews_per_pr"]=5'
+  rechaza 'd["max_parks_in_row"]=4' 'max_parks_in_row debe ser'
+  rechaza 'd["max_reviews_per_pr"]=5' 'max_reviews_per_pr debe ser'
 }
 
 @test "AC-1 reviewers: menos de dos distintos o con el orquestador → rechazada" {
-  rechaza 'd["reviewers"]=["revisora-a"]'
-  rechaza 'd["reviewers"]=["revisora-a","revisora-a"]'
-  rechaza 'd["reviewers"]=["revisora-a","savia-orchestrator"]'
-  MERGE_SPRINT_ORCHESTRATOR="orq-x" rechaza 'd["reviewers"]=["orq-x","revisora-a"]'
+  rechaza 'd["reviewers"]=["revisora-a"]' 'al menos dos reviewers'
+  rechaza 'd["reviewers"]=["revisora-a","revisora-a"]' 'ids distintos'
+  rechaza 'd["reviewers"]=["revisora-a","savia-orchestrator"]' 'orquestador no puede'
+  MERGE_SPRINT_ORCHESTRATOR="orq-x" rechaza 'd["reviewers"]=["orq-x","revisora-a"]' 'orquestador no puede'
+  # La variable amplía la lista: las de siempre siguen prohibidas.
+  MERGE_SPRINT_ORCHESTRATOR="orq-x" rechaza 'd["reviewers"]=["savia-orquestadora","revisora-a"]' 'orquestador no puede'
 }
 
 @test "AC-1 universe frozen sin lista → rechazada; con lista se acepta" {
-  rechaza 'd["universe"]="frozen"'
+  rechaza 'd["universe"]="frozen"' 'universe frozen sin lista'
   plan_at "$(borrador 'd["universe"]="frozen"; d["frozen_prs"]=[10,11]')" 2026-11-10T22:00:00Z
   [ "$status" -eq 0 ]
 }
 
 @test "AC-1 required_checks vacío en la protección viva → rechazada" {
   : > "$FAKE_REQUIRED"
-  rechaza 'pass'
+  rechaza 'pass' 'required_checks vacío'
 }
 
 @test "AC-1 boundary de main_pending_timeout: < 5 o > 60 → rechazada; 5 y 60 se aceptan" {
-  rechaza 'd["main_pending_timeout"]=4'
-  rechaza 'd["main_pending_timeout"]=61'
+  rechaza 'd["main_pending_timeout"]=4' 'main_pending_timeout debe ser'
+  rechaza 'd["main_pending_timeout"]=61' 'main_pending_timeout debe ser'
   plan_at "$(borrador 'd["main_pending_timeout"]=5')" 2026-11-10T22:00:00Z
   [ "$status" -eq 0 ]
   plan_at "$(borrador 'd["main_pending_timeout"]=60')" 2026-11-10T22:00:00Z
@@ -155,7 +160,7 @@ EOF
   printf 'on:\n  push:\n    branches: [develop]\njobs: {}\n' > "$T/repo/.github/workflows/dev.yml"
   git -C "$T/repo" add -A && git -C "$T/repo" -c user.name=t -c user.email=t@t.invalid commit -q -m filtro
   git -C "$T/repo" push -q origin main && git -C "$T/repo" fetch -q origin
-  rechaza 'pass'
+  rechaza 'pass' 'ningún workflow sin filtro'
   # Con un workflow sin filtro (`on: push`) vuelve a aceptarse.
   printf 'on: push\njobs: {}\n' > "$T/repo/.github/workflows/all.yml"
   git -C "$T/repo" add -A && git -C "$T/repo" -c user.name=t -c user.email=t@t.invalid commit -q -m todo
@@ -165,8 +170,8 @@ EOF
 }
 
 @test "AC-1 claves desconocidas o include vacío → rechazada" {
-  rechaza 'd["extend"]=True'
-  rechaza 'd["repos"][0]["include"]=[]'
+  rechaza 'd["extend"]=True' 'claves desconocidas en el borrador'
+  rechaza 'd["repos"][0]["include"]=[]' 'include: lista'
 }
 
 @test "AC-8 editar cualquier campo del fichero de política → policy-verify da anomalía por digest (5)" {
@@ -191,8 +196,37 @@ EOF
 @test "AC-8 no existe subcomando para ampliar la política" {
   for s in policy-extend policy-prorrogar policy-edit policy-grant; do
     run bash "$SCRIPT" "$s"
-    [ "$status" -ne 0 ]
+    [ "$status" -eq 1 ] || { echo "$s: status $status"; return 1; }
+    [[ "$output" == *"merge-sprint: uso: "* ]] || { echo "$s: $output"; return 1; }
   done
+}
+
+@test "plan: el clon raíz ha de ser del repo declarado; repo o base fuera de la lista blanca antes de la red" {
+  rechaza 'd["repos"][0]["repo"]="org/otro"' 'el clon'
+  rechaza 'd["repos"][0]["repo"]="org/sav ia"' 'repo fuera de la lista blanca'
+  rechaza 'd["repos"][0]["base"]="-main"' 'base no válida'
+  rechaza 'd["repos"][0]["dir"]="/tmp"' 'claves desconocidas en un repo'
+  # Con repo o base inválidos no se llega a consultar la API.
+  cat > "$T/bin/gh" <<EOF
+#!/usr/bin/env bash
+echo "\$*" >> "$T/gh.log"; exit 1
+EOF
+  rechaza 'd["repos"][0]["repo"]="../x"' 'repo fuera de la lista blanca'
+  [ ! -s "$T/gh.log" ]
+}
+
+@test "plan: trae origin/<base> antes de congelar los blobs (sin referencia vieja)" {
+  git clone -q -b main "$T/origin.git" "$T/otro"
+  echo "# nuevo" > "$T/otro/scripts/merge-sprint.sh"
+  git -C "$T/otro" -c user.name=t -c user.email=t@t.invalid commit -qam nuevo
+  git -C "$T/otro" push -q origin main
+  nuevo=$(git -C "$T/otro" rev-parse HEAD:scripts/merge-sprint.sh)
+  viejo=$(git -C "$T/repo" rev-parse origin/main:scripts/merge-sprint.sh)
+  [ "$nuevo" != "$viejo" ]
+  plan_at "$T/base.json" 2026-11-10T22:00:00Z
+  [ "$status" -eq 0 ]
+  f=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["politica"])' "$output")
+  [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["runner_blob"])' "$f")" = "$nuevo" ]
 }
 
 @test "policy-verify sin registro de petición ni recibo → sin grant (3), fail-closed" {

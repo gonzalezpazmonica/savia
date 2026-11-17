@@ -118,28 +118,49 @@ class AC12bRecibo(Base):
         self.assertEqual(r["unidad"], "politica@" + mp.digest(self.pol_obj))
         self.assertEqual(r["ventana_efectiva"], [fmt(NB), fmt(NA)])
 
+    def assertSinGrant(self, r, condicion, motivo):
+        """Código 3 por el motivo esperado, no por una excepción cualquiera (cajón de sastre)."""
+        self.assertCodigo(r, mp.SIN_GRANT)
+        self.assertEqual(r.get("condicion"), condicion, r)
+        self.assertIn(motivo, r.get("motivo", ""), r)
+
     def test_sin_merge_no_hay_grant_aunque_exista_el_fichero(self):
-        self.assertCodigo(self.v(self.peticion()), mp.SIN_GRANT)
+        self.assertSinGrant(self.v(self.peticion()), "SE-512", "sin PR de aprobación fusionada")
 
     def test_sin_firma_de_webflow(self):
         pet = self.peticion()
         self.aprobar_pet(pet, firma=None)
-        self.assertCodigo(self.v(pet), mp.SIN_GRANT)
+        self.assertSinGrant(self.v(pet), "R2.3", "sin firma válida")
 
     def test_firma_de_otra_clave(self):
         pet = self.peticion()
         self.aprobar_pet(pet, firma="otra")
-        self.assertCodigo(self.v(pet), mp.SIN_GRANT)
+        self.assertSinGrant(self.v(pet), "R2.3", "sin firma válida")
 
     def test_autor_bot(self):
         pet = self.peticion()
         self.aprobar_pet(pet, autor=fx.BOT)
-        self.assertCodigo(self.v(pet), mp.SIN_GRANT)
+        self.assertSinGrant(self.v(pet), "R2.4", "autora")
 
     def test_pr_con_dos_ficheros(self):
         pet = self.peticion()
         self.aprobar_pet(pet, extra="aprobaciones/otro.txt")
-        self.assertCodigo(self.v(pet), mp.SIN_GRANT)
+        self.assertSinGrant(self.v(pet), "R2.5", "exactamente un fichero")
+
+    def test_otra_peticion_fusionada_de_la_misma_politica_no_vale_por_la_registrada(self):
+        """El merge que cuenta es el del artefacto de la petición registrada, no otro del mismo id."""
+        pet = self.peticion()
+        otra = self.peticion()
+        self.assertNotEqual(otra["ruta"], pet["ruta"])
+        self.aprobar_pet(otra)
+        self.assertSinGrant(self.v(pet), "SE-512", "sin PR de aprobación fusionada")
+        self.assertCodigo(self.v(otra), mp.GRANT)
+
+    def test_ruta_de_la_peticion_de_otra_politica(self):
+        pet = self.peticion()
+        self.aprobar_pet(pet)
+        ajena = {**pet, "ruta": pet["ruta"].replace("0123456789abcdef", "fedcba9876543210")}
+        self.assertSinGrant(self.v(ajena), "SE-512", "no es de esta política")
 
     def test_tipo_no_habilitado_en_la_configuracion(self):
         cfg = {**self.cfg, "tipos": ["savia-merge"]}
@@ -176,13 +197,14 @@ class AC12bRecibo(Base):
     def test_merge_antes_de_emitida(self):
         pet = self.peticion(emitida=NB - 30 * MIN)
         self.aprobar_pet(pet, merge=NB - 40 * MIN)
-        self.assertCodigo(self.v(pet), mp.SIN_GRANT)
+        self.assertSinGrant(self.v(pet), "R2.7", "fecha del merge")
 
     def test_merge_posterior_a_not_after(self):
         pet = self.peticion()
         self.aprobar_pet(pet, merge=NA + MIN)
-        self.assertCodigo(self.v(pet, ahora=NA + 2 * MIN), mp.SIN_GRANT)
-        self.assertCodigo(self.v(pet, ahora=NB + H), mp.SIN_GRANT)
+        self.assertSinGrant(self.v(pet, ahora=NA + 2 * MIN), "R2.7", "fecha del merge")
+        # Dentro de la ventana pero antes del merge (08:01): el suelo monótono ya lo impide.
+        self.assertSinGrant(self.v(pet, ahora=NB + H), "R2.7", "suelo monótono")
 
     def _artefacto_a_mano(self, **cambios):
         ruta, art = mp.nuevo_artefacto(self.pol_obj, NB - 30 * MIN)
@@ -223,18 +245,45 @@ class AC12bRecibo(Base):
             f.write(json.dumps({"nonce": pet["artefacto"]["nonce"], "unidad": "politica@" + "f" * 64}) + "\n")
         self.assertCodigo(self.v(pet), mp.MANIPULADO)
 
-    def _pr_alterada(self, campo):
+    def _pr_alterada(self, campo, valor):
         pet = self.peticion()
-        self.aprobar_pet(pet, **{campo: pet[campo] + " "})
+        self.assertNotEqual(valor, pet[campo])
+        self.aprobar_pet(pet, **{campo: valor})
+        r = self.v(pet)
+        self.assertCodigo(r, mp.SIN_GRANT)
+        self.assertEqual(r["condicion"], "SE-512")
+        self.assertIn("título o descripción", r["motivo"])
+
+    def test_titulo_distinto_del_generado(self):
+        pet = self.peticion()
+        self._pr_alterada("titulo", pet["titulo"].replace("máximo 12", "máximo 40"))
+
+    def test_descripcion_distinta_de_la_generada(self):
+        pet = self.peticion()
+        self._pr_alterada("cuerpo", pet["cuerpo"].replace("12 fusiones", "40 fusiones"))
+
+    def test_descripcion_con_una_linea_de_mas(self):
+        pet = self.peticion()
+        self._pr_alterada("cuerpo", pet["cuerpo"] + "Y también scripts/**.\n")
+
+    def test_cuerpo_null_no_da_grant(self):
+        pet = self.peticion()
+        self.aprobar_pet(pet)
+        with open(self.pulls) as f:
+            pr = json.load(f)
+        pr[0]["body"] = None
+        with open(self.pulls, "w") as f:
+            json.dump(pr, f)
         r = self.v(pet)
         self.assertCodigo(r, mp.SIN_GRANT)
         self.assertIn("título o descripción", r["motivo"])
 
-    def test_titulo_distinto_del_generado(self):
-        self._pr_alterada("titulo")
-
-    def test_descripcion_distinta_de_la_generada(self):
-        self._pr_alterada("cuerpo")
+    def test_normalizacion_documentada_crlf_y_blancos_finales_da_grant(self):
+        """GitHub puede devolver CRLF o recortar el salto final: solo eso se normaliza."""
+        pet = self.peticion()
+        self.aprobar_pet(pet, titulo=pet["titulo"] + " ",
+                         cuerpo=pet["cuerpo"].rstrip("\n").replace("\n", "\r\n") + "  \r\n")
+        self.assertCodigo(self.v(pet), mp.GRANT)
 
     def test_pr_ilegible_en_github_no_da_grant(self):
         pet = self.peticion()
@@ -253,8 +302,13 @@ class AC12bRecibo(Base):
     def test_configuracion_de_aprobacion_cambiada_es_anomalia(self):
         pet = self.peticion()
         self.aprobar_pet(pet)
+        vacio = os.path.join(self.tmp, "libro-vacio")
         for cambio in ({"autor": {"email": "otra@fixture.invalid"}}, {"genesis": "9" * 40},
-                       {"huella_webflow": self.fpr_otra}):
+                       {"huella_webflow": self.fpr_otra},
+                       # Un libro vacío «resetearía» el uso único; otro repo cambiaría de dónde se
+                       # leen el título y el cuerpo de la PR.
+                       {"libro": vacio}, {"repo_aprobaciones": "org/otro"},
+                       {"tipos": ["savia-politica"]}):
             with self.subTest(cambio):
                 r = self.v(pet, cfg={**self.cfg, **cambio})
                 self.assertCodigo(r, mp.ANOMALIA)
@@ -422,12 +476,9 @@ class Peticion(Base):
             with self.subTest(cambio), self.assertRaises(mp.ar.Rechazo):
                 mp.ar.validar_objeto("savia-politica", politica(**cambio))
 
-    def test_tipo_solo_habilitado_en_la_copia_del_consumidor(self):
-        compartido = fx.ar
-        self.assertNotIn("savia-politica", compartido.TIPOS)
-        self.assertIn("savia-politica", mp.ar.TIPOS)
-        self.assertEqual(mp.ar.generar_resumen("savia-merge", {"repo": "o/r", "prs": [{"numero": 1, "head_sha": "a" * 40}]}),
-                         compartido.generar_resumen("savia-merge", {"repo": "o/r", "prs": [{"numero": 1, "head_sha": "a" * 40}]}))
+    def test_paridad_de_los_tipos_de_se488_en_la_copia(self):
+        obj = {"repo": "o/r", "prs": [{"numero": 1, "head_sha": "a" * 40}]}
+        self.assertEqual(mp.ar.generar_resumen("savia-merge", obj), fx.ar.generar_resumen("savia-merge", obj))
 
     def test_abrir_pr_commitea_con_fecha_emitida_y_abre_la_pr(self):
         remoto = os.path.join(self.tmp, "remoto.git")
@@ -451,6 +502,165 @@ class Peticion(Base):
         with open(log) as f:
             llamada = f.read()
         self.assertIn("pr create -R org/aprobaciones --base main --head " + rama, llamada)
+        # Una segunda apertura con la misma rama no la pisa: falla.
+        with self.assertRaises(subprocess.CalledProcessError):
+            mp.abrir_pr(pet, clon, "org/aprobaciones")
+
+
+class RequestCLI(unittest.TestCase):
+    """policy-request: validaciones antes de cualquier efecto y una sola petición por política."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.home = os.path.join(self.tmp, "home")
+        self.fp, self.fc = os.path.join(self.tmp, "p.json"), os.path.join(self.tmp, "c.json")
+        with open(self.fp, "w") as f:
+            f.write(mp.canonico(politica()))
+        self.cfg({"repo_aprobaciones": "org/aprobaciones"})
+        self.preq = os.path.join(self.home, "policy", "0123456789abcdef.request.json")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def cfg(self, c):
+        with open(self.fc, "w") as f:
+            json.dump(c, f)
+
+    def req(self, *extra):
+        return subprocess.run([sys.executable, SCRIPT, "--home", self.home, "request", "--politica", self.fp,
+                               "--aprobacion", self.fc, "--ahora", fmt(NB - 30 * MIN), *extra],
+                              capture_output=True, text=True)
+
+    def test_segunda_peticion_de_la_misma_politica_rechazada_sin_pisar_la_primera(self):
+        p = self.req()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        with open(self.preq) as f:
+            primera = f.read()
+        p = self.req()
+        self.assertEqual(p.returncode, 2, p.stdout)
+        self.assertIn("ya hay una petición", p.stderr)
+        with open(self.preq) as f:
+            self.assertEqual(f.read(), primera)
+
+    def test_abrir_sin_clon_rechazada_sin_escribir_la_peticion(self):
+        p = self.req("--abrir")
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("--abrir exige --clon", p.stderr)
+        self.assertFalse(os.path.exists(self.preq))
+
+    def test_abrir_que_falla_da_2_sin_traceback_ni_peticion(self):
+        p = self.req("--abrir", "--clon", os.path.join(self.tmp, "no-existe"))
+        self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertIn("no se pudo abrir la PR", p.stderr)
+        self.assertNotIn("Traceback", p.stderr)
+        self.assertFalse(os.path.exists(self.preq))
+
+    def test_configuracion_que_no_es_objeto_da_2_sin_traceback(self):
+        self.cfg([1, 2])
+        p = self.req()
+        self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertNotIn("Traceback", p.stderr)
+        self.assertFalse(os.path.exists(self.preq))
+
+
+class FiltrosDeRamaDeGitHub(unittest.TestCase):
+    """push_sin_filtro con la semántica de GitHub: `*` no cruza `/`, `!` niega, lo raro no cuenta."""
+
+    def test_asterisco_simple_no_cruza_barra(self):
+        self.assertFalse(mp.push_sin_filtro({"push": {"branches": ["*"]}}, "release/main"))
+        self.assertTrue(mp.push_sin_filtro({"push": {"branches": ["*"]}}, "main"))
+        self.assertTrue(mp.push_sin_filtro({"push": {"branches": ["**"]}}, "release/main"))
+
+    def test_negacion_gana_el_ultimo(self):
+        self.assertFalse(mp.push_sin_filtro({"push": {"branches": ["*", "!main"]}}, "main"))
+        self.assertTrue(mp.push_sin_filtro({"push": {"branches": ["!main", "main"]}}, "main"))
+
+    def test_branches_ignore(self):
+        self.assertFalse(mp.push_sin_filtro({"push": {"branches-ignore": ["ma*"]}}, "main"))
+        self.assertTrue(mp.push_sin_filtro({"push": {"branches-ignore": ["dev/*"]}}, "main"))
+
+    def test_sintaxis_no_interpretada_no_cuenta_nunca(self):
+        """Fail-closed en los dos sentidos: ni como coincidencia ni como «no ignorada»."""
+        for on in ({"push": {"branches": ["ma?n"]}}, {"push": {"branches": ["[m]ain"]}},
+                   {"push": {"branches-ignore": ["ma?n"]}}, {"push": {"branches-ignore": ["!main"]}}):
+            with self.subTest(on):
+                self.assertFalse(mp.push_sin_filtro(on, "main"))
+
+
+class Orquestadores(unittest.TestCase):
+    def test_la_variable_amplia_la_lista_sin_desprohibir_a_las_de_siempre(self):
+        viejo = os.environ.get("MERGE_SPRINT_ORCHESTRATOR")
+        os.environ["MERGE_SPRINT_ORCHESTRATOR"] = "orq-x"
+        try:
+            for rv in (["revisora-a", "savia-orquestadora"], ["revisora-a", "savia-orchestrator"],
+                       ["orq-x", "revisora-a"]):
+                with self.subTest(rv), self.assertRaises(mp.Rechazada):
+                    mp.validar(politica(reviewers=rv))
+            mp.validar(politica())
+        finally:
+            if viejo is None:
+                os.environ.pop("MERGE_SPRINT_ORCHESTRATOR", None)
+            else:
+                os.environ["MERGE_SPRINT_ORCHESTRATOR"] = viejo
+
+
+COMPROBAR_AISLAMIENTO = r'''
+import hashlib, importlib.util, sys
+consumidor_py, compartido_py = sys.argv[1], sys.argv[2]
+def cargar(nombre, ruta, registrar):
+    spec = importlib.util.spec_from_file_location(nombre, ruta)
+    mod = importlib.util.module_from_spec(spec)
+    if registrar:
+        sys.modules[nombre] = mod
+    spec.loader.exec_module(mod)
+    return mod
+huella = lambda: hashlib.sha256(open(compartido_py, "rb").read()).hexdigest()
+antes = huella()
+# Otro consumidor ya tiene cargado el verificador compartido, con su nombre canónico.
+otro = cargar("approval_receipt", compartido_py, registrar=True)
+tipos, validar, ruta = otro.TIPOS, otro.validar_objeto, otro.RE_RUTA
+c = cargar("consumidor_se512", consumidor_py, registrar=False)
+assert "savia-politica" in c.ar.TIPOS, "el consumidor no habilitó el tipo"
+assert c.ar is not otro, "el consumidor reutiliza el módulo de otro consumidor"
+assert otro.TIPOS == tipos and "savia-politica" not in otro.TIPOS, "mutó el módulo de otro consumidor"
+assert otro.validar_objeto is validar and otro.RE_RUTA is ruta, "mutó funciones del módulo de otro consumidor"
+for nombre, m in list(sys.modules.items()):
+    if m is not c.ar and "savia-politica" in getattr(m, "TIPOS", ()):
+        raise AssertionError(f"tipo visible en el módulo {nombre}")
+limpio = cargar("approval_receipt_limpio", compartido_py, registrar=False)
+assert "savia-politica" not in limpio.TIPOS, "el fichero compartido trae el tipo"
+assert huella() == antes, "el fichero compartido cambió"
+print("AISLADO")
+'''
+
+
+class AislamientoDelTipo(unittest.TestCase):
+    """El tipo `savia-politica` existe solo en la copia del consumidor (en un proceso limpio)."""
+
+    def _comprobar(self, consumidor, compartido):
+        return subprocess.run([sys.executable, "-c", COMPROBAR_AISLAMIENTO, consumidor, compartido],
+                              capture_output=True, text=True)
+
+    def test_tipo_solo_habilitado_en_la_copia_del_consumidor(self):
+        p = self._comprobar(SCRIPT, os.path.join(ROOT, "scripts", "approval-receipt.py"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("AISLADO", p.stdout)
+
+    def test_la_comprobacion_detecta_un_consumidor_que_reutiliza_el_modulo_compartido(self):
+        """Mutante: cargar_verificador devuelve el módulo ya importado por otro consumidor."""
+        with open(SCRIPT) as f:
+            src = f.read()
+        original = "def cargar_verificador():\n"
+        self.assertIn(original, src)
+        mutante = src.replace(original, original + '    if "approval_receipt" in sys.modules:\n'
+                                                   '        return sys.modules["approval_receipt"]\n', 1)
+        with tempfile.TemporaryDirectory() as d:
+            shutil.copy(os.path.join(ROOT, "scripts", "approval-receipt.py"), d)
+            with open(os.path.join(d, "merge-sprint-policy.py"), "w") as f:
+                f.write(mutante)
+            p = self._comprobar(os.path.join(d, "merge-sprint-policy.py"), os.path.join(d, "approval-receipt.py"))
+        self.assertNotEqual(p.returncode, 0, p.stdout)
+        self.assertIn("reutiliza el módulo", p.stderr)
 
 
 class Entorno(Base):

@@ -20,7 +20,6 @@ cambiada). Ante cualquier duda: sin grant (fail-closed).
 """
 import argparse
 import datetime as dt
-import fnmatch
 import hashlib
 import importlib.util
 import json
@@ -35,6 +34,7 @@ CAMPOS = {"kind", "id", "not_before", "not_after", "repos", "tiers", "max_merges
           "max_parks_in_row", "universe", "frozen_prs", "reviewers", "max_reviews_per_pr",
           "runner_blob", "classifier_blob", "f5_blob", "resolver_blob", "main_pending_timeout"}
 CAMPOS_REPO = {"repo", "base", "include", "exclude", "required_checks"}
+CLAVES_REPO_BORRADOR = {"repo", "base", "include", "exclude"}
 MAX_VENTANA = dt.timedelta(hours=12)
 MAX_LATENCIA = dt.timedelta(hours=1)        # «sin políticas latentes»
 TECHO_MERGES, TECHO_PARKS, TECHO_REVIEWS = 40, 3, 4
@@ -60,9 +60,14 @@ class Rechazada(Exception):
     pass
 
 
+ORQUESTADORES = {"savia-orchestrator", "savia-orquestadora"}
+
+
 def orquestadores():
-    return set(os.environ.get("MERGE_SPRINT_ORCHESTRATOR",
-                              "savia-orchestrator savia-orquestadora").split())
+    """Ids que nunca pueden ser reviewers: los de siempre más los de MERGE_SPRINT_ORCHESTRATOR.
+
+    La variable amplía la lista, no la sustituye (no puede «desprohibir» a nadie)."""
+    return ORQUESTADORES | set(os.environ.get("MERGE_SPRINT_ORCHESTRATOR", "").split())
 
 
 # ---------------------------------------------------------------- R1: forma canónica
@@ -198,8 +203,37 @@ def blob_en(d, base, ruta):
     return p.stdout.strip()
 
 
-def _rama_casa(patrones, base):
-    return any(isinstance(p, str) and fnmatch.fnmatchcase(base, p) for p in patrones)
+RE_GLOB_SIMPLE = re.compile(r"^[A-Za-z0-9._/*-]+$")
+
+
+def _glob_gh(patron):
+    """Regex de un filtro de ramas de GitHub con solo `*` (no cruza `/`) y `**` (cruza `/`).
+
+    None si el patrón usa sintaxis que aquí no se interpreta (`?`, `+`, `[]`…): el llamador
+    lo trata como desconocido, nunca como coincidencia ni como no coincidencia."""
+    if not isinstance(patron, str) or not RE_GLOB_SIMPLE.fullmatch(patron):
+        return None
+    trozos = re.split(r"(\*\*|\*)", patron)
+    return re.compile("".join(".*" if t == "**" else "[^/]*" if t == "*" else re.escape(t)
+                              for t in trozos))
+
+
+def _rama_casa(patrones, base, negacion_ok):
+    """True/False según los filtros de GitHub (gana el último que casa; `!` niega).
+    None si algún patrón no se sabe interpretar."""
+    if not isinstance(patrones, list):
+        patrones = [patrones]
+    casa = False
+    for p in patrones:
+        neg = isinstance(p, str) and p.startswith("!")
+        if neg and not negacion_ok:
+            return None
+        rx = _glob_gh(p[1:] if neg else p)
+        if rx is None:
+            return None
+        if rx.fullmatch(base):
+            casa = not neg
+    return casa
 
 
 def push_sin_filtro(on, base):
@@ -216,9 +250,9 @@ def push_sin_filtro(on, base):
     if not isinstance(p, dict) or "paths" in p or "paths-ignore" in p:
         return False
     if "branches" in p:
-        return _rama_casa(p["branches"] or [], base)
+        return _rama_casa(p["branches"] or [], base, negacion_ok=True) is True
     if "branches-ignore" in p:
-        return not _rama_casa(p["branches-ignore"] or [], base)
+        return _rama_casa(p["branches-ignore"] or [], base, negacion_ok=False) is False
     return "tags" not in p and "tags-ignore" not in p
 
 
@@ -239,6 +273,15 @@ def workflow_sin_filtro(d, base):
             if push_sin_filtro(on, base):
                 salida.append(ruta)
     return salida
+
+
+def repo_de_origin(d):
+    """`owner/repo` del remoto origin del clon `d` (URL tal cual, sin insteadOf), o None."""
+    p = subprocess.run(["git", "-C", d, "config", "--get", "remote.origin.url"],
+                       capture_output=True, text=True)
+    m = re.fullmatch(r"(?:https://github\.com/|ssh://git@github\.com/|git@github\.com:)"
+                     r"([^/\s]+/[^/\s]+?)(?:\.git)?/?", p.stdout.strip()) if p.returncode == 0 else None
+    return m.group(1) if m else None
 
 
 def checks_obligatorios(repo, base):
@@ -264,13 +307,25 @@ def plan(borrador, ahora, raiz):
     for r in borrador.get("repos") or []:
         if not isinstance(r, dict):
             raise Rechazada("cada repo del borrador es un objeto")
-        d = r.get("dir") or raiz
-        base = r.get("base", "main")
-        if not workflow_sin_filtro(d, base):
-            raise Rechazada(f"{r.get('repo')}: origin/{base} no tiene ningún workflow sin filtro de rutas en push a {base}")
-        repos.append({"repo": r.get("repo"), "base": base, "include": r.get("include"),
+        if set(r) - CLAVES_REPO_BORRADOR:
+            raise Rechazada(f"claves desconocidas en un repo del borrador: {sorted(set(r) - CLAVES_REPO_BORRADOR)}")
+        repo, base = r.get("repo"), r.get("base", "main")
+        # Antes de cualquier llamada a git o a la API: repo y base dentro de la lista blanca.
+        if not isinstance(repo, str) or not RE_REPO.fullmatch(repo) or ".." in repo:
+            raise Rechazada(f"repo fuera de la lista blanca: {repo!r}")
+        if not isinstance(base, str) or not ar.RE_RAMA.fullmatch(base) or ".." in base:
+            raise Rechazada(f"base no válida: {base!r}")
+        # El workflow sin filtro y los blobs congelados se leen del clon `raiz`: ha de ser el
+        # clon de ese repo y estar al día con su remoto.
+        origen = repo_de_origin(raiz)
+        if origen != repo:
+            raise Rechazada(f"{repo}: el clon {raiz} no es de ese repo (origin = {origen})")
+        _git(raiz, "fetch", "-q", "origin", f"+refs/heads/{base}:refs/remotes/origin/{base}")
+        if not workflow_sin_filtro(raiz, base):
+            raise Rechazada(f"{repo}: origin/{base} no tiene ningún workflow sin filtro de rutas en push a {base}")
+        repos.append({"repo": repo, "base": base, "include": r.get("include"),
                       "exclude": r.get("exclude", []),
-                      "required_checks": checks_obligatorios(r.get("repo"), base)})
+                      "required_checks": checks_obligatorios(repo, base)})
     base0 = (borrador.get("repos") or [{}])[0].get("base", "main") if borrador.get("repos") else "main"
     pol = {"kind": "policy", "id": os.urandom(8).hex(),
            "not_before": ar.fmt_fecha(nb), "not_after": ar.fmt_fecha(na), "repos": repos,
@@ -402,13 +457,20 @@ def nuevo_artefacto(pol, emitida):
 
 def huella_config(cfg):
     """Huella de la configuración de aprobación de SE-488 que fija la verificación."""
+    if not isinstance(cfg, dict):
+        raise Rechazada("la configuración de aprobación no es un objeto JSON")
     try:
         with open(cfg["clave_webflow"], "rb") as f:
             clave = hashlib.sha256(f.read()).hexdigest()
     except (OSError, KeyError, TypeError):
         clave = None
     fija = {"genesis": cfg.get("genesis"), "autor": cfg.get("autor"), "rama": cfg.get("rama", "main"),
-            "huella_webflow": str(cfg.get("huella_webflow", "")).upper(), "clave": clave}
+            "huella_webflow": str(cfg.get("huella_webflow", "")).upper(), "clave": clave,
+            # También mandan: el libro (límite de uso único, R2.8), de dónde se leen el título y
+            # el cuerpo de la PR, y los tipos habilitados. El espejo y su remoto no: moverlos no
+            # amplía nada, porque la cadena hasta el génesis y la clave fijados se verifican igual.
+            "libro": cfg.get("libro"), "repo_aprobaciones": cfg.get("repo_aprobaciones"),
+            "tipos": cfg.get("tipos")}
     return hashlib.sha256(json.dumps(fija, sort_keys=True).encode()).hexdigest()
 
 
@@ -438,16 +500,34 @@ class LibroPolitica(ar.Libro):
         return False
 
 
-def buscar_merge(esp, rama, pol_id):
-    """Último merge first-parent de `rama` que añade un artefacto savia-politica de esta política."""
+def ruta_de_peticion(peticion, pol_id):
+    """Ruta del artefacto que registró policy-request, comprobada contra el id de la política."""
+    ruta = peticion.get("ruta")
+    if not isinstance(ruta, str) or not re.fullmatch(
+            rf"aprobaciones/{TIPO}/[0-9]{{8}}-{re.escape(pol_id)}-[0-9a-f]{{8}}\.json", ruta):
+        raise ar.invalido("SE-512", "la ruta de la petición no es de esta política")
+    return ruta
+
+
+def buscar_merge(esp, rama, ruta):
+    """Último merge first-parent de `rama` que añade exactamente el artefacto `ruta` de la petición."""
     out = esp.out("log", "--first-parent", "--diff-filter=A", "--name-only", "--format=%x00%H",
                   f"refs/heads/{rama}", "--", f"aprobaciones/{TIPO}/")
     for bloque in out.split("\0"):
         lineas = [x for x in bloque.splitlines() if x]
-        if len(lineas) >= 2 and any(re.fullmatch(rf"aprobaciones/{TIPO}/[0-9]{{8}}-{pol_id}-[0-9a-f]{{8}}\.json", x)
-                                    for x in lineas[1:]):
+        if len(lineas) >= 2 and ruta in lineas[1:]:
             return lineas[0]
     return None
+
+
+def _texto_pr(s):
+    """Normalización documentada del texto que devuelve GitHub: CRLF → LF y sin blancos finales.
+
+    Nada más: cualquier otro cambio (palabras, cifras, líneas) es «distinto». Un cuerpo
+    `null` o que no es texto nunca coincide."""
+    if not isinstance(s, str):
+        return None
+    return s.replace("\r\n", "\n").rstrip()
 
 
 def pr_de_merge(cfg, m):
@@ -484,13 +564,13 @@ def verificar(pol, cfg, peticion, ahora, activar=False):
         if not isinstance(cfg.get("libro"), str) or not cfg["libro"]:
             raise ar.invalido("R2.8", "libro de consumidos no configurado")
         esp = ar.Espejo(cfg["espejo"])
-        m = buscar_merge(esp, cfg.get("rama", "main"), pol["id"])
+        ruta = ruta_de_peticion(peticion, pol["id"])
+        m = buscar_merge(esp, cfg.get("rama", "main"), ruta)
         if not m:
             raise ar.no_vigente("SE-512", "sin PR de aprobación fusionada para esta política")
         ar.validar_politica(cfg)
         with LibroPolitica(cfg["libro"]) as libro:
             r = ar._verificar(cfg, cfg["espejo"], m, TIPO, pol, ahora, None, libro, False)
-            ruta = peticion["ruta"]
             fechas = esp.out("log", "--format=%ct", "--diff-filter=A", f"{m}^1..{m}^2", "--", ruta).split()
             if len(fechas) != 1:
                 raise ar.invalido("SE-512", "el artefacto no lo añade exactamente un commit de la PR")
@@ -501,7 +581,9 @@ def verificar(pol, cfg, peticion, ahora, activar=False):
                 raise ar.invalido("SE-512", "emitida distinta de la fecha del commit que añade el artefacto")
             resumen = generar_resumen(pol)
             pr = pr_de_merge(cfg, m)
-            if pr.get("title") != generar_titulo(pol) or pr.get("body") != generar_cuerpo(pol, resumen):
+            # Lo que se compara es el texto actual de la PR; el que manda es el objeto firmado.
+            if _texto_pr(pr.get("title")) != _texto_pr(generar_titulo(pol)) \
+                    or _texto_pr(pr.get("body")) != _texto_pr(generar_cuerpo(pol, resumen)):
                 raise ar.invalido("SE-512", "título o descripción de la PR distintos de los generados")
             f_m = dt.datetime.fromtimestamp(int(esp.out("log", "-1", "--format=%ct", m).strip()), dt.timezone.utc)
             inicio = max(ar.parse_fecha(pol["not_before"]), f_m)
@@ -533,15 +615,17 @@ def activar(pol, cfg, peticion, ahora):
 
 # ---------------------------------------------------------------- request --abrir
 
-def abrir_pr(peticion, clon, repo_aprob):
-    """Rama + commit con fecha `emitida` en un clon del repo de aprobaciones + PR."""
+def abrir_pr(peticion, clon, repo_aprob, base="main"):
+    """Rama + commit con fecha `emitida` en un clon del repo de aprobaciones + PR hacia `base`.
+
+    Lanza subprocess.CalledProcessError u OSError si algún paso falla."""
     rama = "politica-" + os.path.basename(peticion["ruta"])[:-5]
     t = peticion["artefacto"]["emitida"].replace("Z", "+0000")
     env = {**os.environ, "GIT_AUTHOR_DATE": t, "GIT_COMMITTER_DATE": t}
     def g(*a):
         subprocess.run(["git", "-C", clon, *a], check=True, capture_output=True, env=env)
-    g("fetch", "-q", "origin", "main")
-    g("checkout", "-q", "-B", rama, "origin/main")
+    g("fetch", "-q", "origin", f"+refs/heads/{base}:refs/remotes/origin/{base}")
+    g("checkout", "-q", "-b", rama, f"origin/{base}")     # -b: nunca pisa una rama del clon
     destino = os.path.join(clon, peticion["ruta"])
     os.makedirs(os.path.dirname(destino), exist_ok=True)
     with open(destino, "w") as f:
@@ -553,7 +637,7 @@ def abrir_pr(peticion, clon, repo_aprob):
     with open(cuerpo, "w") as f:
         f.write(peticion["cuerpo"])
     gh = os.environ.get("GH", "gh")
-    subprocess.run([gh, "pr", "create", "-R", repo_aprob, "--base", "main", "--head", rama,
+    subprocess.run([gh, "pr", "create", "-R", repo_aprob, "--base", base, "--head", rama,
                     "--title", peticion["titulo"], "--body-file", cuerpo], check=True)
 
 
@@ -574,6 +658,35 @@ def _guardar(ruta, contenido):
 
 def _ahora(s):
     return ar.parse_fecha(s) if s else dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+
+
+def _request(a, pol, cfg, preq):
+    """policy-request. Todas las validaciones van antes de cualquier efecto; el registro de la
+    petición se escribe solo si todo lo anterior (también --abrir) ha ido bien. Una política
+    tiene una sola petición: repetirla exige otra política (policy-plan, otro id)."""
+    def rechazo(motivo):
+        print(f"policy-request: rechazada: {motivo}", file=sys.stderr)
+        return RECHAZADA
+    if not isinstance(cfg, dict):
+        return rechazo("la configuración de aprobación no es un objeto JSON")
+    if a.abrir and (not a.clon or not isinstance(cfg.get("repo_aprobaciones"), str)):
+        return rechazo("--abrir exige --clon y repo_aprobaciones")
+    try:
+        ruta, art = nuevo_artefacto(pol, _ahora(a.ahora))
+        pet = {"ruta": ruta, "artefacto": art, "digest": digest(pol), "aprobacion_cfg": huella_config(cfg),
+               "titulo": generar_titulo(pol), "cuerpo": generar_cuerpo(pol, art["resumen"])}
+    except (Rechazada, ar.Rechazo) as e:
+        return rechazo(getattr(e, "motivo", e))
+    if os.path.exists(preq):
+        return rechazo(f"ya hay una petición para esta política ({preq}); para otra, policy-plan")
+    if a.abrir:
+        try:
+            abrir_pr(pet, a.clon, cfg["repo_aprobaciones"], cfg.get("rama", "main"))
+        except (subprocess.CalledProcessError, OSError) as e:
+            return rechazo(f"no se pudo abrir la PR de aprobación: {e}")
+    _guardar(preq, json.dumps(pet, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    print(json.dumps({"peticion": preq, "ruta": ruta, "titulo": pet["titulo"]}, ensure_ascii=False))
+    return 0
 
 
 def main(argv=None):
@@ -611,21 +724,7 @@ def main(argv=None):
     pid = pol.get("id") if isinstance(pol, dict) else None
     preq = os.path.join(pdir, f"{pid}.request.json")
     if a.orden == "request":
-        try:
-            ruta, art = nuevo_artefacto(pol, _ahora(a.ahora))
-        except (Rechazada, ar.Rechazo) as e:
-            print(f"policy-request: rechazada: {getattr(e, 'motivo', e)}", file=sys.stderr)
-            return RECHAZADA
-        pet = {"ruta": ruta, "artefacto": art, "digest": digest(pol), "aprobacion_cfg": huella_config(cfg),
-               "titulo": generar_titulo(pol), "cuerpo": generar_cuerpo(pol, art["resumen"])}
-        _guardar(preq, json.dumps(pet, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
-        if a.abrir:
-            if not a.clon or not cfg.get("repo_aprobaciones"):
-                print("policy-request: --abrir exige --clon y repo_aprobaciones", file=sys.stderr)
-                return RECHAZADA
-            abrir_pr(pet, a.clon, cfg["repo_aprobaciones"])
-        print(json.dumps({"peticion": preq, "ruta": ruta, "titulo": pet["titulo"]}, ensure_ascii=False))
-        return 0
+        return _request(a, pol, cfg, preq)
     try:
         pet = _leer(preq)
     except (OSError, ValueError):
