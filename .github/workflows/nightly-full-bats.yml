@@ -78,9 +78,10 @@ jobs:
           set -uo pipefail
           mkdir -p /tmp/nightly
           # One process per suite so a hang only costs its own timeout.
-          # Suites marked "# nightly: serial" measure real latency (hook benchmark, SLA 20 ms):
-          # with 4 suites running at once the runner is loaded and they fail for that reason
-          # alone. They run alone, after the parallel batch.
+          # Suites marked "# nightly: serial" measure real latency (hook benchmark, SLA 20 ms) or
+          # assert that the repo tree is unchanged: with 4 suites running at once they see the
+          # writes of the others (and the runner is loaded), so they fail for that reason alone.
+          # They run alone, after the parallel batch.
           ls tests/*.bats tests/bats/*.bats > /tmp/nightly/all.txt
           grep -lE '^# nightly: serial' $(cat /tmp/nightly/all.txt) > /tmp/nightly/serial.txt || true
           grep -vxFf /tmp/nightly/serial.txt /tmp/nightly/all.txt > /tmp/nightly/parallel.txt
