@@ -78,10 +78,20 @@ jobs:
           set -uo pipefail
           mkdir -p /tmp/nightly
           # One process per suite so a hang only costs its own timeout.
-          ls tests/*.bats tests/bats/*.bats | xargs -P 4 -I{} bash -c '
-            out="/tmp/nightly/$(echo {} | tr / _).tap"
-            timeout 900 bats "{}" > "$out" 2>&1
-            echo "$? {}" >> /tmp/nightly/rc.txt'
+          # Suites marked "# nightly: serial" measure real latency (hook benchmark, SLA 20 ms):
+          # with 4 suites running at once the runner is loaded and they fail for that reason
+          # alone. They run alone, after the parallel batch.
+          ls tests/*.bats tests/bats/*.bats > /tmp/nightly/all.txt
+          grep -lE '^# nightly: serial' $(cat /tmp/nightly/all.txt) > /tmp/nightly/serial.txt || true
+          grep -vxFf /tmp/nightly/serial.txt /tmp/nightly/all.txt > /tmp/nightly/parallel.txt
+          run_one() {
+            out="/tmp/nightly/$(echo "$1" | tr / _).tap"
+            timeout 900 bats "$1" > "$out" 2>&1
+            echo "$? $1" >> /tmp/nightly/rc.txt
+          }
+          export -f run_one
+          xargs -P 4 -I{} bash -c 'run_one {}' < /tmp/nightly/parallel.txt
+          xargs -P 1 -I{} bash -c 'run_one {}' < /tmp/nightly/serial.txt
           total=$(wc -l < /tmp/nightly/rc.txt)
           awk '$1 != 0' /tmp/nightly/rc.txt | sort -k2 > /tmp/nightly/failed.txt
           failed=$(wc -l < /tmp/nightly/failed.txt)

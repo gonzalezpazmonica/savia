@@ -122,10 +122,13 @@ assert eager <= 3000, f'L0+L1={eager} > 3000'
 # ── JSON output (AC7) ─────────────────────────────────────────────────────────
 
 @test "SPEC-181: --json flag produces valid JSON" {
-  run bash "$SCRIPT" --json
+  # stdout y stderr separados y JSON por stdin: el aviso de stderr de un runner o unas
+  # comillas en la salida ya no rompen el parseo, y si falla se ve qué salió.
+  bats_require_minimum_version 1.5.0
+  run --separate-stderr bash "$SCRIPT" --json
+  [[ -z "$stderr" ]] || echo "stderr: $stderr" >&3
   [ "$status" -eq 0 ]
-  run python3 -c "import json, sys; json.loads('''$output''')"
-  [ "$status" -eq 0 ]
+  printf '%s' "$output" | python3 -c "import json, sys; json.load(sys.stdin)"
 }
 
 @test "SPEC-181: JSON output has tiers key with L0/L1/L2/L3" {
