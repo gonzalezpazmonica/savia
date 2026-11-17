@@ -31,6 +31,7 @@ import re
 import secrets
 import stat
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,7 +45,9 @@ SECRET_RES = [
     re.compile(r"(?:ghp|ghs|ghu|ghr|gho)_[A-Za-z0-9]{20,}"),
     re.compile(r"xox[abprs]-[A-Za-z0-9-]{10,}"),
     re.compile(r"(?i)(authorization:\s*(?:bearer|basic|token)\s+)\S+"),
-    re.compile(r"(?i)((?:password|passwd|pwd|token|secret|api[_-]?key|pat)\s*[=:]\s*)[^\s'\";&|]+"),
+    re.compile(r"(?i)((?:password|passwd|pwd|token|secret|api[_-]?key|pat)\s*[=:]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s'\";&|]+)"),
+    # Opciones de línea de órdenes: `--password x`, `--token=x`, `-p x` (valor con o sin comillas).
+    re.compile(r"(?i)(\s--?(?:password|passwd|pwd|token|secret|api[_-]?key|pat|p)(?:=|\s+))(?:\"[^\"]*\"|'[^']*'|[^\s'\";&|]+)"),
     re.compile(r"(?i)(://[^/\s:@]+:)[^@\s]+(?=@)"),
     re.compile(r"[A-Za-z0-9+/_=-]{32,}"),  # tokens largos (también los PAT de grano fino)
 ]
@@ -68,14 +71,21 @@ def load_key() -> bytes | None:
     path = key_path()
     try:
         if not path.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, "w") as fh:
-                fh.write(secrets.token_hex(32))
+            path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            try:
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(fd, "w") as fh:
+                    fh.write(secrets.token_hex(32))
+            except FileExistsError:
+                pass  # otro hook concurrente la está creando: se lee abajo
         if stat.S_IMODE(path.stat().st_mode) & 0o077:
             return None
-        key = path.read_text(encoding="utf-8").strip()
-        return key.encode() if len(key) >= 32 else None
+        for _ in range(10):  # la creadora puede no haber escrito aún
+            key = path.read_text(encoding="utf-8").strip()
+            if len(key) >= 32:
+                return key.encode()
+            time.sleep(0.05)
+        return None
     except OSError:
         return None
 
@@ -120,7 +130,7 @@ def record(guard: str, reason: str, raw: str, event: str, tool: str, engine: str
 
 def append_private(path: Path, line: str) -> None:
     """Añade al log creándolo 0600 (no con el umask): solo la persona dueña lo lee."""
-    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
     with os.fdopen(fd, "a", encoding="utf-8") as fh:
         fh.write(line)
 

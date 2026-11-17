@@ -42,6 +42,12 @@ test("sin resolvedor, git + add en el texto bloquea (fallo cerrado); git status 
   expect(unresolvedGitOp("git status", d, "/no/existe.py")).toBeNull();
 });
 
+test("sin resolvedor, el alias stage (sinónimo de add) bloquea igual que add", () => {
+  const d = tmp();
+  expect(unresolvedGitOp(`git -C ${d} stage -A`, d, "/no/existe.py")).toMatch(/resolvedor de destino no disponible/);
+  expect(unresolvedGitOp("git stash list", d, "/no/existe.py")).toBeNull();
+});
+
 test("la lista de paridad es la del plugin y empieza por los baratos", () => {
   expect(BEFORE_GUARDS[0].name).toBe("toolCallHealing");
   expect(BEFORE_GUARDS[1]).toBe(validateBashGlobal);

@@ -168,6 +168,27 @@ EOF
   [[ "$output" == *"malformada"* ]]
 }
 
+@test "SE-510 F3 negativo (revisión Codex/seguridad): cd fuera de la primera posición → exit 2" {
+  # Cada una resolvía mal antes: otro árbol (builtin cd, echo previo) o el inverso (|| , pipe),
+  # o un cd tras salto de línea, comilla, llave, if o bash -c que el analizador no veía.
+  cmds=("builtin cd $TMP && gh pr create" "echo gh pr create; cd $TMP && gh pr create"
+        "true || cd $TMP; gh pr create" "cd $TMP | cat; gh pr create"
+        $'true\ncd '"$TMP"$'\ngh pr create' "bash -c 'cd $TMP && gh pr create'"
+        "{ cd $TMP; gh pr create; }" "if cd $TMP; then gh pr create; fi" "command cd $TMP && gh pr create")
+  for cmd in "${cmds[@]}"; do
+    run bash -c "jq -nc --arg c \"\$1\" --arg d '$TMP' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /" _ "$cmd"
+    [ "$status" -eq 2 ] || { echo "no bloqueó: $cmd"; false; }
+  done
+}
+
+@test "SE-510 F3: un cd inicial literal con gh mencionado antes en texto sigue resolviendo el árbol del cd" {
+  git init -q "$TMP/wt" && mkdir -p "$TMP/otro"
+  top=$(git -C "$TMP/wt" rev-parse --show-toplevel)
+  run bash -c "jq -nc --arg c 'cd $TMP/wt && gh pr create --body \"ver gh pr create\"' --arg d '$TMP/otro' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$top" ]
+}
+
 # summary <dir> <horas de antigüedad> — .pr-summary.md válido de más de 300 caracteres
 summary() {
   { echo '## Qué hace este PR (en lenguaje no técnico)'; printf 'Texto llano de prueba. %.0s' $(seq 1 20); echo; } >"$1/.pr-summary.md"
@@ -324,4 +345,30 @@ print(r["guard"], r["reason"], r["hmac"], len(r["cmd_hmac"]), "input" in r)'
   run bash scripts/guard-blocks.sh wrap --guard g
   [ "$status" -eq 2 ]
   [ ! -e "$SAVIA_GUARD_BLOCKS_LOG" ]
+}
+
+@test "SE-510 AC-4 negativo: opción de wrap sin valor sale 2 en vez de quedarse en bucle" {
+  for opt in --guard --event --tool; do
+    run timeout 5 bash scripts/guard-blocks.sh wrap $opt
+    [ "$status" -eq 2 ] || { echo "$opt: status $status"; false; }
+    [[ "$output" == *"sin valor"* ]]
+  done
+  run timeout 5 bash scripts/guard-blocks.sh wrap --guard g --event
+  [ "$status" -eq 2 ]
+}
+
+@test "SE-510 AC-4: un motivo que empieza por guion se registra (no lo toma argparse por opción)" {
+  printf '#!/bin/bash\necho "-motivo" >&2\nexit 2\n' >"$TMP/hg.sh"
+  run bash -c "printf '{}' | bash scripts/guard-blocks.sh wrap --guard prueba -- bash '$TMP/hg.sh'"
+  [ "$status" -eq 2 ]
+  [[ "$output" != *"AVISO"* ]]
+  [ "$(wc -l <"$SAVIA_GUARD_BLOCKS_LOG")" -eq 1 ]
+}
+
+@test "SE-510 AC-4 negativo: el log no se escribe a través de un enlace simbólico" {
+  : >"$TMP/destino"
+  ln -s "$TMP/destino" "$TMP/enlace.jsonl"
+  SAVIA_GUARD_BLOCKS_LOG="$TMP/enlace.jsonl" run python3 scripts/guard_blocks.py record --guard g --event PreToolUse --tool Bash --engine bash --reason x </dev/null
+  [ "$status" -ne 0 ]
+  [ ! -s "$TMP/destino" ]
 }

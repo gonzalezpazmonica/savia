@@ -10,8 +10,8 @@ Uso: python3 pr_summary_root.py <raíz-de-respaldo>   (entrada del hook en stdin
 Entrada: el JSON del hook (`tool_input.command`, `cwd`) o la orden en texto plano.
 Orden de resolución del directorio base:
   1. `cwd` de la entrada; sin él, la raíz de respaldo (el comportamiento anterior).
-  2. Un único `cd <ruta>` anterior a `gh pr create` en la misma línea (`cd X && gh …`,
-     `(cd X; gh …)`), relativo a la base.
+  2. Un único `cd <ruta>` que sea lo primero de la orden (`cd X && gh …`, `(cd X; gh …)`),
+     relativo a la base. Cualquier otro `cd` antes del último `gh pr create` bloquea.
   3. `git -C <dir> rev-parse --show-toplevel`; si no es un repo, el directorio mismo.
 
 Salida: la raíz en stdout, exit 0. Fallo cerrado (exit 2 con motivo en stderr):
@@ -31,12 +31,14 @@ import shlex
 import subprocess
 import sys
 
-GH_RE = re.compile(r"(?:^|[;&|(`\s])(?:[^\s;&|()]*/)?gh\s+pr\s+create(?=[\s;&|)]|$)")
-# `cd <arg>` al inicio de una orden (principio o tras separador / subshell).
-CD_RE = re.compile(r"(?:^|[;&|(]|\$\()\s*cd(?:\s+(\"[^\"]*\"|'[^']*'|[^\s;&|()]+))?\s*(?=$|[;&|)])")
-# Cualquier `cd` en posición de orden (también `cd $(…)`, `cd "$x"y`): si hay más de los que
-# CD_RE entiende, alguno no se sabe adónde va → fallo cerrado.
-CD_ANY = re.compile(r"(?:^|[;&|(]|\$\()\s*cd(?=\s|$|[;&|)])")
+GH_RE = re.compile(r"(?:^|[;&|(`\s])(?:[^\s;&|()]*/)?gh\s+pr\s+create(?=[\s;&|)'\"}]|$)")
+# Única forma de `cd` que se sigue: es lo PRIMERO de la orden (`cd X && …`, `cd X; …`,
+# `(cd X; …`), con un destino de una sola palabra.
+CD_PREFIX = re.compile(r"^\s*(\(\s*)?cd\s+(\"[^\"]*\"|'[^']*'|[^\s;&|()]+)\s*(?:&&|;)\s*")
+# Cualquier otra aparición de `cd` como palabra (tras `builtin`, `command`, `||`, `|`, un
+# salto de línea, comillas, `{`, `then`, `bash -c '…'`…): no se sabe si se ejecuta ni en qué
+# orden → fallo cerrado. Es deliberadamente amplio: ante la duda, se bloquea.
+CD_WORD = re.compile(r"(?<![\w./-])(?:cd|chdir)(?![\w./-])")
 UNSAFE = re.compile(r"[$`]|^~[^/]|^-$")
 # Otras formas de cambiar de directorio que no se siguen: fallo cerrado.
 OTHER_CHDIR = re.compile(r"(?:(?:^|[;&|(]|\$\()\s*(?:pushd|popd)(?=\s|$|[;&|)]))"
@@ -65,27 +67,29 @@ def parse_input(raw: str) -> tuple[str, str | None]:
 
 
 def cd_target(command: str) -> str | None:
-    """Destino del último `cd` antes de `gh pr create`. None si no hay `cd`."""
-    gh = GH_RE.search(command)
-    if not gh:
+    """Destino del `cd` que precede a `gh pr create`. None si no hay ningún `cd`.
+
+    Solo se sigue un `cd <literal>` al principio de la orden. Cualquier otra palabra `cd`
+    (o pushd/popd/env -C) antes de la ÚLTIMA mención de `gh pr create` bloquea: la última,
+    porque `echo gh pr create; cd X && gh pr create` menciona gh dos veces."""
+    gh = None
+    for gh in GH_RE.finditer(command):
+        pass
+    if gh is None:
         return None
     head = command[: gh.start() + 1]
     if OTHER_CHDIR.search(head):
         raise Unresolved("pushd/popd o env -C antes de gh pr create: no se siguen")
-    parsed = list(CD_RE.finditer(head))
-    n_cd = len(CD_ANY.findall(head))
-    if len(parsed) != n_cd:
-        raise Unresolved("`cd` con un destino que no se entiende antes de gh pr create")
-    if n_cd > 1:
-        raise Unresolved("más de un `cd` antes de gh pr create: no se encadenan")
-    last = parsed[-1] if parsed else None
-    if last is None:
+    pre = CD_PREFIX.match(head)
+    rest = head[pre.end():] if pre else head
+    if CD_WORD.search(rest):
+        raise Unresolved("un `cd` que no es el primero de la orden (o está en otra posición: "
+                         "`||`, pipe, comillas, `bash -c`, subshell…) antes de gh pr create")
+    if pre is None:
         return None
-    if ")" in head[last.end():]:
+    if pre.group(1) and ")" in rest:
         raise Unresolved("`cd` dentro de un subshell que se cierra antes de gh pr create")
-    arg = last.group(1)
-    if arg is None:
-        raise Unresolved("`cd` sin destino antes de gh pr create (iría a HOME)")
+    arg = pre.group(2)
     try:
         parts = shlex.split(arg)
     except ValueError as exc:

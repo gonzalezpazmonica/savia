@@ -48,7 +48,7 @@ const RULES: Array<{ rx: RegExp; msg: string }> = [
 const RESOLVER = fileURLToPath(new URL("../../../scripts/lib/git_op_targets.py", import.meta.url));
 const GIT_RX = /(^|[^\w])git([^\w]|$)/i;
 const COMMIT_RX = /(^|[^\w-])commit(-tree)?([^\w-]|$)/i;
-const OP_RX = /(^|[^\w-])(commit(-tree)?|add)([^\w-]|$)/i;
+const OP_RX = /(^|[^\w-])(commit(-tree)?|add|stage)([^\w-]|$)/i;
 
 /**
  * SE-510 AC-7: paridad con validate-bash-global.sh. Cada `git commit|add` real

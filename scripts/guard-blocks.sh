@@ -15,9 +15,11 @@ shift
 guard="" event="PreToolUse" tool="Bash"
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --guard) guard="${2:-}"; shift 2 ;;
-    --event) event="${2:-}"; shift 2 ;;
-    --tool) tool="${2:-}"; shift 2 ;;
+    --guard|--event|--tool)
+      # Sin valor, `shift 2` fallaba y el bucle no avanzaba nunca (sin set -e).
+      [[ $# -ge 2 ]] || { echo "wrap: $1 sin valor" >&2; exit 2; }
+      case "$1" in --guard) guard="$2" ;; --event) event="$2" ;; --tool) tool="$2" ;; esac
+      shift 2 ;;
     --) shift; break ;;
     *) echo "wrap: argumento desconocido: $1" >&2; exit 2 ;;
   esac
@@ -38,7 +40,7 @@ cat "$err" >&2
 if [[ $rc -eq 2 ]]; then
   reason=$(grep -m1 -v '^[[:space:]]*$' "$err" || true)
   python3 "$DIR/guard_blocks.py" record --guard "$guard" --event "$event" <"$inp" \
-    --tool "$tool" --engine bash --reason "$reason" >/dev/null 2>&1 \
+    --tool "$tool" --engine bash --reason="$reason" >/dev/null 2>&1 \
     || echo "AVISO: bloqueo de $guard no registrado en output/guard-blocks.jsonl" >&2
 fi
 exit "$rc"
