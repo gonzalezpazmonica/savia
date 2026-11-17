@@ -41,9 +41,14 @@ setup() {
 @test "loop handles dry-run with synthetic tasks" {
     tmpdir="$BATS_TEST_TMPDIR"
     echo '[{"id":1,"description":"test","status":"pending"}]' > "$tmpdir/tasks.json"
-    # SE-472: la vigencia del grant se prueba en test-se472-overnight-authority.bats;
-    # aquí se desactiva de forma explícita para probar solo el recorrido del dry-run.
-    run env SAVIA_WORKSPACE_DIR="$tmpdir/ws" OVERNIGHT_REQUIRE_GRANT=false \
+    # SE-472: el bucle exige grant vigente. Se emite uno real en un directorio temporal
+    # (AC5d prohíbe desactivar el requisito); su caducidad se prueba en test-se472.
+    printf -- '---\nactive_slug: "tester"\n---\n' > "$tmpdir/active-user.md"
+    SAVIA_GRANTS_DIR="$tmpdir/grants" SAVIA_ACTIVE_USER_FILE="$tmpdir/active-user.md" \
+        bash scripts/operator-grant.sh grant \
+        --scope autonomy:overnight-sprint --context "test" --ttl-hours 1 >/dev/null
+    run env SAVIA_WORKSPACE_DIR="$tmpdir/ws" SAVIA_GRANTS_DIR="$tmpdir/grants" \
+        SAVIA_ACTIVE_USER_FILE="$tmpdir/active-user.md" \
         bash "$LOOP" --sprint-id "test-smoke" --tasks "$tmpdir/tasks.json" --max-tasks 1 --dry-run
     # dry-run should succeed
     [[ "$status" -eq 0 ]]
