@@ -43,8 +43,14 @@ ts_guards = {}   # script.sh -> tsName
 if os.path.exists(plugin_path):
     with open(plugin_path) as f:
         ts_src = f.read()
-    # Match: import { SomeName } from "./guards/some-name.ts"
-    for m in re.finditer(r'import\s*\{\s*([\w]+)\s*\}\s*from\s*["\']\.\/guards\/([\w\-]+)\.ts["\']', ts_src):
+    # SE-510 AC-7: la lista BEFORE_GUARDS vive en lib/before-guards.ts, que el
+    # plugin importa; sus guards cuentan igual que los importados directamente.
+    before_guards_path = os.path.join(os.path.dirname(plugin_path), "lib", "before-guards.ts")
+    if re.search(r'from\s*["\']\./lib/before-guards\.ts["\']', ts_src) and os.path.exists(before_guards_path):
+        with open(before_guards_path) as f:
+            ts_src += "\n" + f.read()
+    # Match: import { SomeName } from "./guards/some-name.ts" (o "../guards/" desde lib/)
+    for m in re.finditer(r'import\s*\{\s*([\w]+)\s*\}\s*from\s*["\']\.{1,2}\/guards\/([\w\-]+)\.ts["\']', ts_src):
         ts_name = m.group(1)
         guard_file = m.group(2)
         # Map guard filename to likely bash script name (e.g. auto-redact-credentials → auto-redact-credentials.sh)
