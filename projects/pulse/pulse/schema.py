@@ -15,7 +15,7 @@ SCHEMAS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 _ANNOTATIONS = {"title", "description"}
 _SUPPORTED = _ANNOTATIONS | {
     "type", "required", "properties", "enum", "const", "pattern", "minLength",
-    "maxLength", "minimum", "maximum", "items", "maxItems", "allOf", "if", "then", "format",
+    "maxLength", "minimum", "maximum", "items", "maxItems", "minItems", "allOf", "if", "then", "format",
 }
 _FORMATS = {"date-time": "%Y-%m-%dT%H:%M:%SZ"}  # UTC con segundos: la única forma del contrato
 
@@ -113,6 +113,8 @@ def validate(value, schema, path="$"):
             if key in value:
                 errors.extend(validate(value[key], sub, path + "." + key))
     if isinstance(value, list):
+        if "minItems" in schema and len(value) < schema["minItems"]:
+            errors.append(path + ": faltan elementos")
         if "maxItems" in schema and len(value) > schema["maxItems"]:
             errors.append(path + ": demasiados elementos")
         if "items" in schema:
