@@ -77,13 +77,26 @@ export function withSource(cfg: SoulConfig, o: AddOptions & { adapter: ApiAdapte
   return next;
 }
 
+/**
+ * Frase llana de lo que significa cada nivel, para la pantalla de consentimiento: qué clase de dato es y
+ * dónde se queda. La etiqueta interna (N1–N4) no se enseña. Un nivel desconocido se explica con la frase
+ * más restrictiva (fail-closed).
+ */
+const QUE_DATOS: Record<string, string> = {
+  N1: "información pública. Se guarda en este equipo.",
+  N2: "datos de trabajo de tu organización (títulos y referencias, no el contenido). Se guardan en este equipo, bajo tu usuario.",
+  N3: "datos personales tuyos. Se guardan en este equipo y solo los ves tú.",
+  N4: "datos de trabajo de tu empresa o de sus clientes (títulos, remitentes, fechas y referencias, no el contenido). Se guardan en este equipo, bajo tu usuario, y un agente de IA solo los ve si tú lo apruebas.",
+};
+const QUE_DATOS_DESCONOCIDO = "datos privados. Se guardan en este equipo y solo los ves tú.";
+
 /** Texto que ve la persona antes de dar el consentimiento. */
 export function declaration(adapter: ApiAdapterName, purpose: string): string {
   const d = DESCRIPTORS[adapter];
   return [
     `Vas a conectar ${adapter} (solo lectura).`,
     `  Para qué: ${purpose}`,
-    `  Nivel de los datos: ${d.sensitivity}`,
+    `  Qué datos son: ${QUE_DATOS[d.sensitivity] ?? QUE_DATOS_DESCONOCIDO}`,
     `  Qué no se guarda nunca: ${d.never_persists}`,
     `  Se retira cuando quieras: soul revoke ${adapter}`,
     `Al escribir «s» queda registrado: «${CONSENT_STATEMENT}» (con la fecha y hora de ahora).`,

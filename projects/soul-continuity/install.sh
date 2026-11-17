@@ -5,7 +5,8 @@
 #      Si no lo hay, descarga el Node.js LTS oficial de nodejs.org, comprueba su SHA-256 con
 #      SHASUMS256.txt y lo deja en ~/.savia/node.
 #   2. Crea la orden «soul» en ~/.local/bin (sin alias). No pisa una orden «soul» que no sea suya.
-#   3. Dice el siguiente paso: soul setup.
+#   3. Dice el siguiente paso: soul setup, escrito de forma que funcione tal cual en ese momento
+#      (con la ruta completa si «soul» todavía no está en el PATH).
 #
 # Uso: bash install.sh [--download]
 #   --download   baja el Node oficial aunque el del PATH ya sirva.
@@ -103,8 +104,11 @@ say "Node.js que usará Soul: $NODE ($("$NODE" --version))"
 
 mkdir -p "$BIN_DIR"
 W="$BIN_DIR/soul"
+# Orden que funciona tal cual, sin depender del PATH (la ruta de la orden propia o, si hay una ajena, Node + el lanzador).
+RUN_SOUL="$(shq "$W")"
 if [ -e "$W" ] && ! grep -qF "$MARK" "$W"; then
   printf 'install.sh: ya hay una orden «soul» en %s que no creé yo; no la toco. Usa: "%s" "%s/bin/soul.mjs"\n' "$W" "$NODE" "$PKG" >&2
+  RUN_SOUL="$(shq "$NODE") $(shq "$PKG/bin/soul.mjs")"
 else
   printf '#!/bin/sh\n%s\nexec %s %s "$@"\n' "$MARK" "$(shq "$NODE")" "$(shq "$PKG/bin/soul.mjs")" > "$W"
   chmod 755 "$W"
@@ -140,12 +144,18 @@ offer_path() {
   esac
 }
 
+# Qué escribir ahora para el siguiente paso: depende de si «soul» ya se encuentra en esta terminal.
+NEXT="soul setup"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
-  *) if ! offer_path; then
+  *) if offer_path; then
+       # El PATH queda arreglado para las terminales nuevas, no para esta.
+       NEXT="abre una terminal nueva y escribe: soul setup"
+     else
        say "Aviso: $BIN_DIR no está en tu PATH. Añade esta línea a ~/.bashrc (o ~/.zshrc) y abre una terminal nueva:"
        say "  $PATH_LINE"
+       NEXT="$RUN_SOUL setup"
      fi ;;
 esac
 say ""
-say "Siguiente paso, en tu terminal: soul setup"
+say "Siguiente paso, en tu terminal: $NEXT"
