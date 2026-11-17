@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "spec": "SE-510",
+  "description": "Paridad de veredicto bash/TS (AC-7). ported: hook bash → guard TS de BEFORE_GUARDS (.opencode/plugins/lib/before-guards.ts, usada por savia-foundation.ts) que debe dar el mismo veredicto con la misma entrada. not_exposed: hook bash bloqueante sin guard TS, con su motivo. Un hook bash que bloquea un caso del corpus y no está en ninguna de las dos listas hace fallar la paridad (fallo cerrado). Cambiar este fichero es tier 3 (SE-362).",
+  "ported": {
+    "validate-bash-global": "validateBashGlobal",
+    "block-credential-leak": "blockCredentialLeak",
+    "block-force-push": "blockForcePush",
+    "block-branch-switch-dirty": "blockBranchSwitchDirty",
+    "block-commit-to-main": "blockCommitToMain",
+    "block-infra-destructive": "blockInfraDestructive",
+    "data-sovereignty-gate": "dataSovereigntyGate",
+    "block-gitignored-references": "blockGitignoredReferences",
+    "prompt-injection-guard": "promptInjectionGuard",
+    "tdd-gate": "tddGate",
+    "block-blind-signing": "blockBlindSigning"
+  },
+  "not_exposed": {
+    "pr-summary-gate": "Sin guard TS: OpenCode ejecuta el mismo fichero bash por el puente de savia-gates (scripts/opencode-plugin/savia-gates, lee .claude/settings.json). Portarlo duplicaría la revisión con modelo; la paridad del árbol donde corre gh la da el resolvedor común scripts/lib/pr_summary_root.py."
+  }
+}

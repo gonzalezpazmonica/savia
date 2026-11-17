@@ -45,6 +45,39 @@ const RULES: Array<{ rx: RegExp; msg: string }> = [
   },
 ];
 
+const RESOLVER = fileURLToPath(new URL("../../../scripts/lib/git_op_targets.py", import.meta.url));
+const GIT_RX = /(^|[^\w])git([^\w]|$)/i;
+const COMMIT_RX = /(^|[^\w-])commit(-tree)?([^\w-]|$)/i;
+const OP_RX = /(^|[^\w-])(commit(-tree)?|add)([^\w-]|$)/i;
+
+/**
+ * SE-510 AC-7: paridad con validate-bash-global.sh. Cada `git commit|add` real
+ * cuyo destino no se reconoce con certeza (línea `<op>\t` con destino vacío del
+ * resolvedor común scripts/lib/git_op_targets.py) se bloquea. Sin resolvedor
+ * (sin Python, timeout o fallo) y con `git` y `commit|add` en el texto: también
+ * (fail-closed). El chequeo de rama main del repo destino sigue omitido aquí
+ * (ver cabecera). Devuelve el motivo del bloqueo o null.
+ */
+export function unresolvedGitOp(command: string, base: string, resolver = RESOLVER): string | null {
+  const plain = command.replace(/["'\\]/g, ""); // `gi''t ad\d` también cuenta
+  const hasGit = GIT_RX.test(plain);
+  if (!hasGit && !COMMIT_RX.test(plain)) return null;
+  const res = spawnSync("python3", [resolver, base], { encoding: "utf8", timeout: 5000, input: command });
+  if (res.status !== 0 || res.error || typeof res.stdout !== "string") {
+    return hasGit && OP_RX.test(plain)
+      ? "resolvedor de destino no disponible para git commit/add (fail-closed). Forma admitida: git -C <ruta> commit …"
+      : null;
+  }
+  for (const line of res.stdout.split("\n")) {
+    const tab = line.indexOf("\t");
+    if (tab > 0 && line.slice(tab + 1) === "") {
+      const op = line.slice(0, tab);
+      return `destino de git ${op} no reconocido con certeza (fail-closed). Forma admitida: git -C <ruta> ${op} …`;
+    }
+  }
+  return null;
+}
+
 const STRIPPER = fileURLToPath(new URL("../../../scripts/lib/strip_inert_heredocs.py", import.meta.url));
 
 /**
@@ -70,4 +103,9 @@ export async function validateBashGlobal(input: ToolInput, output: ToolOutput): 
       throw new Error(`BLOCKED [validate-bash-global]: ${r.msg}`);
     }
   }
+  const args = (output?.args ?? input?.args ?? {}) as Record<string, unknown>;
+  const base = typeof args.workdir === "string" && args.workdir ? args.workdir : process.cwd();
+  // Como el hook bash: la orden entera (el resolvedor ya trata heredocs y cadenas como texto).
+  const unsure = unresolvedGitOp(raw, base);
+  if (unsure) throw new Error(`BLOCKED [validate-bash-global]: ${unsure}`);
 }
