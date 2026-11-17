@@ -10,3 +10,4 @@ section: Fixed
 - SE-510 S2: registro local de bloqueos con tasa de falsos positivos (scripts/guard-blocks.sh record|mark|report|wrap, HMAC con clave local, sin la orden en claro); los guards TS ya registran.
 
 - SE-510 S2 (revisión): el resolvedor bloquea con varios cd, un cd en subshell ya cerrado, pushd/popd y env -C; el registro redacta el motivo, nace 0600 y wrap entrega al hook los mismos bytes sin cambiar su código; los guards TS solo registran errores con marca BLOCKED/BLOQUEADO.
+- SE-510 S2 (CI): scripts/hooks-coverage-matrix.sh lee también .opencode/plugins/lib/before-guards.ts cuando el plugin la importa; sin ello 13 guards TS salían como NONE y el --check fallaba.
