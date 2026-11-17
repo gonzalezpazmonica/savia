@@ -39,12 +39,24 @@ setup() {
 }
 
 @test "loop handles dry-run with synthetic tasks" {
-    tmpdir=$(mktemp -d)
+    tmpdir="$BATS_TEST_TMPDIR"
     echo '[{"id":1,"description":"test","status":"pending"}]' > "$tmpdir/tasks.json"
-    run bash "$LOOP" --sprint-id "test-smoke" --tasks "$tmpdir/tasks.json" --max-tasks 1 --dry-run
-    rm -rf "$tmpdir"
+    # SE-472: la vigencia del grant se prueba en test-se472-overnight-authority.bats;
+    # aquí se desactiva de forma explícita para probar solo el recorrido del dry-run.
+    run env SAVIA_WORKSPACE_DIR="$tmpdir/ws" OVERNIGHT_REQUIRE_GRANT=false \
+        bash "$LOOP" --sprint-id "test-smoke" --tasks "$tmpdir/tasks.json" --max-tasks 1 --dry-run
     # dry-run should succeed
     [[ "$status" -eq 0 ]]
+    [[ -f "$tmpdir/ws/output/agent-runs/test-smoke/state.json" ]]
+}
+
+@test "loop dry-run sin grant vigente para con exit 4 y deja la tarea suspendida (fail-closed)" {
+    tmpdir="$BATS_TEST_TMPDIR"
+    echo '[{"id":1,"description":"test","status":"pending"}]' > "$tmpdir/tasks.json"
+    run env SAVIA_WORKSPACE_DIR="$tmpdir/ws" SAVIA_GRANTS_DIR="$tmpdir/nogrants" \
+        bash "$LOOP" --sprint-id "test-deny" --tasks "$tmpdir/tasks.json" --max-tasks 1 --dry-run
+    [[ "$status" -eq 4 ]]
+    [[ "$output" == *"authority"* || "$output" == *"suspendida"* ]]
 }
 
 # ── SE-350 Coherence Court wiring ───────────────────────────────────────────
@@ -65,7 +77,7 @@ setup() {
 @test "coherence wiring is off-by-default non-blocking (OVERNIGHT_COHERENCE_GATE=off)" {
     tmpdir=$(mktemp -d)
     export OVERNIGHT_COHERENCE_GATE=off
-    export AGENT_RUNS_DIR="$tmpdir/runs"
+    export SAVIA_WORKSPACE_DIR="$tmpdir/ws"
     export SAVIA_WORKSPACE_DIR="$tmpdir"
     echo '[{"id":1,"description":"test","status":"pending"}]' > "$tmpdir/tasks.json"
     # SE-472: el bucle exige grant vigente; grant real en un almacén aislado
