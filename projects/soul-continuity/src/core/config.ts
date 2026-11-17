@@ -116,14 +116,17 @@ export function saveConfig(dataDir: string, cfg: SoulConfig): void {
 
 export function activeProfileName(cfg: SoulConfig, env: Record<string, string | undefined>): string {
   const name = env.SOUL_PROFILE || cfg.active_profile;
-  if (!name) throw new NoProfileError("No sé quién eres: esta instalación no tiene perfil activo. Configura uno en config.json (active_profile y profiles).");
-  if (!cfg.profiles[name]) throw new NoProfileError(`No sé quién eres: el perfil «${name}» no existe en esta instalación.`);
+  if (!name) throw new NoProfileError("No sé quién eres: esta instalación no tiene perfil activo. Ejecuta: soul setup");
+  if (!cfg.profiles[name]) {
+    const hint = env.SOUL_PROFILE ? "La variable SOUL_PROFILE apunta a un perfil que no existe: quítala o corrígela. Si no, ejecuta: soul doctor" : "Mira qué falla con: soul doctor";
+    throw new NoProfileError(`No sé quién eres: el perfil «${name}» no existe en esta instalación. ${hint}`);
+  }
   return name;
 }
 
 export function resolveInstall(cfg: SoulConfig, env: Record<string, string | undefined>): InstallationConfig {
   const p = cfg.profiles[activeProfileName(cfg, env)];
-  if (!p.operator?.ref) throw new NoProfileError("No sé quién eres: el perfil activo no tiene operator.ref.");
+  if (!p.operator?.ref) throw new NoProfileError("No sé quién eres: el perfil activo no tiene identidad (operator.ref). Mira qué falla con: soul doctor");
   return { id: cfg.installation_id, operator: p.operator, sources: p.sources ?? [], alert_rules: p.alert_rules ?? [] };
 }
 

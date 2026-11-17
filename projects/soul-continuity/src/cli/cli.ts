@@ -203,7 +203,7 @@ async function runWithoutConfig(p: Parsed, deps: CliDeps, print: (human: string,
       const almacen = checkSecretTool(hostProbe(deps));
       if (almacen.level === "fallo") deps.err(`aviso: ${almacen.message}. Instálalo: ${almacen.fix}`);
       print([
-        `Instalación creada en ${deps.dataDir} con el perfil «${name}». Ninguna fuente ni adaptador está activo: actívalos en config.json (ver docs/instalar.md).`,
+        `Instalación creada en ${deps.dataDir} con el perfil «${name}». Ninguna fuente está conectada todavía: conecta la primera con «soul source add <adaptador>» (por ejemplo, github; ver docs/instalar.md).`,
         listen.length ? `Escucharé solo en tu VPN: ${listen.join(", ")} (cámbialo con soul listen).`
           : candidates.length ? `No fijo la escucha: ${describeVpn(candidates)}. Si es tu VPN: soul listen ${candidates.map((v) => v.address).join(" ")}`
           : noVpnHelp(deps.platform),
