@@ -254,3 +254,37 @@ test("setup (negativo): si la persona no da la «s», la fuente no se conecta", 
   assert.equal(await runCli(["setup"], s.deps), 0, s.err.join("\n"));
   assert.deepEqual(loadConfig(s.dir).profiles.yo.sources, []);
 });
+
+// ---- La pantalla de consentimiento no enseña etiquetas internas (guía del gemelo) ----
+
+import { declaration } from "../src/cli/source.ts";
+
+test("declaración: sin «Nivel de los datos» ni N1–N4; dice qué clase de dato es y dónde se queda", () => {
+  for (const a of ["github", "jira", "m365-mail", "azure-devops"] as const) {
+    const t = declaration(a, "para qué");
+    assert.doesNotMatch(t, /\bN[1-4]\b/, a);
+    assert.doesNotMatch(t, /Nivel de los datos/, a);
+    assert.match(t, /Qué datos son: .*(este equipo|tu equipo)/s, a);
+    assert.match(t, /Qué no se guarda nunca:/, a);
+  }
+  assert.match(declaration("github", "x"), /Qué datos son: .*(organización|empresa)/);
+});
+
+test("declaración (negativo): un nivel que no conozco se explica con la frase más restrictiva, no se enseña la etiqueta", async () => {
+  const { DESCRIPTORS } = await import("../src/adapters/descriptors.ts");
+  const orig = DESCRIPTORS.github.sensitivity;
+  (DESCRIPTORS.github as { sensitivity: string }).sensitivity = "N9";
+  try {
+    const t = declaration("github", "x");
+    assert.doesNotMatch(t, /N9/);
+    assert.match(t, /Qué datos son: .*(privad|solo tú)/s);
+  } finally { DESCRIPTORS.github.sensitivity = orig; }
+});
+
+test("source add: la pantalla que ve la persona no contiene etiquetas de nivel", async () => {
+  const s = mk({ answers: ["n"] });
+  await runCli(["source", "add", "github"], s.deps);
+  const all = s.err.join("\n") + s.out.join("\n");
+  assert.match(all, /Vas a conectar github/);
+  assert.doesNotMatch(all, /\bN[1-4]\b|Nivel de los datos/);
+});
