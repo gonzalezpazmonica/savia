@@ -4,6 +4,8 @@
 // hooks bash): un solo formato para output/guard-blocks.jsonl. Solo se llama cuando
 // un guard ya ha bloqueado, así que no añade coste al camino que pasa. Nunca lanza:
 // un fallo al registrar no puede convertir un bloqueo en un permiso ni al revés.
+// Solo cuenta como bloqueo un error con la marca BLOCKED/BLOQUEADO: un TypeError o un
+// fallo interno de un guard no es un bloqueo e inflaría la tasa de falsos positivos.
 
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -13,13 +15,14 @@ const RECORDER = fileURLToPath(new URL("../../../scripts/guard_blocks.py", impor
 
 /** Nombre del guard según la etiqueta del mensaje: «BLOCKED [branch-switch-dirty]: …». */
 export function guardNameOf(message: string): string {
-  const m = /\b(?:BLOCKED|BLOQUEADO)\s*\[([\w.-]+)\]/i.exec(message);
+  const m = /\b(?:BLOCKED|BLOQUEADO)\s*\[([\w./-]+)\]/i.exec(message);
   return m ? m[1] : "ts-before-guards";
 }
 
 export function recordGuardBlock(err: unknown, input: any, output: any): boolean {
   try {
     const message = err instanceof Error ? err.message : String(err);
+    if (!/\b(?:BLOCKED|BLOQUEADO)\b/.test(message)) return false;
     const command = extractCommand(input, output) ?? "";
     const tool = extractToolName(input) || "unknown";
     const res = spawnSync("python3", [RECORDER, "record", "--engine", "ts", "--event", "PreToolUse",

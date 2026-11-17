@@ -26,16 +26,18 @@ if [[ -z "$guard" || $# -eq 0 ]]; then
   echo "uso: guard-blocks.sh wrap --guard G [--event E] [--tool T] -- <orden del hook…>" >&2
   exit 2
 fi
-raw=""
-[[ -t 0 ]] || raw=$(cat)
-err=$(mktemp) || { echo "BLOQUEADO [$guard]: sin fichero temporal para el hook" >&2; exit 2; }
-trap 'rm -f "$err"' EXIT
-printf '%s' "$raw" | "$@" 2>"$err"
+# La entrada va a un fichero, no a una variable ni a un pipe: así el hook recibe los mismos
+# bytes (salto final y NUL incluidos) y un hook que no lee stdin no provoca SIGPIPE (141)
+# con entradas grandes, que con pipefail cambiaría el código que se reenvía.
+inp=$(mktemp) && err=$(mktemp) || { echo "BLOQUEADO [$guard]: sin fichero temporal para el hook" >&2; exit 2; }
+trap 'rm -f "$inp" "$err"' EXIT
+[[ -t 0 ]] || cat >"$inp"
+"$@" <"$inp" 2>"$err"
 rc=$?
 cat "$err" >&2
 if [[ $rc -eq 2 ]]; then
   reason=$(grep -m1 -v '^[[:space:]]*$' "$err" || true)
-  printf '%s' "$raw" | python3 "$DIR/guard_blocks.py" record --guard "$guard" --event "$event" \
+  python3 "$DIR/guard_blocks.py" record --guard "$guard" --event "$event" <"$inp" \
     --tool "$tool" --engine bash --reason "$reason" >/dev/null 2>&1 \
     || echo "AVISO: bloqueo de $guard no registrado en output/guard-blocks.jsonl" >&2
 fi

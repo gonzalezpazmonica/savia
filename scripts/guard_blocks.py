@@ -104,7 +104,8 @@ def record(guard: str, reason: str, raw: str, event: str, tool: str, engine: str
     key = load_key()
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
     entry = {"ts": now, "event": event, "tool": tool, "guard": guard, "engine": engine,
-             "reason": (reason.strip().splitlines() or [""])[0][:300],
+             # El motivo lo escribe el hook y puede repetir rutas o el fragmento detectado.
+             "reason": redact((reason.strip().splitlines() or [""])[0])[:300],
              "cmd_hmac": hmac.new(key, cmd.encode(), hashlib.sha256).hexdigest() if key else "",
              "hmac": "ok" if key else "no-key"}
     if os.environ.get("SAVIA_GUARD_LOG_INPUT") == "1":
@@ -113,9 +114,15 @@ def record(guard: str, reason: str, raw: str, event: str, tool: str, engine: str
                                  ).hexdigest()[:12]
     path = log_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+    append_private(path, json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
     return entry
+
+
+def append_private(path: Path, line: str) -> None:
+    """Añade al log creándolo 0600 (no con el umask): solo la persona dueña lo lee."""
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as fh:
+        fh.write(line)
 
 
 def read_log() -> tuple[list[dict], dict[str, str]]:
@@ -147,8 +154,8 @@ def mark(block_id: str, label: str) -> int:
         print(f"no existe el bloqueo {block_id} en {log_path()}", file=sys.stderr)
         return 1
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
-    with open(log_path(), "a", encoding="utf-8") as fh:
-        fh.write(json.dumps({"type": "label", "id": block_id, "label": label, "ts": now}) + "\n")
+    append_private(log_path(), json.dumps({"type": "label", "id": block_id, "label": label,
+                                           "ts": now}) + "\n")
     print(f"{block_id} → {label}")
     return 0
 

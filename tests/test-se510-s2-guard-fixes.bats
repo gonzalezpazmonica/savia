@@ -4,6 +4,8 @@
 # El hook pr-summary-gate.sh arreglado aún no está colocado en .claude/hooks (lo coloca la
 # operadora): se prueba desde tests/fixtures/se510-s2/hooks con --overlay-hooks. Al colocarlo,
 # el test de S1 «F3 es el único bloqueo falso» falla a propósito y pasa a «0 falsos».
+# La comparación «antes/después» usa una copia fija del gate previo
+# (tests/fixtures/se510-s2/hooks-pre), no la ruta viva: colocar el arreglo no la invierte.
 setup_file() {
   cd "$BATS_TEST_DIRNAME/.."
   export S2_OUT="$BATS_FILE_TMPDIR/s2" MUT_OUT="$BATS_FILE_TMPDIR/mut"
@@ -27,6 +29,18 @@ EOF
   cp tests/fixtures/se510-s2/hooks/pr-summary-gate.sh "$FIXED_WS/.claude/hooks/"
   ln -s "$PWD/scripts" "$FIXED_WS/scripts"
   export FIXED_GATE="$FIXED_WS/.claude/hooks/pr-summary-gate.sh"
+  export PRE_WS="$BATS_FILE_TMPDIR/ws-pre"
+  mkdir -p "$PRE_WS/.claude/hooks"
+  cp -r .claude/hooks/lib "$PRE_WS/.claude/hooks/lib"
+  cp tests/fixtures/se510-s2/hooks-pre/pr-summary-gate.sh "$PRE_WS/.claude/hooks/"
+  ln -s "$PWD/scripts" "$PRE_WS/scripts"
+  export PRE_GATE="$PRE_WS/.claude/hooks/pr-summary-gate.sh"
+}
+
+# absent <patrón> <fichero>: el patrón no aparece (falla si aparece o si grep da error).
+absent() {
+  run grep -q -- "$1" "$2"
+  [ "$status" -eq 1 ]
 }
 
 setup() {
@@ -57,6 +71,10 @@ receipt() {
   [ "$(receipt "$S2_OUT" 'sorted({c["ts"]["parity"] for c in r["cases"]})')" = "['MATCH']" ]
   # Los pares peligrosos siguen bloqueados en los dos motores donde hay guard TS.
   [ "$(receipt "$S2_OUT" '[c["ts"]["observed"] for c in r["cases"] if c["id"] in ("B1","B1b","B2","B5")]')" = "['BLOCK', 'BLOCK', 'BLOCK', 'BLOCK']" ]
+}
+
+@test "SE-510 AC-7: el recibo declara los límites de la paridad" {
+  [ "$(receipt "$S2_OUT" '[l for l in r["limitations"] if l.startswith(("PARITY_", "NOT_EXPOSED_"))]')" = "['PARITY_COMPARES_DECISION_NOT_GUARD', 'NOT_EXPOSED_HOOKS_RELY_ON_SAVIA_GATES_BRIDGE', 'PARITY_CORPUS_SMALL_N=10']" ]
 }
 
 @test "SE-510 AC-3/AC-10: B3 y B4 siguen en BLOCK con el gate arreglado" {
@@ -114,6 +132,29 @@ EOF
   [ "$output" = "$TMP/otro" ]
 }
 
+@test "SE-510 F3 negativo: varios cd, cd en subshell cerrado, pushd o env -C → exit 2" {
+  for cmd in "cd $TMP && cd sub && gh pr create" "(cd $TMP); gh pr create --draft" \
+             "pushd $TMP && gh pr create" "env -C $TMP gh pr create" "env --chdir=$TMP gh pr create" \
+             "cd -P $TMP && gh pr create"; do
+    run bash -c "jq -nc --arg c '$cmd' --arg d '$TMP' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"BLOQUEADO [pr-summary-gate]"* ]]
+  done
+}
+
+@test "SE-510 F3: cd dentro del mismo subshell que gh, gh sin argumentos y env sin -C se resuelven" {
+  git init -q "$TMP/wt" && mkdir -p "$TMP/otro"
+  top=$(git -C "$TMP/wt" rev-parse --show-toplevel)
+  run bash -c "jq -nc --arg c '(cd $TMP/wt; gh pr create)' --arg d '$TMP/otro' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$top" ]
+  run bash -c "jq -nc --arg c 'cd $TMP/wt && (gh pr create)' --arg d '$TMP/otro' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /"
+  [ "$output" = "$top" ]
+  run bash -c "jq -nc --arg c 'env GH_PAGER=cat gh pr create' --arg d '$TMP/wt' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$top" ]
+}
+
 @test "SE-510 F3 negativo: cd no resoluble, directorio inexistente o JSON roto → exit 2" {
   for cmd in 'cd $HOME/x && gh pr create' 'cd $(pwd) && gh pr create' 'cd && gh pr create' 'cd - && gh pr create'; do
     run bash -c "jq -nc --arg c '$cmd' --arg d '$TMP' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /"
@@ -144,8 +185,8 @@ gate() {  # gate <hook> <cwd> <proyecto>
   run gate "$FIXED_GATE" "$TMP/wt" "$TMP/proj"
   [ "$status" -eq 2 ]
   [[ "$output" == *"97h"* ]]
-  # El gate colocado hoy (sin el arreglo) mira el del proyecto y deja pasar: este test lo distingue.
-  run gate .claude/hooks/pr-summary-gate.sh "$TMP/wt" "$TMP/proj"
+  # El gate previo (sin el arreglo) mira el del proyecto y deja pasar: este test lo distingue.
+  run gate "$PRE_GATE" "$TMP/wt" "$TMP/proj"
   [ "$status" -eq 0 ]
 }
 
@@ -154,7 +195,7 @@ gate() {  # gate <hook> <cwd> <proyecto>
   summary "$TMP/wt" 0 && summary "$TMP/proj" 97
   run gate "$FIXED_GATE" "$TMP/wt" "$TMP/proj"
   [ "$status" -eq 0 ]
-  run gate .claude/hooks/pr-summary-gate.sh "$TMP/wt" "$TMP/proj"
+  run gate "$PRE_GATE" "$TMP/wt" "$TMP/proj"
   [ "$status" -eq 2 ]
 }
 
@@ -192,8 +233,8 @@ hook2() { printf '#!/usr/bin/env bash\ncat >/dev/null\necho "BLOQUEADO: motivo d
   [ "$status" -eq 2 ]
   [[ "$output" == *"BLOQUEADO: motivo de prueba"* ]]
   [ "$(wc -l <"$SAVIA_GUARD_BLOCKS_LOG")" -eq 1 ]
-  ! grep -q "ghp_" "$SAVIA_GUARD_BLOCKS_LOG"
-  ! grep -q "git push" "$SAVIA_GUARD_BLOCKS_LOG"
+  absent "ghp_" "$SAVIA_GUARD_BLOCKS_LOG"
+  absent "git push" "$SAVIA_GUARD_BLOCKS_LOG"
   run python3 -c 'import json,os; r=json.loads(open(os.environ["SAVIA_GUARD_BLOCKS_LOG"]).read())
 print(r["guard"], r["reason"], r["hmac"], len(r["cmd_hmac"]), "input" in r)'
   [ "$output" = "prueba BLOQUEADO: motivo de prueba ok 64 False" ]
@@ -215,8 +256,31 @@ print(r["guard"], r["reason"], r["hmac"], len(r["cmd_hmac"]), "input" in r)'
   [ "$status" -eq 2 ]
   grep -q '"input"' "$SAVIA_GUARD_BLOCKS_LOG"
   grep -q 'REDACTED' "$SAVIA_GUARD_BLOCKS_LOG"
-  ! grep -q 'abc123' "$SAVIA_GUARD_BLOCKS_LOG"
-  ! grep -q 'ghp_abcdef' "$SAVIA_GUARD_BLOCKS_LOG"
+  absent 'abc123' "$SAVIA_GUARD_BLOCKS_LOG"
+  absent 'ghp_abcdef' "$SAVIA_GUARD_BLOCKS_LOG"
+}
+
+@test "SE-510 AC-4: el motivo del hook se guarda redactado y el log nace 0600" {
+  printf '#!/usr/bin/env bash\ncat >/dev/null\necho "BLOQUEADO: token ghp_abcdefghijklmnopqrstuvwxyz0123 en /ruta/x" >&2\nexit 2\n' >"$TMP/hr.sh"
+  run bash -c "umask 022; echo '{}' | bash scripts/guard-blocks.sh wrap --guard p -- bash '$TMP/hr.sh'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"ghp_abcdef"* ]]  # el hook habla tal cual; solo el registro se redacta
+  absent 'ghp_abcdef' "$SAVIA_GUARD_BLOCKS_LOG"
+  grep -q 'REDACTED' "$SAVIA_GUARD_BLOCKS_LOG"
+  [ "$(stat -c %a "$SAVIA_GUARD_BLOCKS_LOG")" = "600" ]
+}
+
+@test "SE-510 AC-4: wrap entrega al hook los mismos bytes y no cambia su código con entradas grandes" {
+  printf '#!/usr/bin/env bash\ncat >"%s"\nexit 0\n' "$TMP/got" >"$TMP/copy.sh"
+  printf '{"tool_input":{"command":"ls"}}\n\n' >"$TMP/in"
+  run bash -c "bash scripts/guard-blocks.sh wrap --guard p -- bash '$TMP/copy.sh' <'$TMP/in'"
+  [ "$status" -eq 0 ]
+  cmp "$TMP/in" "$TMP/got"
+  # Hook que sale 0 sin leer stdin con una entrada mayor que el buffer del pipe.
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$TMP/noread.sh"
+  head -c 300000 /dev/zero | tr '\0' 'a' >"$TMP/big"
+  run bash -c "bash scripts/guard-blocks.sh wrap --guard p -- bash '$TMP/noread.sh' <'$TMP/big'"
+  [ "$status" -eq 0 ]
 }
 
 @test "SE-510 AC-4: clave con permisos abiertos → cmd_hmac vacío, nunca un hash sin clave" {

@@ -38,7 +38,7 @@ hook_read_command pr-summary-gate <<<"$RAW_INPUT"; _rc=$?
 INPUT="$HOOK_COMMAND"
 CMD_AT="$HOOK_CMD_AT"
 GIT_AT="$HOOK_GIT_AT"
-if ! grep -qE "${CMD_AT}([^[:space:]]*/)?gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)" <<<"$INPUT"; then
+if ! grep -qE "${CMD_AT}([^[:space:]]*/)?gh[[:space:]]+pr[[:space:]]+create([[:space:];&|)]|$)" <<<"$INPUT"; then
   exit 0
 fi
 

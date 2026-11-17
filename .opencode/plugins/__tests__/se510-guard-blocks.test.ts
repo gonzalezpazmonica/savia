@@ -50,7 +50,24 @@ test("la lista de paridad es la del plugin y empieza por los baratos", () => {
 test("guardNameOf: etiqueta del mensaje o nombre genérico", () => {
   expect(guardNameOf("BLOCKED [force-push]: no")).toBe("force-push");
   expect(guardNameOf("BLOQUEADO [pr-summary-gate]: x")).toBe("pr-summary-gate");
-  expect(guardNameOf("algo raro")).toBe("ts-before-guards");
+  expect(guardNameOf("BLOCKED [credential-leak/aws]: x")).toBe("credential-leak/aws");
+  expect(guardNameOf("BLOCKED: sin etiqueta")).toBe("ts-before-guards");
+});
+
+test("recordGuardBlock no registra una excepción que no es un bloqueo (TypeError)", () => {
+  const d = tmp();
+  const log = join(d, "blocks.jsonl");
+  process.env.SAVIA_GUARD_BLOCKS_LOG = log;
+  process.env.SAVIA_GUARD_BLOCKS_KEY = join(d, "k");
+  try {
+    expect(recordGuardBlock(new TypeError("cannot read properties of undefined"), bash("ls"), {})).toBe(false);
+    expect(existsSync(log)).toBe(false);
+    expect(recordGuardBlock(new Error("BLOCKED: sin etiqueta"), bash("ls"), {})).toBe(true);
+    expect(JSON.parse(readFileSync(log, "utf8").trim()).guard).toBe("ts-before-guards");
+  } finally {
+    delete process.env.SAVIA_GUARD_BLOCKS_LOG;
+    delete process.env.SAVIA_GUARD_BLOCKS_KEY;
+  }
 });
 
 test("recordGuardBlock deja una línea sin la orden en claro", () => {

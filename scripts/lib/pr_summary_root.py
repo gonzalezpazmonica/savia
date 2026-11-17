@@ -10,13 +10,15 @@ Uso: python3 pr_summary_root.py <raíz-de-respaldo>   (entrada del hook en stdin
 Entrada: el JSON del hook (`tool_input.command`, `cwd`) o la orden en texto plano.
 Orden de resolución del directorio base:
   1. `cwd` de la entrada; sin él, la raíz de respaldo (el comportamiento anterior).
-  2. Un `cd <ruta>` anterior a `gh pr create` en la misma línea (`cd X && gh …`,
+  2. Un único `cd <ruta>` anterior a `gh pr create` en la misma línea (`cd X && gh …`,
      `(cd X; gh …)`), relativo a la base.
   3. `git -C <dir> rev-parse --show-toplevel`; si no es un repo, el directorio mismo.
 
 Salida: la raíz en stdout, exit 0. Fallo cerrado (exit 2 con motivo en stderr):
 JSON malformado, `cd` cuyo destino no se puede saber sin ejecutar nada (`$VAR`,
-`$(…)`, `` ` ``, `~usuario`, `cd -`, `cd` a secas) o un directorio que no existe.
+`$(…)`, `` ` ``, `~usuario`, `cd -`, `cd` a secas), más de un `cd` (habría que
+encadenarlos), un `cd` dentro de un subshell que se cierra antes de gh (`(cd X); gh …`),
+`pushd`/`popd` o `env -C`/`--chdir`, o un directorio que no existe.
 No hay `-C` en gh: el `-C` de la spec es el de `git -C` y el de `cd`; `gh -R`
 apunta al remoto, no al árbol, y no cambia nada aquí.
 """
@@ -29,13 +31,16 @@ import shlex
 import subprocess
 import sys
 
-GH_RE = re.compile(r"(?:^|[;&|(`\s])(?:[^\s;&|()]*/)?gh\s+pr\s+create(?:\s|$)")
+GH_RE = re.compile(r"(?:^|[;&|(`\s])(?:[^\s;&|()]*/)?gh\s+pr\s+create(?=[\s;&|)]|$)")
 # `cd <arg>` al inicio de una orden (principio o tras separador / subshell).
 CD_RE = re.compile(r"(?:^|[;&|(]|\$\()\s*cd(?:\s+(\"[^\"]*\"|'[^']*'|[^\s;&|()]+))?\s*(?=$|[;&|)])")
 # Cualquier `cd` en posición de orden (también `cd $(…)`, `cd "$x"y`): si hay más de los que
 # CD_RE entiende, alguno no se sabe adónde va → fallo cerrado.
 CD_ANY = re.compile(r"(?:^|[;&|(]|\$\()\s*cd(?=\s|$|[;&|)])")
 UNSAFE = re.compile(r"[$`]|^~[^/]|^-$")
+# Otras formas de cambiar de directorio que no se siguen: fallo cerrado.
+OTHER_CHDIR = re.compile(r"(?:(?:^|[;&|(]|\$\()\s*(?:pushd|popd)(?=\s|$|[;&|)]))"
+                         r"|(?:\benv\b[^;&|()]*\s(?:-C|--chdir)(?:=|\s|$))")
 
 
 class Unresolved(Exception):
@@ -65,12 +70,19 @@ def cd_target(command: str) -> str | None:
     if not gh:
         return None
     head = command[: gh.start() + 1]
+    if OTHER_CHDIR.search(head):
+        raise Unresolved("pushd/popd o env -C antes de gh pr create: no se siguen")
     parsed = list(CD_RE.finditer(head))
-    if len(parsed) != len(CD_ANY.findall(head)):
+    n_cd = len(CD_ANY.findall(head))
+    if len(parsed) != n_cd:
         raise Unresolved("`cd` con un destino que no se entiende antes de gh pr create")
+    if n_cd > 1:
+        raise Unresolved("más de un `cd` antes de gh pr create: no se encadenan")
     last = parsed[-1] if parsed else None
     if last is None:
         return None
+    if ")" in head[last.end():]:
+        raise Unresolved("`cd` dentro de un subshell que se cierra antes de gh pr create")
     arg = last.group(1)
     if arg is None:
         raise Unresolved("`cd` sin destino antes de gh pr create (iría a HOME)")

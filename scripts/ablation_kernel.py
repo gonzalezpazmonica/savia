@@ -632,6 +632,13 @@ def run_guard_corpus(root: Path, corpus: dict, workdir: Path, hooks_rev: str | N
     limitations = ["SIMULATED_DISPATCHER_NOT_A_LIVE_RUNTIME", "PROMPT_AND_ASYNC_HOOKS_NOT_EVALUATED"]
     if not ts:
         limitations.append("TS_GUARDS_NOT_COMPARED")
+    else:
+        # La paridad compara BLOCK/ALLOW, no qué guard bloquea; los casos que solo bloquean
+        # hooks not_exposed cuentan como ALLOW en bash (se confía en el puente savia-gates);
+        # y el corpus es pequeño: «0 diferencias» es una señal débil, no una prueba.
+        limitations += ["PARITY_COMPARES_DECISION_NOT_GUARD",
+                        "NOT_EXPOSED_HOOKS_RELY_ON_SAVIA_GATES_BRIDGE",
+                        f"PARITY_CORPUS_SMALL_N={len(cases)}"]
     receipt = {"schema": 1, "spec": "SE-510", "unit": "guard-allow-corpus",
                "model_invocations": 0, "corpus_sha256": sha256(canonical(corpus)),
                "hooks_rev": hooks_sha, "hooks_overlay": overlaid, "threshold_false_blocks": 0,
