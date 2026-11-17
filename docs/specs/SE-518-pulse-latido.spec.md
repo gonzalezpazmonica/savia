@@ -306,7 +306,7 @@ Otros: identidad propia para los pushes de Pulse cuando el forge lo permita, dis
 
 ## Enmienda A1 (PROPUESTA) — Revisión diaria de la comprobación nocturna
 
-> Estado: **pendiente de confirmación de la operadora**. Hasta que confirme la escena E11 y apruebe esta enmienda en su PR, no se implementa nada (SE-505). No cambia el `status` de la spec.
+> Estado: **escena E11 confirmada y enmienda A1 aprobada por la operadora el 2026-11-17**, por pregunta interactiva; registrado en un comentario de la PR #1602 (puerta de comprensión cumplida). Implementada como slice S1n en esa misma PR. No cambia el `status` de la spec.
 
 **Por qué es una enmienda y no cabe en un slice aprobado.** S1 entrega contratos, lanzador, `pulse status` y respaldo, y dice expresamente que nadie invoca todavía nada de forma periódica. Consultar el forge es un observador de forge (arquitectura, pieza 1), que la spec reparte entre S2 (cabeza sin pruebas), S3 (forge caído) y S7 (adaptador de forge y configuración por operador); ninguno es una comprobación diaria del resultado de un flujo. Y E1–E10 no incluyen la escena «un rojo repetido se vuelve invisible»: la puerta de comprensión exige confirmarla antes de escribir código.
 
