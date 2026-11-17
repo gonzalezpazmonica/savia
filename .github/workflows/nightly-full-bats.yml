@@ -34,6 +34,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      # El lock de savia-vaults se generó con npm de Node 22; con el Node por defecto del runner
+      # `npm ci` lo da por desincronizado (faltan los @esbuild/* opcionales). Misma versión que ci.yml.
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
       - name: Install BATS and dependencies
         run: |
           git clone --depth 1 --branch v1.9.0 https://github.com/bats-core/bats-core.git /tmp/bats
