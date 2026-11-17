@@ -32,7 +32,7 @@ jqr() { python3 -c "import json,sys; r=json.load(open('$R')); print($1)"; }
 @test "SE-400 F4 check: el preregistro cubre exactamente el grupo PreToolUse/Bash de F2" {
   run python3 scripts/ablation_units.py check
   [ "$status" -eq 0 ]
-  [[ "$output" == *"PREREG_OK f4-pretooluse-bash@"*"units=9"* ]]
+  [[ "$output" == *"PREREG_OK f4-pretooluse-bash@"*"units=13"* ]]
 }
 
 @test "SE-400 F4 run sobre el repo: control válido y cero invocaciones de modelo" {
@@ -55,10 +55,15 @@ jqr() { python3 -c "import json,sys; r=json.load(open('$R')); print($1)"; }
   [ "$output" = "True" ]
 }
 
-@test "SE-400 F4 la exclusión de f4-adb-root sigue justificada (guard ADB sin leer stdin)" {
-  # Si falla porque stale=True, el hook ya lee stdin: quitar la exclusión del preregistro.
-  run jqr "[(e['id'], e['control'], e['stale']) for e in r['control']['excluded']]"
-  [ "$output" = "[('f4-adb-root', 'ALLOW', False)]" ]
+@test "SE-400 F4 sin exclusiones caducadas: f4-adb-root vuelve al corpus y el guard ADB lo atrapa" {
+  # La exclusión de 0.2.0 caducó cuando el hook pasó a leer stdin (#1398). Si reaparece una
+  # exclusión y su control ya no es ALLOW, hay que retirarla del preregistro, no tolerarla.
+  run jqr "[e['id'] for e in r['control']['excluded'] if e['stale']]"
+  [ "$output" = "[]" ]
+  run jqr "r['control']['excluded']"
+  [ "$output" = "[]" ]
+  run jqr "'f4-adb-root' in [c for u in r['units'] if u['unit_id']=='u-android-adb-validate' for c in u['unique_failures_caught']]"
+  [ "$output" = "True" ]
 }
 
 @test "SE-400 F4 el repositorio no cambia tras correr la ablación" {
