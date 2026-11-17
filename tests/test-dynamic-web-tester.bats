@@ -122,7 +122,7 @@ s03t_run() { run env PATH="$SB/bin:$SB/sys" "$SB/sys/bash" "$RUN" "$@"; }
     s03t_run --target http://localhost:19999
     [ "$status" -eq 0 ]
     [ "$(cut -d' ' -f1 "$CALLS" | tr '\n' ' ')" = "dalfox sqlmap nuclei " ]
-    grep -q '^dalfox url http://localhost:19999 --output .*dalfox-results.json --format json --silence' "$CALLS"
+    grep -q '^dalfox url http://localhost:19999 --output .*dalfox-results.json --format json --silence$' "$CALLS"
     grep -q '^nuclei -u http://localhost:19999 -tags xss,sqli,lfi -silent -json -o .*nuclei-results.json' "$CALLS"
 }
 

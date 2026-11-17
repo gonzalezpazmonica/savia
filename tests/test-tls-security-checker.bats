@@ -397,6 +397,14 @@ Permissions-Policy: geolocation=()'
   [ "$(jget "$(hdr_report)" "[f['header'] for f in d['findings']]")" = "['Content-Security-Policy', 'X-Content-Type-Options', 'X-Frame-Options', 'Referrer-Policy', 'Permissions-Policy']" ]
 }
 
+@test "SE376: HSTS max-age one second under a year still raises the MEDIUM finding" {
+  mk_tree242; start_http
+  printf 'Strict-Transport-Security: max-age=31535999\n' > "$T242/hdr_"
+  tls bash "$T242/scripts/web-headers-check.sh" --url "$URL/"
+  stop_http
+  [[ "$(jget "$(hdr_report)" "[f['message'] for f in d['findings'] if f['header']=='HSTS']")" == *"max-age < 31536000"* ]]
+}
+
 @test "SE242-B28: Server version and X-Powered-By each cost 5 points, a bare Server name does not" {
   mk_tree242; start_http
   { echo "$ALL_HEADERS"; echo "Server: nginx/1.25.3"; } > "$T242/hdr_"
@@ -598,4 +606,11 @@ teardown() {
   FAKE_TESTSSL_JSON='[{"id":"scanProblem","severity":"FATAL","finding":"No engine or GET request"}]' tls bash "$T242/scripts/tls-security-check.sh" --host example.org
   [ "$status" -eq 2 ]
   [[ "$output" == *"GRADE: UNKNOWN"* ]]
+}
+
+# SE-376 S03: los dos scripts deben conservar el modo estricto (variable sin definir
+# o fallo en tubería no pueden pasar en silencio y dar una nota falsa).
+@test "SE376: tls and headers scripts keep set -uo pipefail" {
+  grep -q '^set -uo pipefail' "$TLS_SCRIPT"
+  grep -q '^set -uo pipefail' "$HEADERS_SCRIPT"
 }
