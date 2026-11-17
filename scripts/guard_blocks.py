@@ -42,12 +42,11 @@ SECRET_RES = [
     re.compile(r"sk-[A-Za-z0-9]{32,}"),
     re.compile(r"AKIA[0-9A-Z]{16}"),
     re.compile(r"(?:ghp|ghs|ghu|ghr|gho)_[A-Za-z0-9]{20,}"),
-    re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
     re.compile(r"xox[abprs]-[A-Za-z0-9-]{10,}"),
     re.compile(r"(?i)(authorization:\s*(?:bearer|basic|token)\s+)\S+"),
     re.compile(r"(?i)((?:password|passwd|pwd|token|secret|api[_-]?key|pat)\s*[=:]\s*)[^\s'\";&|]+"),
     re.compile(r"(?i)(://[^/\s:@]+:)[^@\s]+(?=@)"),
-    re.compile(r"[A-Za-z0-9+/_=-]{32,}"),
+    re.compile(r"[A-Za-z0-9+/_=-]{32,}"),  # tokens largos (también los PAT de grano fino)
 ]
 
 
