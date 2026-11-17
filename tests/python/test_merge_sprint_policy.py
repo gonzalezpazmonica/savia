@@ -171,7 +171,7 @@ class AC12bRecibo(Base):
         self.assertEqual(r["condicion"], "R2.9")
 
     def test_objeto_distinto_del_fichero_de_politica_es_anomalia(self):
-        """AC-8 en el recibo: el fichero local editado tras aprobar no vale."""
+        """AC-8: el fichero local editado tras aprobar no coincide con el digest de la petición."""
         pet = self.peticion()
         self.aprobar_pet(pet)
         for campo, valor in (("max_merges", 20), ("not_after", fmt(NA + H)), ("tiers", [1]),
@@ -516,7 +516,13 @@ class RequestCLI(unittest.TestCase):
         self.fp, self.fc = os.path.join(self.tmp, "p.json"), os.path.join(self.tmp, "c.json")
         with open(self.fp, "w") as f:
             f.write(mp.canonico(politica()))
-        self.cfg({"repo_aprobaciones": "org/aprobaciones"})
+        self.clave = os.path.join(self.tmp, "clave.asc")
+        with open(self.clave, "w") as f:
+            f.write("clave de prueba\n")
+        self.cfg_ok = {"genesis": "a" * 40, "autor": {"email": "op@fixture.invalid"}, "clave_webflow": self.clave,
+                       "huella_webflow": "B" * 40, "tipos": ["savia-politica"], "libro": os.path.join(self.tmp, "libro"),
+                       "espejo": os.path.join(self.tmp, "espejo"), "repo_aprobaciones": "org/aprobaciones"}
+        self.cfg(self.cfg_ok)
         self.preq = os.path.join(self.home, "policy", "0123456789abcdef.request.json")
 
     def tearDown(self):
@@ -555,6 +561,35 @@ class RequestCLI(unittest.TestCase):
         self.assertNotIn("Traceback", p.stderr)
         self.assertFalse(os.path.exists(self.preq))
 
+    def test_configuracion_incompleta_no_registra_peticion(self):
+        """Una configuración que verify nunca podría verificar no bloquea la política."""
+        for mala in ({}, {**self.cfg_ok, "tipos": ["savia-merge"]}, {**self.cfg_ok, "genesis": "x"},
+                     {k: v for k, v in self.cfg_ok.items() if k != "espejo"}):
+            with self.subTest(mala):
+                self.cfg(mala)
+                p = self.req()
+                self.assertEqual(p.returncode, 2, p.stdout)
+                self.assertFalse(os.path.exists(self.preq))
+        self.cfg(self.cfg_ok)
+        self.assertEqual(self.req().returncode, 0)
+
+    def test_dos_peticiones_simultaneas_abren_una_sola_pr(self):
+        """La reserva se toma antes de abrir la PR: una petición anidada en abrir_pr se rechaza."""
+        llamadas = []
+        a = type("A", (), {"abrir": True, "clon": "x", "ahora": fmt(NB - 30 * MIN)})()
+        cfg = dict(self.cfg_ok)
+
+        def abrir(*args, **kw):
+            llamadas.append(1)
+            self.assertEqual(mp._request(a, politica(), cfg, self.preq), mp.RECHAZADA)   # la «otra» petición
+        original = mp.abrir_pr
+        mp.abrir_pr = abrir
+        try:
+            self.assertEqual(mp._request(a, politica(), cfg, self.preq), 0)
+        finally:
+            mp.abrir_pr = original
+        self.assertEqual(len(llamadas), 1)
+
     def test_configuracion_que_no_es_objeto_da_2_sin_traceback(self):
         self.cfg([1, 2])
         p = self.req()
@@ -585,6 +620,101 @@ class FiltrosDeRamaDeGitHub(unittest.TestCase):
                    {"push": {"branches-ignore": ["ma?n"]}}, {"push": {"branches-ignore": ["!main"]}}):
             with self.subTest(on):
                 self.assertFalse(mp.push_sin_filtro(on, "main"))
+
+
+class ResumenFiel(unittest.TestCase):
+    """Lo que lee la operadora es lo que se aprueba: nada del objeto puede ocultarse con marcado."""
+
+    def _repo(self, **c):
+        return [{"repo": "org/savia", "base": "main", "include": ["docs/**"], "exclude": [],
+                 "required_checks": ["CI"], **c}]
+
+    def test_globs_con_marcado_rechazados(self):
+        for g in ("<!--", "-->x", "a<b", "`x`", "a|b", "a b", "[x](y)", "a‮b", "docs/*?", "{a,b}"):
+            with self.subTest(g), self.assertRaises(mp.Rechazada):
+                mp.validar(politica(repos=self._repo(include=["docs/**", g])))
+
+    def test_caso_de_codex_include_con_apertura_y_exclude_con_cierre(self):
+        with self.assertRaises(mp.Rechazada):
+            mp.validar(politica(repos=self._repo(include=["docs/**", "<!--", "src/**"], exclude=["-->"])))
+        with self.assertRaises(mp.Rechazada):
+            mp.validar(politica(repos=self._repo(exclude=["-->"])))
+
+    def test_checks_y_reviewers_con_marcado(self):
+        with self.assertRaises(mp.Rechazada):
+            mp.validar(politica(repos=self._repo(required_checks=["<!-- CI"])))
+        with self.assertRaises(mp.Rechazada):
+            mp.validar(politica(reviewers=["revisora-a", "<!--"]))
+
+    def test_resumen_sin_secuencias_de_comentario_html(self):
+        pol = politica(repos=self._repo(include=["docs/**", "src/**"], exclude=["docs/x/**"],
+                                        required_checks=["CI (lint) *"]))
+        mp.validar(pol)
+        resumen = mp.generar_resumen(pol)
+        self.assertNotIn("<", resumen)
+        self.assertNotIn("<", mp.generar_cuerpo(pol, resumen))
+        self.assertIn("`src/**`", resumen)
+
+    def test_md_escapa_el_marcado(self):
+        self.assertNotIn("<!--", mp._md("a <!-- b --> c"))
+        self.assertEqual(mp._md("<"), "&lt;")
+
+    def test_reviewers_sin_distinguir_mayusculas(self):
+        with self.assertRaises(mp.Rechazada):
+            mp.validar(politica(reviewers=["Bob", "bob"]))
+        with self.assertRaises(mp.Rechazada):
+            mp.validar(politica(reviewers=["Savia-Orquestadora", "x"]))
+
+
+class WorkflowsYPlan(unittest.TestCase):
+    def _git(self, tmp, *a):
+        subprocess.run(["git", "-C", tmp, "-c", "user.name=t", "-c", "user.email=t@x.invalid", *a], check=True)
+
+    def test_workflow_en_subcarpeta_no_cuenta(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        self._git(tmp, "init", "-q", "-b", "main")
+        for rel, esperado in ((".github/workflows/inert/ci.yml", []),
+                              (".github/workflows/ci.yml", [".github/workflows/ci.yml"])):
+            self._git(tmp, "rm", "-q", "-r", "-f", "--ignore-unmatch", ".github")
+            ruta = os.path.join(tmp, rel)
+            os.makedirs(os.path.dirname(ruta), exist_ok=True)
+            with open(ruta, "w") as f:
+                f.write("on: push\njobs: {}\n")
+            self._git(tmp, "add", "-A")
+            self._git(tmp, "commit", "-q", "--allow-empty", "-m", "x")
+            self._git(tmp, "update-ref", "refs/remotes/origin/main", "HEAD")
+            with self.subTest(rel):
+                self.assertEqual(mp.workflow_sin_filtro(tmp, "main"), esperado)
+
+    def test_repos_que_no_es_lista_da_rechazo_no_traceback(self):
+        for repos in (5, True, "x", {"a": 1}):
+            with self.subTest(repos), self.assertRaises(mp.Rechazada):
+                mp.plan({"repos": repos, "max_merges": 3, "tiers": [1], "reviewers": ["a", "b"]}, NB, ".")
+
+
+class AbrirPrIndiceAjeno(Base):
+    def test_abrir_pr_no_publica_altas_ajenas_del_indice(self):
+        remoto = os.path.join(self.tmp, "remoto2.git")
+        subprocess.run(["git", "clone", "-q", "--bare", self.repo, remoto], check=True)
+        clon = os.path.join(self.tmp, "clon2")
+        subprocess.run(["git", "clone", "-q", remoto, clon], check=True)
+        for k, val in (("user.name", "App"), ("user.email", "app@fixture.invalid")):
+            subprocess.run(["git", "-C", clon, "config", k, val], check=True)
+        with open(os.path.join(clon, "extra.txt"), "w") as f:
+            f.write("ajeno\n")
+        subprocess.run(["git", "-C", clon, "add", "extra.txt"], check=True)
+        gh = os.path.join(self.tmp, "gh-ok")
+        with open(gh, "w") as f:
+            f.write("#!/usr/bin/env bash\nexit 0\n")
+        os.chmod(gh, 0o755)
+        os.environ["GH"] = gh
+        pet = self.peticion()
+        mp.abrir_pr(pet, clon, "org/aprobaciones")
+        rama = "politica-" + os.path.basename(pet["ruta"])[:-5]
+        ficheros = subprocess.run(["git", "-C", remoto, "show", "--name-only", "--format=", rama], check=True,
+                                  capture_output=True, text=True).stdout.split()
+        self.assertEqual(ficheros, [pet["ruta"]])
 
 
 class Orquestadores(unittest.TestCase):

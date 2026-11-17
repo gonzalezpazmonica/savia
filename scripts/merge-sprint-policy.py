@@ -27,6 +27,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TIPO = "savia-politica"
@@ -94,10 +95,15 @@ def _entero(v, campo, lo, hi):
         raise Rechazada(f"{campo} debe ser un entero entre {lo} y {hi}: {v!r}")
 
 
+RE_GLOB_RUTA = re.compile(r"^[A-Za-z0-9._/*-]+$")          # lista blanca: nada de marcado Markdown/HTML
+RE_REVIEWER = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?:\[bot\])?$")
+RE_CHECK = re.compile(r"^[^\x00-\x1f\x7f<>`]{1,200}$")
+
+
 def _globs(v, campo, vacia_ok):
     if not isinstance(v, list) or (not v and not vacia_ok) or not all(
-            isinstance(g, str) and g and not g.startswith("/") and ".." not in g.split("/")
-            and "\n" not in g for g in v):
+            isinstance(g, str) and RE_GLOB_RUTA.fullmatch(g) and not g.startswith("/")
+            and ".." not in g.split("/") for g in v):
         raise Rechazada(f"{campo}: lista de globs de rutas relativas" + ("" if vacia_ok else " no vacía"))
 
 
@@ -132,11 +138,12 @@ def validar(pol):
     if u == "open" and fz:
         raise Rechazada("universe open no lleva lista de PR")
     rv = pol["reviewers"]
-    if not isinstance(rv, list) or not all(isinstance(r, str) and r for r in rv) or len(set(rv)) != len(rv):
-        raise Rechazada("reviewers debe ser una lista de ids distintos")
+    if not isinstance(rv, list) or not all(isinstance(r, str) and RE_REVIEWER.fullmatch(r) for r in rv) \
+            or len({r.casefold() for r in rv}) != len(rv):
+        raise Rechazada("reviewers debe ser una lista de ids distintos (logins de GitHub, sin distinguir mayúsculas)")
     if len(rv) < 2:
         raise Rechazada("hacen falta al menos dos reviewers distintos")
-    if set(rv) & orquestadores():
+    if {r.casefold() for r in rv} & {o.casefold() for o in orquestadores()}:
         raise Rechazada("el id del orquestador no puede ser reviewer")
     for k in ("runner_blob", "classifier_blob", "f5_blob", "resolver_blob"):
         if not isinstance(pol[k], str) or not RE_BLOB.fullmatch(pol[k]):
@@ -158,7 +165,7 @@ def validar(pol):
         _globs(r["include"], "include", vacia_ok=False)
         _globs(r["exclude"], "exclude", vacia_ok=True)
         rc = r["required_checks"]
-        if not isinstance(rc, list) or not rc or not all(isinstance(c, str) and c for c in rc):
+        if not isinstance(rc, list) or not rc or not all(isinstance(c, str) and RE_CHECK.fullmatch(c) for c in rc):
             raise Rechazada(f"required_checks vacío en {r['repo']}")
 
 
@@ -262,7 +269,7 @@ def workflow_sin_filtro(d, base):
     salida = []
     lista = _git(d, "ls-tree", "-r", "--name-only", f"origin/{base}", "--", ".github/workflows/")
     for ruta in lista.splitlines():
-        if not ruta.endswith((".yml", ".yaml")):
+        if not re.fullmatch(r"\.github/workflows/[^/]+\.ya?ml", ruta):   # GitHub ignora subcarpetas
             continue
         try:
             doc = yaml.safe_load(_git(d, "show", f"origin/{base}:{ruta}"))
@@ -304,6 +311,8 @@ def plan(borrador, ahora, raiz):
         raise Rechazada("max_merges es obligatorio")
     nb, na = ventana(borrador, ahora)
     repos = []
+    if not isinstance(borrador.get("repos") or [], list):
+        raise Rechazada("repos del borrador debe ser una lista")
     for r in borrador.get("repos") or []:
         if not isinstance(r, dict):
             raise Rechazada("cada repo del borrador es un objeto")
@@ -346,6 +355,12 @@ def plan(borrador, ahora, raiz):
 
 # ---------------------------------------------------------------- resumen, título, cuerpo
 
+def _md(s):
+    """Texto de usuario sin efecto de marcado: &, <, > como entidades y el resto escapado."""
+    s = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return re.sub(r"([\\`*_\[\]()!|~#])", r"\\\1", s)
+
+
 def generar_resumen(pol):
     """Lenguaje llano, determinista: solo depende del objeto (byte a byte)."""
     tiers = " y ".join(str(t) for t in sorted(pol["tiers"]))
@@ -354,9 +369,10 @@ def generar_resumen(pol):
          f"Tope: {pol['max_merges']} fusiones. Se para tras {pol['max_parks_in_row']} PR aparcadas seguidas.",
          "Repos y rutas:"]
     for r in pol["repos"]:
-        fuera = ", ".join(r["exclude"]) if r["exclude"] else "nada más"
-        l.append(f"- {r['repo']} hacia {r['base']}: entran {', '.join(r['include'])}; "
-                 f"quedan fuera {fuera}. Checks obligatorios: {', '.join(r['required_checks'])}.")
+        fuera = ", ".join(f"`{g}`" for g in r["exclude"]) if r["exclude"] else "nada más"
+        dentro = ", ".join(f"`{g}`" for g in r["include"])
+        l.append(f"- {r['repo']} hacia {r['base']}: entran {dentro}; "
+                 f"quedan fuera {fuera}. Checks obligatorios: {', '.join(_md(c) for c in r['required_checks'])}.")
     l.append("Universo: " + ("cualquier PR abierta de esas ramas, también las que se abran de noche."
                              if pol["universe"] == "open" else
                              "solo las PR " + ", ".join(f"#{n}" for n in sorted(pol["frozen_prs"])) + "."))
@@ -628,17 +644,19 @@ def abrir_pr(peticion, clon, repo_aprob, base="main"):
     g("checkout", "-q", "-b", rama, f"origin/{base}")     # -b: nunca pisa una rama del clon
     destino = os.path.join(clon, peticion["ruta"])
     os.makedirs(os.path.dirname(destino), exist_ok=True)
-    with open(destino, "w") as f:
+    with open(destino, "w", encoding="utf-8") as f:
         f.write(json.dumps(peticion["artefacto"], ensure_ascii=False, indent=2, sort_keys=True) + "\n")
     g("add", "--", peticion["ruta"])
-    g("commit", "-q", "-m", peticion["titulo"])
+    # --only: solo el artefacto, aunque el índice del clon traiga otras altas preparadas.
+    g("commit", "-q", "--only", "-m", peticion["titulo"], "--", peticion["ruta"])
     g("push", "-q", "-u", "origin", rama)
-    cuerpo = os.path.join(clon, ".git", "politica-cuerpo.md")
-    with open(cuerpo, "w") as f:
-        f.write(peticion["cuerpo"])
     gh = os.environ.get("GH", "gh")
-    subprocess.run([gh, "pr", "create", "-R", repo_aprob, "--base", base, "--head", rama,
-                    "--title", peticion["titulo"], "--body-file", cuerpo], check=True)
+    with tempfile.TemporaryDirectory() as td:       # fuera de .git (en un worktree .git es un fichero)
+        cuerpo = os.path.join(td, "cuerpo.md")
+        with open(cuerpo, "w", encoding="utf-8") as f:
+            f.write(peticion["cuerpo"])
+        subprocess.run([gh, "pr", "create", "-R", repo_aprob, "--base", base, "--head", rama,
+                        "--title", peticion["titulo"], "--body-file", cuerpo], check=True)
 
 
 # ---------------------------------------------------------------- CLI
@@ -651,7 +669,7 @@ def _leer(ruta):
 def _guardar(ruta, contenido):
     os.makedirs(os.path.dirname(ruta), mode=0o700, exist_ok=True)
     tmp = ruta + ".tmp"
-    with open(tmp, "w") as f:
+    with open(tmp, "w", encoding="utf-8") as f:
         f.write(contenido)
     os.replace(tmp, ruta)
 
@@ -672,19 +690,35 @@ def _request(a, pol, cfg, preq):
     if a.abrir and (not a.clon or not isinstance(cfg.get("repo_aprobaciones"), str)):
         return rechazo("--abrir exige --clon y repo_aprobaciones")
     try:
+        # La configuración se valida como la validará verify: una que nunca podría verificarse
+        # no registra petición (registrarla bloquearía la política: solo hay una petición).
+        ar.validar_politica(cfg)
+        if TIPO not in cfg["tipos"] or not isinstance(cfg.get("espejo"), str) \
+                or not isinstance(cfg.get("repo_aprobaciones"), str):
+            raise Rechazada("la configuración no habilita savia-politica o le falta espejo o repo_aprobaciones")
         ruta, art = nuevo_artefacto(pol, _ahora(a.ahora))
         pet = {"ruta": ruta, "artefacto": art, "digest": digest(pol), "aprobacion_cfg": huella_config(cfg),
                "titulo": generar_titulo(pol), "cuerpo": generar_cuerpo(pol, art["resumen"])}
     except (Rechazada, ar.Rechazo) as e:
         return rechazo(getattr(e, "motivo", e))
-    if os.path.exists(preq):
+    # Reserva atómica (O_EXCL) antes de abrir la PR: dos peticiones simultáneas no abren dos PR.
+    os.makedirs(os.path.dirname(preq), mode=0o700, exist_ok=True)
+    try:
+        os.close(os.open(preq, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+    except FileExistsError:
         return rechazo(f"ya hay una petición para esta política ({preq}); para otra, policy-plan")
-    if a.abrir:
-        try:
-            abrir_pr(pet, a.clon, cfg["repo_aprobaciones"], cfg.get("rama", "main"))
-        except (subprocess.CalledProcessError, OSError) as e:
-            return rechazo(f"no se pudo abrir la PR de aprobación: {e}")
-    _guardar(preq, json.dumps(pet, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    try:
+        if a.abrir:
+            try:
+                abrir_pr(pet, a.clon, cfg["repo_aprobaciones"], cfg.get("rama", "main"))
+            except (subprocess.CalledProcessError, OSError) as e:
+                os.unlink(preq)
+                return rechazo(f"no se pudo abrir la PR de aprobación: {e}")
+        _guardar(preq, json.dumps(pet, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    except BaseException:
+        if os.path.exists(preq) and os.path.getsize(preq) == 0:
+            os.unlink(preq)
+        raise
     print(json.dumps({"peticion": preq, "ruta": ruta, "titulo": pet["titulo"]}, ensure_ascii=False))
     return 0
 

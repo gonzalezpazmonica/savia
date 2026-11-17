@@ -134,6 +134,32 @@ EOF
   MERGE_SPRINT_ORCHESTRATOR="orq-x" rechaza 'd["reviewers"]=["savia-orquestadora","revisora-a"]' 'orquestador no puede'
 }
 
+@test "AC-1 globs con marcado HTML/Markdown (<!--, -->, acento grave) → rechazada" {
+  rechaza 'd["repos"][0]["include"]=["docs/**","<!--","src/**"]; d["repos"][0]["exclude"]=["-->"]' 'include: lista de globs'
+  rechaza 'd["repos"][0]["exclude"]=["-->"]' 'exclude: lista de globs'
+  rechaza 'd["repos"][0]["include"]=["docs/`x`"]' 'include: lista de globs'
+  rechaza 'd["reviewers"]=["revisora-a","<!--"]' 'ids distintos'
+}
+
+@test "AC-1 reviewers que solo difieren en mayúsculas o el orquestador en otra capitalización → rechazada" {
+  rechaza 'd["reviewers"]=["Bob","bob"]' 'ids distintos'
+  rechaza 'd["reviewers"]=["Savia-Orquestadora","revisora-a"]' 'orquestador no puede'
+}
+
+@test "AC-1 workflow en subcarpeta de .github/workflows no cuenta → rechazada" {
+  git -C "$T/repo" rm -q -r -f .github
+  mkdir -p "$T/repo/.github/workflows/inert"
+  printf 'on: push\njobs: {}\n' > "$T/repo/.github/workflows/inert/ci.yml"
+  git -C "$T/repo" add -A && git -C "$T/repo" -c user.name=t -c user.email=t@t.invalid commit -q -m inerte
+  git -C "$T/repo" push -q origin main && git -C "$T/repo" fetch -q origin
+  rechaza 'pass' 'ningún workflow sin filtro'
+}
+
+@test "AC-1 repos del borrador que no es lista → rechazada con 2, sin traceback" {
+  rechaza 'd["repos"]=5' 'repos del borrador debe ser una lista'
+  [[ "$output" != *Traceback* ]]
+}
+
 @test "AC-1 universe frozen sin lista → rechazada; con lista se acepta" {
   rechaza 'd["universe"]="frozen"' 'universe frozen sin lista'
   plan_at "$(borrador 'd["universe"]="frozen"; d["frozen_prs"]=[10,11]')" 2026-11-10T22:00:00Z
@@ -178,7 +204,8 @@ EOF
   plan_at "$T/base.json" 2026-11-10T22:00:00Z
   f=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["politica"])' "$output")
   id=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["id"])' "$output")
-  echo '{"genesis":"0000000000000000000000000000000000000000","autor":{"email":"x@x.invalid"},"clave_webflow":"/nonexistent","huella_webflow":"0000000000000000000000000000000000000000","tipos":["savia-politica"],"libro":"'"$T"'/libro","espejo":"'"$T"'/esp","repo_aprobaciones":"org/aprob"}' > "$T/cfg.json"
+  echo "clave de prueba" > "$T/clave.asc"
+  echo '{"genesis":"0000000000000000000000000000000000000000","autor":{"email":"x@x.invalid"},"clave_webflow":"'"$T"'/clave.asc","huella_webflow":"0000000000000000000000000000000000000000","tipos":["savia-politica"],"libro":"'"$T"'/libro","espejo":"'"$T"'/esp","repo_aprobaciones":"org/aprob"}' > "$T/cfg.json"
   run bash "$SCRIPT" policy-request --politica "$f" --aprobacion "$T/cfg.json" --ahora 2026-11-10T22:00:00Z
   [ "$status" -eq 0 ]
   [ -f "$MERGE_SPRINT_HOME/policy/$id.request.json" ]
