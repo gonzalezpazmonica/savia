@@ -39,9 +39,31 @@ jobs:
           git clone --depth 1 --branch v1.9.0 https://github.com/bats-core/bats-core.git /tmp/bats
           sudo /tmp/bats/install.sh /usr/local
           pip3 install --require-hashes --only-binary=:all: -r .github/requirements/ci-pytest.lock.txt
-          npm install --prefix scripts
+          npm ci --prefix scripts  # SE-425: lock versionado, igual que ci.yml
           git config --global user.email "ci@example.com"
           git config --global user.name "CI Runner"
+
+      # Los tests de savia-vaults (tools/list por MCP, banco de evidencia) arrancan el servidor con
+      # tsx y fallan cerrado sin node_modules. Misma instalación que el trabajo savia-vaults de ci.yml.
+      - name: Install SaviaVaults dependencies
+        working-directory: projects/savia-vaults
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: npm ci --no-audit --no-fund
+
+      # SE-501 (opción B): los derivados (.scm, índices de reglas) no se versionan y varias suites
+      # los leen; ci.yml los genera antes de probar y la suite nocturna no lo hacía.
+      - name: Generate derived artifacts (SE-501)
+        run: bash scripts/derived.sh ensure
+
+      # Suites que fijan LC_ALL=es_ES.UTF-8: sin el locale bash avisa por stderr y `run` lo mezcla
+      # con la salida, así que fallan por el aviso y no por lo que prueban.
+      - name: Generate es_ES.UTF-8 locale
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq locales
+          sudo locale-gen es_ES.UTF-8
+          locale -a | grep -ix 'es_ES.utf-\?8'
 
       - name: Run every suite (per-file timeout)
         id: run

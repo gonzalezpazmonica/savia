@@ -99,13 +99,16 @@ for f in "${TEST_FILES[@]}"; do
   rel=${f#$PROJECT_ROOT/}
   # Run auditor, extract score (robust to missing jq)
   # Auditor JSON uses "total" field, not "score".
-  output=$(bash "$AUDITOR" "$f" 2>/dev/null || echo '{"total":0}')
+  # El auditor sale con 1 bajo su umbral pero imprime su JSON igualmente: el respaldo solo
+  # entra si no imprimió nada (con `|| echo` se concatenaban dos documentos y el score salía "68\n0").
+  output=$(bash "$AUDITOR" "$f" 2>/dev/null)
+  [[ -z "$output" ]] && output='{"total":0}'
   if command -v jq >/dev/null 2>&1; then
-    score=$(echo "$output" | jq -r '.total // 0' 2>/dev/null)
+    score=$(echo "$output" | jq -r '.total // 0' 2>/dev/null | head -1)
   else
     score=$(echo "$output" | grep -oE '"total"[[:space:]]*:[[:space:]]*[0-9]+' | grep -oE '[0-9]+' | head -1)
   fi
-  score="${score:-0}"
+  [[ "$score" =~ ^[0-9]+$ ]] || score=0
   [[ "$score" -ge "$THRESHOLD" ]] && compliant=$((compliant + 1))
   RESULTS+=("$score|$rel")
 done
