@@ -87,12 +87,15 @@ describe('SE-424 H5: escritura con credencial y Host admitido en A2A', () => {
     const w = await share(url, { dome: 'P1', path: '../S4/inyectado.md', content: '# x\n' }, auth);
     expect(w.status).toBe(400);
     expect(fs.existsSync(path.join(tmp, 'S4', 'inyectado.md'))).toBe(false);
-    for (const p of ['..%2FS4%2Fnota.md', '%2e%2e/S4/nota.md', '..%5CS4%5Cnota.md']) {
+    // Barras codificadas: llegan tal cual al almacenamiento y se rechazan como ruta inválida.
+    for (const p of ['..%2FS4%2Fnota.md', '..%5CS4%5Cnota.md']) {
       const r = await fetch(`${url}/context/x/${p}?dome=P1`, { headers: auth });
-      const body = await r.text();
-      expect(r.status, p).not.toBe(200);
-      expect(body, p).not.toContain('contenido-S4');
+      expect(r.status, p).toBe(400);
+      expect(await r.text(), p).not.toContain('contenido-S4');
     }
+    // `%2e%2e` lo normaliza ya el analizador de URL dentro de la propia ruta del servicio: nunca sale.
+    const dots = await fetch(`${url}/context/x/%2e%2e/S4/nota.md?dome=P1`, { headers: auth });
+    expect(await dots.text()).not.toContain('contenido-S4');
     // Sin credencial, tampoco desde la N1 pública.
     const anon = await fetch(`${url.replace('127.0.0.1', 'localhost')}/context/x/..%2FS4%2Fnota.md?dome=P1`);
     expect(await anon.text()).not.toContain('contenido-S4');

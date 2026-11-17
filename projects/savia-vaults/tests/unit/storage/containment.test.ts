@@ -42,6 +42,9 @@ describe('SE-424 H5: contención del almacenamiento', () => {
     '%2E%2E%2Ffuera.md',
     '..%2ffuera.md',
     'C:\\Windows\\win.ini',
+    'C:/Windows/win.ini',
+    '\\\\servidor\\recurso\\x.md',
+    'sub\\x.md',
     'nota.md\0.txt',
     '',
   ];
@@ -68,7 +71,9 @@ describe('SE-424 H5: contención del almacenamiento', () => {
       await expect(storage.log(p), p).rejects.toThrow();
     }
     const out = path.join(tmp, 'escrito-por-git.txt');
-    await expect(storage.diff(`--output=${out}`)).rejects.toThrow();
+    // Es una ruta relativa válida dentro de la cúpula; lo que importa es que git no la lea como opción.
+    await storage.diff(`--output=${out}`).catch(() => '');
+    await storage.log(`--output=${out}`).catch(() => []);
     expect(fs.existsSync(out)).toBe(false);
     // Una nota legítima cuyo nombre empieza por guion no se interpreta como opción.
     await storage.write('-raro.md', '# raro\n');
