@@ -93,10 +93,23 @@ deps_json() { cat "$FIX/tests/bats/.deps.json"; }
   [ "$rules" -ge 1 ]
 }
 
-@test "SE-305: core tests include attention anchor" {
+@test "SE-305: core tests y dir_rules apuntan solo a ficheros bats que existen" {
   bash "$DEPS_SCRIPT" --generate
-  has_anchor=$(python3 -c "import json; d=json.load(open('$DEPS_FILE')); print('test-se-080-attention-anchor.bats' in d.get('core_tests', []))")
-  [ "$has_anchor" = "True" ]
+  # Un test borrado que sigue en CORE_TESTS o en .deps-rules.yaml rompe la CI
+  # en «bats tests/bats/<t>» (PR #1609). La lista no puede quedarse vacía.
+  run python3 -c "
+import json, os
+d = json.load(open('$DEPS_FILE'))
+bats_dir = '$REPO_ROOT/tests/bats'
+core = d.get('core_tests', [])
+assert core, 'core_tests vacío'
+refs = list(core) + [t for ts in d.get('dir_rules', {}).values() for t in ts]
+missing = sorted({t for t in refs if not os.path.isfile(os.path.join(bats_dir, t))})
+assert not missing, 'missing: ' + ' '.join(missing)
+print('all ok')
+"
+  [ "$status" -eq 0 ]
+  [ "$output" = "all ok" ]
 }
 
 @test "SE-305: mappings reference real bats files" {
@@ -174,10 +187,10 @@ EOF
   [ "$output" = '{".claude/agents/":["test-a.bats"],"docs/x.md":["test-b.bats"]}' ]
 }
 
-@test "SE-305: generate lista 15 core_tests fijos aunque el repo no los tenga" {
+@test "SE-305: generate lista 13 core_tests fijos aunque el repo no los tenga" {
   mk_fixture
   in_fix bash "$DEPS_SCRIPT" --generate
-  run jq -e '(.core_tests | length) == 15 and (.core_tests | index("test-evals-ci-gate.bats") != null)' "$FIX/tests/bats/.deps.json"
+  run jq -e '(.core_tests | length) == 13 and (.core_tests | index("test-evals-ci-gate.bats") != null)' "$FIX/tests/bats/.deps.json"
   [ "$status" -eq 0 ]
 }
 
@@ -247,7 +260,7 @@ EOF
   in_fix bash "$DEPS_SCRIPT" --generate
   run in_fix bash "$SELECT_SCRIPT" --base HEAD
   [ "$status" -eq 0 ]
-  [ "$(wc -w <<< "$output")" -eq 15 ]
+  [ "$(wc -w <<< "$output")" -eq 13 ]
   [[ " $output " != *" test-a.bats "* ]]
 }
 
@@ -258,7 +271,7 @@ EOF
   git -C "$FIX" add -A && git -C "$FIX" commit -q -m huerfano
   SAVIA_BATS_FULL_THRESHOLD_PCT=100000 run in_fix bash "$SELECT_SCRIPT" --base HEAD~1
   [ "$status" -eq 0 ]
-  [ "$(wc -w <<< "$output")" -eq 15 ]
+  [ "$(wc -w <<< "$output")" -eq 13 ]
 }
 
 @test "SE-305: selector devuelve FULL con exit 1 si la selección supera el umbral" {
@@ -302,17 +315,17 @@ EOF
   [[ " $output " == *" test-a.bats "* && " $output " == *" test-b.bats "* ]]
 }
 
-@test "SE-305: el umbral por defecto es 30% de los tests (boundary 17 de 60 no es FULL, 12 sí con 20%)" {
+@test "SE-305: el umbral por defecto es 30% de los tests (boundary 15 de 50 no es FULL, tope 10 con 20% sí)" {
   mk_fixture
-  for i in $(seq 1 58); do echo '@test "x" { true; }' > "$FIX/tests/bats/test-fill-$i.bats"; done
+  for i in $(seq 1 48); do echo '@test "x" { true; }' > "$FIX/tests/bats/test-fill-$i.bats"; done
   in_fix bash "$DEPS_SCRIPT" --generate
   echo 'echo 1' >> "$FIX/scripts/foo.sh"
   git -C "$FIX" add -A && git -C "$FIX" commit -q -m c1
-  # 15 core + test-a + test-b = 17 <= 60*30/100 = 18 → lista, no FULL
+  # 13 core + test-a + test-b = 15 <= 50*30/100 = 15 (justo en el tope) → lista, no FULL
   run in_fix bash "$SELECT_SCRIPT" --base HEAD~1
   [ "$status" -eq 0 ]
-  [ "$(wc -w <<< "$output")" -eq 17 ]
-  # con 20% el tope es 12 → FULL
+  [ "$(wc -w <<< "$output")" -eq 15 ]
+  # con 20% el tope es 10 → FULL
   SAVIA_BATS_FULL_THRESHOLD_PCT=20 run in_fix bash "$SELECT_SCRIPT" --base HEAD~1
   [ "$status" -eq 1 ]
   [ "$output" = "FULL" ]
