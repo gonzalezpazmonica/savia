@@ -1,0 +1,15 @@
+# EJEMPLO, no instalado. Ver README.md de esta carpeta.
+# Copiar a ~/.config/systemd/user/pulse-nocturna.service y ajustar las rutas.
+[Unit]
+Description=Pulse: revisión diaria de la comprobación nocturna (solo lectura)
+
+[Service]
+Type=oneshot
+# Repositorio y flujo (PULSE_NOCTURNA_REPO, PULSE_NOCTURNA_FLUJO) viven en este fichero
+# de la persona, fuera del repositorio. Sin el fichero, systemd no arranca la pasada.
+EnvironmentFile=%h/.config/pulse/nocturna.env
+# Ruta del checkout de Savia: ajústala a la tuya.
+ExecStart=%h/savia/projects/pulse/bin/pulse nocturna
+# Si Soul no está, el canal de respaldo avisa por la notificación del sistema.
+ExecStartPost=%h/savia/projects/pulse/bin/pulse deliver
+TimeoutStartSec=120

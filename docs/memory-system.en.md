@@ -202,7 +202,7 @@ Every entry carries an `origin` class governing its trust during consolidation:
 Rules:
 - **Fail-safe**: an entry without `--origin` or a trusted source is classified `untrusted`. NEVER `owner` by default.
 - **Turn taint**: after a network tool (webfetch, curl, git fetch...), subsequent entries in the turn degrade to `untrusted` (hook `memory-origin-gate.sh`).
-- **Consolidation**: `memory-store.sh consolidate` excludes `untrusted`/`system` from promotion (`--dry-run` to preview). A recalled entry never promotes its own trust level.
+- **Consolidation**: `memory-store.sh consolidate` excludes `untrusted`/`system` from promotion (`--dry-run` to preview). Excluding is not deleting: excluded entries, and legacy ones without an `origin` field, move to `output/.memory-store-quarantine.jsonl` and stay recoverable. A recalled entry never promotes its own trust level.
 - **Search filter**: `memory-store.sh search "..." --min-origin owner|agent|untrusted`.
 - **Audit**: `memory-store.sh audit-origins` reports the origin distribution.
 
