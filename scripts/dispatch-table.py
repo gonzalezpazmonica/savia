@@ -49,7 +49,12 @@ def build():
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise TableError(f"settings.json ilegible o sin PreToolUse: {exc}")
     rows, excluded, max_timeout = [], [], 0
+    if not isinstance(groups, list):
+        raise TableError("PreToolUse no es una lista")
     for g in groups:
+        if not isinstance(g, dict) or not isinstance(g.get("hooks", []), list) \
+                or not all(isinstance(h, dict) for h in g.get("hooks", [])):
+            raise TableError(f"grupo PreToolUse con forma inesperada: {g!r}")
         raw = g.get("matcher", "")
         hooks = g.get("hooks", [])
         if all(h.get("type") != "command" for h in hooks):
@@ -63,12 +68,17 @@ def build():
             m = CMD_RE.match(h.get("command", ""))
             if not m:
                 raise TableError(f"command no despachable: {h.get('command')!r}")
+            if ".." in m.group(1).split("/"):
+                raise TableError(f"ruta de hook con '..' (fuera del repo): {h.get('command')!r}")
             script = m.group(1) + m.group(2).rstrip()
             desc = (h.get("statusMessage") or m.group(1)).replace("\t", " ").replace("\n", " ")
             # `async: true` en Claude Code no puede bloquear: aquí es bloqueante=no.
             blocking = "no" if h.get("async") is True else "yes"
             rows.append((matcher, script, "spawn", blocking, desc))
-            max_timeout = max(max_timeout, int(h.get("timeout") or 0))
+            t = h.get("timeout", 0)
+            if isinstance(t, bool) or not isinstance(t, (int, float)) or t < 0:
+                raise TableError(f"timeout no numérico en {h.get('command')!r}: {t!r}")
+            max_timeout = max(max_timeout, t)
     if max_timeout > DISPATCH_TIMEOUT:
         raise TableError(f"timeout de settings ({max_timeout}s) > despachador ({DISPATCH_TIMEOUT}s)")
     if not rows:
@@ -110,6 +120,9 @@ def main(argv):
             return 2
     except (TableError, OSError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:  # fail-closed: un error inesperado nunca sale 1 (DRIFT) ni 0
+        print(f"ERROR inesperado: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
     return 0
 

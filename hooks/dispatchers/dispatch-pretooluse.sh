@@ -15,6 +15,7 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ROUTING="$REPO_ROOT/hooks/routing-pretooluse.tsv"
 HOOK_TIMEOUT="${DISPATCH_HOOK_TIMEOUT:-100}"
+HOOK_KILL_GRACE=5   # tras el TERM, KILL: un hook que ignora TERM no cuelga la acción
 export CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$REPO_ROOT}"
 
 # Motivo ambiguo = POLÍTICA (decisión de la operadora, SE-510 S0).
@@ -22,6 +23,10 @@ block() {
     echo "[dispatch-pretooluse] BLOQUEO (POLÍTICA): $1" >&2
     exit 2
 }
+
+# Entero 1..100: `timeout 0` desactivaría el límite y un hook colgado colgaría la sesión.
+[[ "$HOOK_TIMEOUT" =~ ^[1-9][0-9]*$ && "$HOOK_TIMEOUT" -le 100 ]] \
+    || block "DISPATCH_HOOK_TIMEOUT inválido (entero 1..100): $HOOK_TIMEOUT"
 
 INPUT=$(cat) || block "no se pudo leer stdin"
 
@@ -39,6 +44,12 @@ print(name)
 # ── Tabla: debe existir y ser legible ─────────────────────────────────────────
 [[ -f "$ROUTING" && -r "$ROUTING" ]] || block "tabla de despacho ausente o ilegible: $ROUTING"
 command -v timeout >/dev/null 2>&1 || block "timeout no disponible: no se puede acotar el tiempo de los hooks"
+
+# La entrada va a cada hook desde un fichero, no por tubería: con `pipefail`, un hook que sale 0
+# sin leer stdin dejaba a printf con SIGPIPE (141) y el despachador bloqueaba en falso.
+INPUT_FILE=$(mktemp "${TMPDIR:-/tmp}/dispatch-pretooluse.XXXXXX") || block "no se pudo crear el fichero de entrada"
+trap 'rm -f "$INPUT_FILE"' EXIT
+printf '%s' "$INPUT" > "$INPUT_FILE" || block "no se pudo escribir el fichero de entrada"
 
 # ── Lee y valida la tabla entera antes de ejecutar nada ───────────────────────
 # `|| [[ -n "$matcher" ]]`: la última fila cuenta aunque no acabe en salto de línea.
@@ -85,7 +96,15 @@ for pass in yes no; do
         fi
 
         exit_code=0
-        printf '%s' "$INPUT" | timeout "$HOOK_TIMEOUT" bash "$script_path" "${parts[@]:1}" || exit_code=$?
+        # `timeout` es líder de su grupo de procesos (pgid = su pid). Su KILL final solo alcanza al
+        # hook: si vence el tiempo, se mata el grupo entero para que ningún hijo que ignore TERM
+        # quede vivo con la salida del despachador abierta (colgaría la acción).
+        timeout -k "$HOOK_KILL_GRACE" "$HOOK_TIMEOUT" bash "$script_path" "${parts[@]:1}" < "$INPUT_FILE" &
+        hook_pid=$!
+        wait "$hook_pid" || exit_code=$?
+        if [[ "$exit_code" -eq 124 || "$exit_code" -eq 137 ]]; then
+            kill -KILL -- "-$hook_pid" 2>/dev/null
+        fi
         [[ "$exit_code" -eq 0 ]] && continue
 
         if [[ "$pass" == "yes" ]]; then
@@ -93,7 +112,7 @@ for pass in yes no; do
                 echo "[dispatch-pretooluse] bloqueado por $script" >&2
                 exit 2
             fi
-            [[ "$exit_code" -eq 124 ]] && block "tiempo agotado (${HOOK_TIMEOUT}s) en $script"
+            [[ "$exit_code" -eq 124 || "$exit_code" -eq 137 ]] && block "tiempo agotado (${HOOK_TIMEOUT}s) en $script"
             block "$script salió con exit $exit_code (solo 0 o 2 son válidos en un hook bloqueante)"
         fi
         echo "[dispatch-pretooluse] WARNING: hook no bloqueante $script salió con exit $exit_code" >&2

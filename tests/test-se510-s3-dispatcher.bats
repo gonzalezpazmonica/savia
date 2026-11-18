@@ -248,3 +248,76 @@ P
     run python3 "$T/scripts/dispatch-table.py" generate; [ "$status" -eq 2 ]
     [[ "$output" == *"no despachable"* ]]
 }
+
+# ── Revisión de la PR #1616 (ronda 2): SIGPIPE, kill, timeout, generador ──────
+@test "P1: entrada de 200 KB y hook que sale 0 sin leer stdin -> 0 (sin bloqueo falso por SIGPIPE)" {
+    mkhook ok 'exit 0'; row Bash ok
+    python3 -c 'import json; print(json.dumps({"tool_name":"Bash","tool_input":{"command":"x"*200000}}))' > "$T/big.json"
+    run bash "$D" < "$T/big.json"; [ "$status" -eq 0 ]
+}
+@test "P1: la entrada de 200 KB llega íntegra al hook que sí la lee" {
+    mkhook eco "cat > $T/visto"; row Bash eco
+    python3 -c 'import json,sys; sys.stdout.write(json.dumps({"tool_name":"Bash","tool_input":{"command":"y"*200000}}))' > "$T/big.json"
+    run bash "$D" < "$T/big.json"; [ "$status" -eq 0 ]
+    cmp -s "$T/big.json" "$T/visto"
+}
+@test "P2: hook que ignora TERM se mata con KILL y bloquea (no cuelga)" {
+    mkhook terco "trap '' TERM; sleep 30"; row Bash terco
+    start=$SECONDS
+    DISPATCH_HOOK_TIMEOUT=1 run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]
+    [[ "$output" == *"tiempo agotado"* ]]
+    [ $((SECONDS - start)) -lt 15 ]
+}
+@test "P2: DISPATCH_HOOK_TIMEOUT=0 (sin límite) -> 2" {
+    mkhook ok 'exit 0'; row Bash ok
+    DISPATCH_HOOK_TIMEOUT=0 run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]
+    [[ "$output" == *"DISPATCH_HOOK_TIMEOUT inválido"* ]]
+}
+@test "P2: DISPATCH_HOOK_TIMEOUT no numérico o > 100 -> 2" {
+    mkhook ok 'exit 0'; row Bash ok
+    DISPATCH_HOOK_TIMEOUT=abc run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]
+    DISPATCH_HOOK_TIMEOUT=101 run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]
+}
+@test "límite: DISPATCH_HOOK_TIMEOUT=100 es válido" {
+    mkhook ok 'exit 0'; row Bash ok
+    DISPATCH_HOOK_TIMEOUT=100 run bash "$D" <<< "$IN"; [ "$status" -eq 0 ]
+}
+@test "AC-6: timeout no numérico en settings.json -> exit 2 (no 1 ni traza)" {
+    gen_tree
+    python3 - "$T/.claude/settings.json" <<'P'
+import json, sys
+p = sys.argv[1]; s = json.load(open(p))
+s["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"] = "diez"
+json.dump(s, open(p, "w"))
+P
+    run python3 "$T/scripts/dispatch-table.py" check; [ "$status" -eq 2 ]
+    [[ "$output" == *"timeout no numérico"* ]]
+}
+@test "AC-6: grupo PreToolUse que no es un objeto -> exit 2" {
+    gen_tree
+    python3 - "$T/.claude/settings.json" <<'P'
+import json, sys
+p = sys.argv[1]; s = json.load(open(p))
+s["hooks"]["PreToolUse"].append("Bash")
+json.dump(s, open(p, "w"))
+P
+    run python3 "$T/scripts/dispatch-table.py" check; [ "$status" -eq 2 ]
+}
+@test "AC-6: ruta de hook con '..' aborta la generación (exit 2)" {
+    gen_tree
+    python3 - "$T/.claude/settings.json" <<'P'
+import json, sys
+p = sys.argv[1]; s = json.load(open(p))
+s["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = "\"$CLAUDE_PROJECT_DIR\"/../fuera/x.sh"
+json.dump(s, open(p, "w"))
+P
+    run python3 "$T/scripts/dispatch-table.py" generate; [ "$status" -eq 2 ]
+    [[ "$output" == *"'..'"* ]]
+}
+@test "tabla real: todo hook tiene shebang de bash (el despachador lo lanza con bash)" {
+    while IFS=$'\t' read -r m s rest; do
+        [[ -z "$m" || "$m" == \#* ]] && continue
+        head -1 "$REPO/${s%% *}" | grep -Eq '^#!(/usr/bin/env bash|/bin/bash|/usr/bin/bash)' \
+            || { echo "shebang no bash: $s"; false; }
+    done < "$REPO/hooks/routing-pretooluse.tsv"
+}
