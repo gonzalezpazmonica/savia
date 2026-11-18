@@ -29,7 +29,7 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: saca de la cola hasta 22 specs sin escribir código y deja ver el backlog real; esfuerzo: revisión por lotes de cinco; sin hueco WIP.
 
 - **S03 · P0 · fase A** — Deuda de calidad con pruebas de comportamiento
-  Acción: Remedir deuda certificada y elegir el siguiente grupo por riesgo/uso; conservar umbral >=80 y ratchet; usar #1180 como evidencia de entrega, no como cierre de toda la wave.
+  Acción: Remedir deuda certificada y elegir el siguiente grupo por riesgo/uso; conservar umbral >=80 y ratchet; usar #1180 como evidencia de entrega, no como cierre de toda la wave. SE-467 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): no se ejecuta hasta reactivarla.
   Entrada: WIP actual; inventario actualizado; aprobación de avance de wave cuando corresponda.
   Salida: Reducción de deuda demostrada por comportamiento discriminante, baseline publicado y excepciones explícitas; no certificar por presencia de ficheros.
   Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: hace fiables los gates; esfuerzo: grupo pequeño; no prometer cierre de 128 skills por sesión.
@@ -59,10 +59,10 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: media; urgencia: media; valor: medio; desbloqueo: reduce trabajo abierto a medias; esfuerzo: restos pequeños.
 
 - **S19 · P1 · fase A** — Medir jueces y relevos antes de confiar en ellos
-  Acción: SE-469: 30 casos de los golden sets en vivo con tope de gasto e IC95 por tribunal. SE-474: proveedor independiente opcional; la métrica de hallazgos que solo ve el segundo proveedor se mide una vez y la comparte con SE-476. SE-471 ya está en main (#1486) y pasa a S27.
+  Acción: SE-469 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): sus 30 casos de golden sets en vivo no se ejecutan hasta reactivarla. SE-474: proveedor independiente opcional; la métrica de hallazgos que solo ve el segundo proveedor se mide una vez y la comparte con SE-476. SE-471 ya está en main (#1486) y pasa a S27.
   Entrada: SE-469 aparcada (DEFERRED desde 2026-11-18) y, al retomarla, después de SE-468; SE-474 sigue PROPOSED y necesita decisión de la operadora.
   Salida: Informe de concordancia con IC95 y decisión según kill criterion; decisión registrada sobre SE-474.
-  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: da el primer dato de acierto de los tribunales que pesan en merges y separa el OK autodeclarado de lo validado; esfuerzo: SE-469 medio (M); SE-474 por decidir.
+  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: da el primer dato de acierto de los tribunales que pesan en merges y separa el OK autodeclarado de lo validado; esfuerzo: SE-469 aparcada, sin esfuerzo asignado; SE-474 por decidir.
 
 - **S28 · P1 · fase C** — Lecciones con ámbito y aprobación auténtica
   Acción: Un solo esquema de lección: SE-473 es la dueña (ámbito, evidencia, caducidad, refutación y, nuevo, tipo de acción y punto de control); SE-497 parte 2 conserva el paso a activa (recibo, firma humana verificable, rollback, ninguna cifra concede autoridad). SE-409 se reduce a retirada por desuso. SE-460 declara que su sello local es higiene, no aprobación.
@@ -119,7 +119,7 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: media; urgencia: media; valor: alto; desbloqueo: reduce coste de adopción; esfuerzo: probes antes de retirar componentes.
 
 - **S08 · P2 · fase E** — Adopción y contexto de ficheros completo
-  Acción: Instalación limpia/doctor; desktop y docs; Vaults adaptativo bajo evaluación. Files: serving/tus autenticado, snapshot/CAS, digest/citas/visor y lifecycle; después formatos remotos/media/email/conectores/Teams según demanda.
+  Acción: Instalación limpia/doctor; desktop y docs; Vaults adaptativo bajo evaluación. SE-408 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): sin trabajo hasta reactivarla. Files: serving/tus autenticado, snapshot/CAS, digest/citas/visor y lifecycle; después formatos remotos/media/email/conectores/Teams según demanda.
   Entrada: Gate D y autorización/revocación/scanner/restore de Files verificados. D08 S3 y paquetes Labs propuestos requieren aprobación; SE-289 S4 conforme ADR-002.
   Salida: Una persona ajena instala y usa un flujo seguro con citas y doctor verde; ampliar perfiles sólo tras conformance.
   Necesidad: media; urgencia: baja; valor: alto; desbloqueo: uso externo verificable; esfuerzo: un flujo de adopción y un perfil de formato cada vez.

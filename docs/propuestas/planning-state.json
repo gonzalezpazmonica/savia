@@ -1877,7 +1877,7 @@
           "SE-467"
         ],
         "title": "Deuda de calidad con pruebas de comportamiento",
-        "action": "Remedir deuda certificada y elegir el siguiente grupo por riesgo/uso; conservar umbral >=80 y ratchet; usar #1180 como evidencia de entrega, no como cierre de toda la wave.",
+        "action": "Remedir deuda certificada y elegir el siguiente grupo por riesgo/uso; conservar umbral >=80 y ratchet; usar #1180 como evidencia de entrega, no como cierre de toda la wave. SE-467 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): no se ejecuta hasta reactivarla.",
         "necessity": "alta",
         "urgency": "alta",
         "value": "alto",
@@ -1979,12 +1979,12 @@
           "SE-474"
         ],
         "title": "Medir jueces y relevos antes de confiar en ellos",
-        "action": "SE-469: 30 casos de los golden sets en vivo con tope de gasto e IC95 por tribunal. SE-474: proveedor independiente opcional; la métrica de hallazgos que solo ve el segundo proveedor se mide una vez y la comparte con SE-476. SE-471 ya está en main (#1486) y pasa a S27.",
+        "action": "SE-469 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): sus 30 casos de golden sets en vivo no se ejecutan hasta reactivarla. SE-474: proveedor independiente opcional; la métrica de hallazgos que solo ve el segundo proveedor se mide una vez y la comparte con SE-476. SE-471 ya está en main (#1486) y pasa a S27.",
         "necessity": "alta",
         "urgency": "media",
         "value": "alto",
         "dependency_value": "da el primer dato de acierto de los tribunales que pesan en merges y separa el OK autodeclarado de lo validado",
-        "effort": "SE-469 medio (M); SE-474 por decidir",
+        "effort": "SE-469 aparcada, sin esfuerzo asignado; SE-474 por decidir",
         "prerequisites": "SE-469 aparcada (DEFERRED desde 2026-11-18) y, al retomarla, después de SE-468; SE-474 sigue PROPOSED y necesita decisión de la operadora.",
         "done": "Informe de concordancia con IC95 y decisión según kill criterion; decisión registrada sobre SE-474."
       },
@@ -2185,7 +2185,7 @@
           "SE-408"
         ],
         "title": "Adopción y contexto de ficheros completo",
-        "action": "Instalación limpia/doctor; desktop y docs; Vaults adaptativo bajo evaluación. Files: serving/tus autenticado, snapshot/CAS, digest/citas/visor y lifecycle; después formatos remotos/media/email/conectores/Teams según demanda.",
+        "action": "Instalación limpia/doctor; desktop y docs; Vaults adaptativo bajo evaluación. SE-408 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): sin trabajo hasta reactivarla. Files: serving/tus autenticado, snapshot/CAS, digest/citas/visor y lifecycle; después formatos remotos/media/email/conectores/Teams según demanda.",
         "necessity": "media",
         "urgency": "baja",
         "value": "alto",
