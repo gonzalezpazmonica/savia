@@ -69,11 +69,26 @@ suite() {  # suite <nombre> <rc> [serial|kill]
   [ "$(tail -1 "$T/order.log")" = "$s" ]
 }
 
+@test "el marcador serial solo cuenta en las 3 primeras líneas" {
+  f="$T/suites/late.bats"; printf 'rc=0\n#\n#\n# nightly: serial\n' > "$f"
+  run bash "$SCRIPT" "$OUT" "$f"
+  [ "$output" = $'total=1\nfailed=0' ]
+  [ ! -s "$OUT/serial.txt" ]
+  grep -qxF "$f" "$OUT/parallel.txt"
+}
+
+@test "el resumen usa el timeout configurado" {
+  a=$(suite ok.bats 1)
+  NIGHTLY_TIMEOUT_S=77 run bash "$SCRIPT" "$OUT" "$a"
+  grep -qF 'timeout (77 s)' "$OUT/summary.md"
+}
+
 @test "una suite que no registra su código cuenta como fallo missing" {
   # xargs avisa por stderr del hijo muerto por señal (y deja de lanzar más: también serían missing).
   bats_require_minimum_version 1.5.0
+  # NIGHTLY_JOBS=1 y la suite sana primero: sin carrera, solo `k` queda sin código.
   k=$(suite killed.bats 0 kill); a=$(suite a.bats 0)
-  run --separate-stderr bash "$SCRIPT" "$OUT" "$k" "$a"
+  NIGHTLY_JOBS=1 run --separate-stderr bash "$SCRIPT" "$OUT" "$a" "$k"
   [ "$status" -eq 0 ]
   [ "$output" = $'total=2\nfailed=1' ]
   grep -qxF "missing $k" "$OUT/failed.txt"

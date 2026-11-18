@@ -7,7 +7,7 @@
 #   y un .tap por suite. Por stdout solo imprime `total=N` y `failed=M` (para $GITHUB_OUTPUT).
 #   Sale 0 si ha podido medir (el paso de informe decide el rojo); 2 si no hay suites.
 #
-# Las suites marcadas `# nightly: serial` miden latencia real o comprueban que el árbol no cambia:
+# Las suites marcadas `# nightly: serial` (en sus 3 primeras líneas) miden latencia real o comprueban que el árbol no cambia:
 # en paralelo ven las escrituras de las demás, así que corren solas tras el lote paralelo.
 # Una suite que no deja su línea en rc.txt (proceso muerto) cuenta como fallo `missing`: nunca
 # desaparece del total.
@@ -35,7 +35,12 @@ if [[ ! -s "$OUT/all.txt" ]]; then
 fi
 
 # Rutas por línea (-d '\n') y pasadas como argumento ("$1"), nunca pegadas al código del shell.
-xargs -d '\n' grep -lE '^# nightly: serial' -- < "$OUT/all.txt" > "$OUT/serial.txt" 2>/dev/null
+# El marcador solo vale en las 3 primeras líneas (tras el shebang): un texto igual en el cuerpo
+# de una suite no la reclasifica.
+: > "$OUT/serial.txt"
+while IFS= read -r suite_path; do
+  head -n 3 -- "$suite_path" 2>/dev/null | grep -qE '^# nightly: serial' && printf '%s\n' "$suite_path" >> "$OUT/serial.txt"
+done < "$OUT/all.txt"
 grep -vxFf "$OUT/serial.txt" "$OUT/all.txt" > "$OUT/parallel.txt"
 
 run_one() {
@@ -62,7 +67,7 @@ failed=$(wc -l < "$OUT/failed.txt")
   echo '|---|---|'
   awk '{e=$1; $1=""; sub(/^ /, ""); print "| " e " | `" $0 "` |"}' "$OUT/failed.txt"
   echo
-  echo 'exit 124 = timeout (900 s); missing = la suite no registró su código de salida.'
+  echo "exit 124 = timeout ($NIGHTLY_TIMEOUT_S s); missing = la suite no registró su código de salida."
 } > "$OUT/summary.md"
 
 echo "total=$total"
