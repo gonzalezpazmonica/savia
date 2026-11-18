@@ -1104,7 +1104,11 @@ def decide_bash(domes: list[dict], files: list[str], project: str, ctx: dict, to
     # hay alguna cúpula N3 o superior (la política de N3 en nube no se rebaja por una clave que el modelo
     # controla); ask en el resto. Nunca pass.
     v = read_verdict(ctx, [d for d in domes if d["level"] >= 3])
-    return v if v[0] == "deny" else ("ask", UNKNOWN_CWD_NOTICE)
+    if v[0] == "deny":
+        return v
+    # Puede leer cualquiera: constancia conservadora de todas las N2+ (revisión de la PR #1611).
+    mark_reads(ctx, domes)
+    return "ask", UNKNOWN_CWD_NOTICE
 
 
 def analyse_bash(domes: list[dict], files: list[str], project: str, ctx: dict, tool_input: dict, base: str,
@@ -1152,13 +1156,17 @@ def analyse_bash(domes: list[dict], files: list[str], project: str, ctx: dict, t
         # Un programa que no es lector conocido (`base64`, `awk`, `cp`, `curl -F file=@`) puede leer igual: una N3
         # tocada en nube se rechaza como con un lector, no se rebaja a una pregunta (ronda 9 de dome_guard.rs).
         # Solo lo que la nombra o cae en ella: alcanzarla por un ancestro o una variable pregunta, como en Space.
-        v = read_verdict(ctx, [d for d in direct_hit if reads_it(d)])
+        read_hit = [d for d in direct_hit if reads_it(d)]
+        v = read_verdict(ctx, read_hit)
         if v[0] == "deny":
             return v
         # Una orden que además recorre una N3 hacia la nube se deniega: la pregunta de escritura no la afloja.
         reached = [d for d in domes if traversal_reaches(cmds, base, d["root"])]
         if reached and read_verdict(ctx, reached)[0] == "deny":
             return read_verdict(ctx, reached)
+        # Lo que nombra o cae en la cúpula puede leerla aunque el programa no sea un lector conocido (`cp`,
+        # `base64`, `awk`): si la persona aprueba, el contenido sale; deja constancia (revisión de la PR #1611).
+        mark_reads(ctx, read_hit)
         return "ask", WRITE_NOTICE if writes(cmds) else UNKNOWN_NOTICE
     if not reads_only and any(direct({"root": f}) for f in files):
         return "ask", REGISTRY_NOTICE
@@ -1346,9 +1354,11 @@ def write_marks(root: str, session_id, marks: list[dict], now: float | None = No
         if not stat.S_ISDIR(st.st_mode):
             return False
         os.chmod(root, 0o700)
-        cutoff = (now if now is not None else time.time()) - MARK_TTL_SECONDS
+        now = now if now is not None else time.time()
+        cutoff = now - MARK_TTL_SECONDS
         for name in os.listdir(root):
-            if SESSION_ID_RE.fullmatch(name):
+            # El fichero de la sesión en curso no se purga: perdería las marcas de lecturas anteriores.
+            if name != session_id and SESSION_ID_RE.fullmatch(name):
                 try:
                     f = os.path.join(root, name)
                     fs = os.lstat(f)
@@ -1362,6 +1372,8 @@ def write_marks(root: str, session_id, marks: list[dict], now: float | None = No
             if not stat.S_ISREG(os.fstat(fd).st_mode):
                 return False
             os.fchmod(fd, 0o600)
+            # Renueva el mtime aunque no se añada nada: una sesión viva no caduca para la purga de otra.
+            os.utime(fd, (now, now))
             with os.fdopen(os.dup(fd), "r", encoding="utf-8", errors="replace") as fh:
                 have = set(fh.read().splitlines())
             for m in marks:

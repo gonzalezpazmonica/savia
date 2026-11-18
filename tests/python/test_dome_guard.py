@@ -229,6 +229,21 @@ class SessionMarks(unittest.TestCase):
         self.assertFalse(os.path.exists(old))
         self.assertTrue(os.path.exists(fresh))
 
+    def test_purge_keeps_the_current_session_file_and_renews_its_mtime(self):
+        # Revisión de la PR #1611: una sesión larga no pierde sus marcas anteriores al purgar.
+        os.makedirs(self.root, mode=0o700)
+        own = os.path.join(self.root, "s1")
+        Path(own).write_text('{"cupula":"secreta","nivel":"N3"}\n')
+        os.utime(own, (1000, 1000))
+        now = 1000 + 7 * 24 * 3600 + 1
+        self.assertTrue(dg.write_marks(self.root, "s1", self.MARKS, now=now))
+        self.assertEqual(Path(own).read_text().splitlines(),
+                         ['{"cupula":"secreta","nivel":"N3"}', '{"cupula":"gallinero","nivel":"N2"}'])
+        os.utime(own, (now - 10, now - 10))
+        self.assertTrue(dg.write_marks(self.root, "s1", self.MARKS, now=now + 5))  # duplicado: sin línea nueva
+        self.assertEqual(len(Path(own).read_text().splitlines()), 2)
+        self.assertEqual(os.stat(own).st_mtime, now + 5)
+
     def test_mark_reads_ignores_n1(self):
         ctx = {}
         dg.mark_reads(ctx, [{"id": "a", "level": 1}, {"id": "b", "level": 2}])

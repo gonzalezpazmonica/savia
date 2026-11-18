@@ -119,16 +119,63 @@ NUBE_FUERA=',"dome_context":{"cloud":false}'
   done
 }
 
-@test "negative: writing into an N2 dome asks (proposal notice) and leaves no mark" {
+@test "negative: writing into an N2 dome with Edit/Write asks (proposal notice) and leaves no mark" {
   for impl in $(impls); do
     reset_marks
     run_impl "$impl" "$(payload Edit "{\"file_path\":\"$WS/vaults/gallinero/nota.md\",\"old_string\":\"a\",\"new_string\":\"b\"}" '"s1"')"
     [ "$output" = "ask" ]
     run_impl "$impl" "$(payload Write "{\"file_path\":\"$WS/vaults/gallinero/nueva.md\",\"content\":\"x\"}" '"s1"')"
     [ "$output" = "ask" ]
-    run_impl "$impl" "$(payload Bash "{\"command\":\"cp $WS/src/a.md $WS/vaults/gallinero/nueva.md\"}" '"s1"')"
-    [ "$output" = "ask" ]
     [ ! -e "$MARKS" ]
+  done
+}
+
+# Revisión de la PR #1611: un programa que no es lector conocido y nombra la cúpula puede leerla. Si la persona
+# aprueba el «ask», el contenido sale, así que deja constancia. Léxicamente no se distingue `cp cúpula → fuera`
+# de `cp fuera → cúpula`: los dos marcan (conservador; las herramientas Edit/Write no marcan).
+@test "review #1611: a non-reader bash command naming an N2 note asks and marks (cp out, base64, cp in)" {
+  for impl in $(impls); do
+    for cmd in "cp $WS/vaults/gallinero/nota.md /tmp/x" "base64 $WS/vaults/gallinero/nota.md" \
+               "cp $WS/src/a.md $WS/vaults/gallinero/nueva.md"; do
+      reset_marks
+      run_impl "$impl" "$(payload Bash "{\"command\":\"$cmd\"}" '"s1"' "$NUBE_FUERA")"
+      [ "$output" = "ask" ] || { echo "$impl «$cmd» dio $output"; return 1; }
+      [ "$(cat "$MARKS/s1")" = '{"cupula":"gallinero","nivel":"N2"}' ] || { echo "$impl «$cmd» sin marca"; return 1; }
+    done
+  done
+}
+
+@test "review #1611 negative: a non-reader bash command outside any dome leaves no mark" {
+  for impl in $(impls); do
+    reset_marks
+    run_impl "$impl" "$(payload Bash "{\"command\":\"cp $WS/src/a.md /tmp/x\"}" '"s1"' "$NUBE_FUERA")"
+    [ "$output" = "pass" ]
+    [ ! -e "$MARKS" ]
+  done
+}
+
+@test "review #1611: bash with unknown working directory asks and marks every N2+ dome; N1 is not marked" {
+  for impl in $(impls); do
+    reset_marks
+    data="{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"cat nota.md\"},\"session_id\":\"s1\",\"dome_context\":{\"cloud\":false}}"
+    run_impl "$impl" "$data"
+    [ "$output" = "ask" ]
+    [ "$(sort "$MARKS/s1")" = "$(printf '%s\n%s' '{"cupula":"gallinero","nivel":"N2"}' '{"cupula":"secreta","nivel":"N3"}')" ]
+  done
+}
+
+@test "review #1611: the current session's file is not purged at 7 days and its mtime is renewed on a duplicate" {
+  for impl in $(impls); do
+    reset_marks; mkdir -p "$MARKS"; chmod 700 "$MARKS"
+    printf '%s\n' '{"cupula":"secreta","nivel":"N3"}' > "$MARKS/s1"; chmod 600 "$MARKS/s1"
+    touch -d '8 days ago' "$MARKS/s1"
+    run_impl "$impl" "$(payload Read "$(nota)" '"s1"' "$NUBE_FUERA")"
+    [ "$output" = "pass" ]
+    [ "$(cat "$MARKS/s1")" = "$(printf '%s\n%s' '{"cupula":"secreta","nivel":"N3"}' '{"cupula":"gallinero","nivel":"N2"}')" ]
+    touch -d '6 days ago' "$MARKS/s1"
+    run_impl "$impl" "$(payload Read "$(nota)" '"s1"' "$NUBE_FUERA")"   # duplicado: no añade línea
+    [ "$(wc -l < "$MARKS/s1")" -eq 2 ]
+    [ "$(( $(date +%s) - $(stat -c %Y "$MARKS/s1") ))" -lt 60 ]
   done
 }
 

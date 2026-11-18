@@ -31,7 +31,7 @@
 // sandbox del motor o el modo mediado de Savia Space (SE-434).
 
 import {
-  chmodSync, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync,
+  chmodSync, closeSync, fstatSync, futimesSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync,
   statSync, unlinkSync, writeSync, constants as fsc,
 } from "node:fs"
 import { execFileSync } from "node:child_process"
@@ -1190,7 +1190,10 @@ function decideBash(domes: Dome[], files: string[], project: string, ctx: Ctx, r
   // hay alguna cúpula N3 o superior (la política de N3 en nube no se rebaja por una clave que el modelo
   // controla); ask en el resto. Nunca pass.
   const v = readVerdict(ctx, domes.filter((d) => d.level >= 3))
-  return v.decision === "deny" ? v : { decision: "ask", reason: UNKNOWN_CWD_NOTICE }
+  if (v.decision === "deny") return v
+  // Puede leer cualquiera: constancia conservadora de todas las N2+ (revisión de la PR #1611).
+  markReads(ctx, domes)
+  return { decision: "ask", reason: UNKNOWN_CWD_NOTICE }
 }
 
 /** Análisis de la orden con `base` como directorio de trabajo (`shifted`: distinto del proyecto). */
@@ -1236,11 +1239,15 @@ function analyseBash(domes: Dome[], files: string[], project: string, ctx: Ctx, 
     // Un programa que no es lector conocido (`base64`, `awk`, `cp`, `curl -F file=@`) puede leer igual: una N3
     // tocada en nube se rechaza como con un lector, no se rebaja a una pregunta (ronda 9 de dome_guard.rs).
     // Solo lo que la nombra o cae en ella: alcanzarla por un ancestro o una variable pregunta, como en Space.
-    const v = readVerdict(ctx, directHit.filter(readsIt))
+    const readHit = directHit.filter(readsIt)
+    const v = readVerdict(ctx, readHit)
     if (v.decision === "deny") return v
     // Una orden que además recorre una N3 hacia la nube se deniega: la pregunta de escritura no la afloja.
     const reached = domes.filter((d) => traversalReaches(cmds, base, d.root))
     if (reached.length > 0 && readVerdict(ctx, reached).decision === "deny") return readVerdict(ctx, reached)
+    // Lo que nombra o cae en la cúpula puede leerla aunque el programa no sea un lector conocido (`cp`,
+    // `base64`, `awk`): si la persona aprueba, el contenido sale; deja constancia (revisión de la PR #1611).
+    markReads(ctx, readHit)
     return { decision: "ask", reason: writes(cmds) ? WRITE_NOTICE : UNKNOWN_NOTICE }
   }
   if (!readsOnly && files.some((f) => direct({ root: f }))) return { decision: "ask", reason: REGISTRY_NOTICE }
@@ -1507,7 +1514,8 @@ export function writeMarks(root: string, sessionId: unknown, marks: Dome[], now:
     if (!lstatSync(root).isDirectory()) return false // un enlace o un fichero en su lugar no es el directorio de marcas
     chmodSync(root, 0o700)
     for (const name of readdirSync(root)) {
-      if (!SESSION_ID_RE.test(name)) continue
+      // El fichero de la sesión en curso no se purga: perdería las marcas de lecturas anteriores.
+      if (name === sessionId || !SESSION_ID_RE.test(name)) continue
       try {
         const st = lstatSync(pathJoin(root, name))
         if (st.isFile() && st.mtimeMs < now - MARK_TTL_MS) unlinkSync(pathJoin(root, name))
@@ -1518,7 +1526,11 @@ export function writeMarks(root: string, sessionId: unknown, marks: Dome[], now:
     const fd = openSync(pathJoin(root, sessionId), fsc.O_RDWR | fsc.O_CREAT | fsc.O_APPEND | fsc.O_NOFOLLOW, 0o600)
     try {
       if (!fstatSync(fd).isFile()) return false
-      const have = new Set(readFileSync(pathJoin(root, sessionId), "utf8").split("\n"))
+      // Renueva el mtime aunque no se añada nada: una sesión viva no caduca para la purga de otra.
+      const t = new Date(now)
+      futimesSync(fd, t, t)
+      // Por descriptor, no por ruta: releer por ruta seguiría un enlace puesto tras el O_NOFOLLOW.
+      const have = new Set(readFileSync(fd, "utf8").split("\n"))
       for (const m of marks) {
         const line = JSON.stringify({ cupula: m.id, nivel: levelName(m.level) })
         if (!have.has(line)) writeSync(fd, line + "\n")
