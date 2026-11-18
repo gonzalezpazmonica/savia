@@ -16,6 +16,9 @@ d = os.environ["GH_STUB_DIR"]
 a = sys.argv[1:]
 with open(os.path.join(d, "calls.log"), "a") as f:
     f.write(" ".join(a) + "\n")
+    for k in ("GH_REPO", "GH_HOST"):  # el script no debe dejar que estas variables redirijan gh
+        if k in os.environ:
+            f.write(f"ENV {k}={os.environ[k]}\n")
 
 
 def load(p, default):

@@ -229,3 +229,68 @@ ledger() { printf '%s\n' "$@" > "$SAVIA_EFFECT_LEDGER"; }
   mv "$SAVIA_EFFECT_LEDGER" "$T/ledger.guardado"
   run sc reconcile; [ "$status" -eq 2 ]; [[ "$output" == *LEDGER_UNREADABLE* ]]
 }
+
+# ── revisiones sobre 382d87ab8 ──────────────────────────────────────────────
+
+marker() { echo "$(git -C "$R" rev-parse --absolute-git-dir)/savia-control/installed"; }
+seq_of() { jget "$SAVIA_CONTROL_DIR/state.json" "d['stops']['$1']['stop_seq']"; }
+
+@test "security P2-3: GH_REPO y GH_HOST no llegan a los gh de resume --via-pr" {
+  operator_setup
+  sc pause --scope executor:a --reason x; sc reconcile --scope executor:a
+  approve executor:a 0 "$(seq_of executor:a)"
+  GH_REPO=atacante/repo GH_HOST=evil.invalid run sc resume --scope executor:a --via-pr
+  echo "$output"; [ "$status" -eq 0 ]
+  grep -q '^api ' "$GH_STUB_DIR/calls.log"            # gh se llamó de verdad
+  run grep -c '^ENV GH_' "$GH_STUB_DIR/calls.log"; [ "$output" = 0 ]
+}
+
+@test "security P2-4: SAVIA_EFFECT_LEDGER queda fijado en la marca; otro valor sale 2 y sin variable se usa el fijado" {
+  ledger '{"effect_id":"e1","state":"DISPATCHED","executor":"a"}'
+  sc pause --scope executor:a --reason x
+  SAVIA_EFFECT_LEDGER="$T/otro.jsonl" run sc reconcile
+  echo "$output"; [ "$status" -eq 2 ]; [[ "$output" == *PATH_MISMATCH* ]]
+  unset SAVIA_EFFECT_LEDGER
+  run sc reconcile; echo "$output"; [ "$status" -eq 5 ]; [[ "$output" == *"INDETERMINATE e1"* ]]
+}
+
+@test "security P2-4: MERGE_SPRINT_HOME queda fijado; redirigirlo no salta MERGED_BY_SPRINT" {
+  operator_setup
+  sc pause --scope executor:a --reason x; sc reconcile --scope executor:a
+  approve executor:a 0 "$(seq_of executor:a)"
+  mkdir -p "$MERGE_SPRINT_HOME"; echo "{\"event\":\"MERGED\",\"pr\":\"$APPROVAL_PR\"}" > "$MERGE_SPRINT_HOME/ledger.jsonl"
+  MERGE_SPRINT_HOME="$T/vacio" run sc resume --scope executor:a --via-pr
+  echo "$output"; [ "$status" -eq 2 ]; [[ "$output" == *PATH_MISMATCH* ]]
+  unset MERGE_SPRINT_HOME
+  run sc resume --scope executor:a --via-pr; echo "$output"; [ "$status" -eq 4 ]; [[ "$output" == *MERGED_BY_SPRINT* ]]
+  run sc check --executor a; [ "$status" -eq 6 ]
+}
+
+@test "security P2-4 (negativo): una marca sin rutas fijadas adopta las del entorno y las fija" {
+  sc pause --scope executor:a --reason x
+  python3 -c 'import json,sys; p=sys.argv[1]; m=json.load(open(p)); m.pop("effect_ledger"); m.pop("merge_sprint_home"); json.dump(m, open(p,"w"))' "$(marker)"
+  export SAVIA_EFFECT_LEDGER="$T/nuevo.jsonl"
+  ledger '{"effect_id":"e2","state":"DISPATCHED","executor":"a"}'
+  run sc reconcile; echo "$output"; [ "$status" -eq 5 ]; [[ "$output" == *"INDETERMINATE e2"* ]]
+  [ "$(jget "$(marker)" 'd["effect_ledger"]')" = "$(realpath "$T/nuevo.jsonl")" ]
+}
+
+@test "correctness P2: un reconcile por ámbito que resuelve un incierto del global lo descarga también del global" {
+  ledger '{"effect_id":"e1","state":"DISPATCHED","executor":"a"}'
+  sc revoke --reason r; sc pause --scope executor:a --reason x
+  run sc reconcile; [ "$status" -eq 5 ]
+  ledger '{"effect_id":"e1","state":"SUCCEEDED","receipt":"r1","executor":"a"}'
+  run sc reconcile --scope executor:a; [ "$status" -eq 0 ]
+  mv "$SAVIA_EFFECT_LEDGER" "$T/ledger.guardado"
+  run sc reconcile; echo "$output"; [ "$status" -eq 0 ]
+}
+
+@test "correctness P2 (negativo): si un reconcile posterior al que lo resolvió lo vuelve a dejar incierto, bloquea" {
+  ledger '{"effect_id":"e1","state":"SUCCEEDED","receipt":"r1","executor":"a"}'
+  sc revoke --reason r; sc pause --scope executor:a --reason x
+  run sc reconcile --scope executor:a; [ "$status" -eq 0 ]
+  ledger '{"effect_id":"e1","state":"DISPATCHED","executor":"a"}'
+  run sc reconcile; [ "$status" -eq 5 ]
+  mv "$SAVIA_EFFECT_LEDGER" "$T/ledger.guardado"
+  run sc reconcile; echo "$output"; [ "$status" -eq 2 ]; [[ "$output" == *LEDGER_UNREADABLE* ]]
+}

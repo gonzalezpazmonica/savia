@@ -51,7 +51,7 @@ ledger() { printf '%s\n' "$@" > "$SAVIA_EFFECT_LEDGER"; }
   sc pause --scope executor:a --reason x
   run sc reconcile; [ "$status" -eq 5 ]
   tail -1 "$SAVIA_CONTROL_DIR/control.jsonl" | grep -q '"op":"reconcile"'
-  tail -1 "$SAVIA_CONTROL_DIR/control.jsonl" | grep -q '"indeterminate":\["e1"\],"scope":"executor:a","stop_seq":1'
+  tail -1 "$SAVIA_CONTROL_DIR/control.jsonl" | grep -q '"indeterminate":\["e1"\],"resolved":\[\],"scope":"executor:a","stop_seq":1'
   ls "$SAVIA_CONTROL_DIR"/reports/reconcile-*.json >/dev/null
 }
 

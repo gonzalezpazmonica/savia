@@ -40,6 +40,8 @@ EPOCH_CHECK = "control-epoch-monotonic"
 STATE_KEYS = {"version", "epoch", "stop_seq", "stops"}
 ENTRY_KEYS = {"mode", "stop_seq", "since", "reason", "actor"}
 FORBIDDEN_ANCESTORS = {"claude", "opencode", "script"}
+PINNED_PATHS = {"effect_ledger": ("SAVIA_EFFECT_LEDGER", (".savia", "effect-ledger", "ledger.jsonl")),
+                "merge_sprint_home": ("MERGE_SPRINT_HOME", (".savia", "merge-sprint"))}
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 # Variables de Git que redirigen qué repositorio, índice, objetos o configuración usa un subproceso. `git -C` no las
 # anula: con GIT_DIR ajeno, `check` leería la marca de otro repo y daría RUNNING. Se descartan al arrancar.
@@ -48,12 +50,16 @@ GIT_REDIRECT_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FI
                      "GIT_DISCOVERY_ACROSS_FILESYSTEM", "GIT_CONFIG", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS",
                      "GIT_EXEC_PATH", "GIT_REPLACE_REF_BASE", "GIT_NO_REPLACE_OBJECTS", "GIT_SHALLOW_FILE",
                      "GIT_GRAFT_FILE")
+# Variables de gh que cambian contra qué repositorio o servidor se consulta: con GH_REPO ajeno, las reglas de main,
+# las PR y el merged_by de verify_pr vendrían de un repo del atacante. Se conservan las credenciales (GH_TOKEN,
+# GH_CONFIG_DIR): un token distinto no puede fabricar respuestas del repo de origin.
+GH_REDIRECT_VARS = ("GH_REPO", "GH_HOST")
 
 
 def scrub_git_env(env=None):
     env = os.environ if env is None else env
     for k in list(env):
-        if k in GIT_REDIRECT_VARS or re.fullmatch(r"GIT_CONFIG_(KEY|VALUE)_[0-9]+", k):
+        if k in GIT_REDIRECT_VARS or k in GH_REDIRECT_VARS or re.fullmatch(r"GIT_CONFIG_(KEY|VALUE)_[0-9]+", k):
             del env[k]
     return env
 
@@ -172,6 +178,7 @@ class Ctx:
                 assert isinstance(m, dict) and isinstance(m.get("control_dir"), str)
                 assert nat(m.get("epoch_hwm")) and nat(m.get("stop_seq_hwm"))
                 assert isinstance(m.get("consumed"), list)
+                assert all(isinstance(m.get(k), str) for k in PINNED_PATHS if k in m)
                 self.marker = m
             except (OSError, ValueError, AssertionError):
                 raise Fail(2, f"MARK_UNREADABLE: {self.marker_path}")
@@ -183,6 +190,14 @@ class Ctx:
         else:
             self.cdir = env or os.path.join(os.path.expanduser("~"), ".savia", "control")
         self.cdir = os.path.realpath(self.cdir)
+        # Ledger de efectos y del merge-sprint: como el directorio de control, quedan fijados en la marca. Si no, una
+        # variable de entorno vaciaría el ledger de reconcile o saltaría la comprobación MERGED_BY_SPRINT.
+        self.paths = {}
+        for key, (var, default) in PINNED_PATHS.items():
+            pinned, envv = (self.marker or {}).get(key), os.environ.get(var)
+            if pinned is not None and envv and os.path.realpath(envv) != os.path.realpath(pinned):
+                raise Fail(2, f"PATH_MISMATCH: {var} no coincide con la marca de instalación")
+            self.paths[key] = os.path.realpath(pinned or envv or os.path.join(os.path.expanduser("~"), *default))
         self.state_path = os.path.join(self.cdir, "state.json")
         self.journal_path = os.path.join(self.cdir, "control.jsonl")
         self.warnings = []
@@ -369,6 +384,8 @@ class Ctx:
     def save_marker(self, consumed=None):
         m = dict(self.marker or {"version": VERSION, "consumed": []})
         m["control_dir"] = self.cdir
+        for key in PINNED_PATHS:
+            m.setdefault(key, self.paths[key])
         m["epoch_hwm"] = max(m.get("epoch_hwm", 0), self.epoch)
         m["stop_seq_hwm"] = max(m.get("stop_seq_hwm", 0), self.stop_seq)
         if consumed:
@@ -669,10 +686,9 @@ def cmd_status(a):
 
 # ── reconcile (R5) ──────────────────────────────────────────────────────────
 
-def ledger_records():
+def ledger_records(ctx):
     """Ledger de efectos (SE-493). Interino en F0: JSONL, el último registro de cada effect_id manda."""
-    p = os.environ.get("SAVIA_EFFECT_LEDGER") or os.path.join(os.path.expanduser("~"), ".savia", "effect-ledger",
-                                                              "ledger.jsonl")
+    p = ctx.paths["effect_ledger"]
     recs = {}
     if os.path.exists(p):
         try:
@@ -692,14 +708,21 @@ def ledger_records():
 
 def known_indeterminate(ctx, scopes):
     """Efectos que un reconcile anterior dejó INDETERMINATE para paradas que siguen abiertas (diario encadenado)."""
-    last = {}  # solo cuenta el último reconcile de cada ámbito: uno posterior pudo resolver los inciertos
-    for r in ctx.journal or []:
+    # Solo cuenta el último reconcile de cada ámbito, y un efecto que un reconcile posterior de cualquier ámbito
+    # abierto clasificó como resuelto deja de contar: la clase de un efecto no depende del ámbito desde el que se mira.
+    last, resolved_at = {}, {}
+    for i, r in enumerate(ctx.journal or []):
         if r.get("op") == "reconcile":
             for c in r.get("scopes", []):
                 cur = ctx.stops.get(c.get("scope"))
-                if c.get("scope") in scopes and cur and cur["stop_seq"] == c.get("stop_seq"):
-                    last[c["scope"]] = {x for x in c.get("indeterminate", []) if isinstance(x, str)}
-    return set().union(*last.values())
+                if not (cur and cur["stop_seq"] == c.get("stop_seq")):
+                    continue
+                for x in c.get("resolved", []):
+                    if isinstance(x, str):
+                        resolved_at[x] = i
+                if c["scope"] in scopes:
+                    last[c["scope"]] = (i, {x for x in c.get("indeterminate", []) if isinstance(x, str)})
+    return {x for i, xs in last.values() for x in xs if resolved_at.get(x, -1) <= i}
 
 
 def covers(scope, rec):
@@ -751,7 +774,7 @@ def cmd_reconcile(a):
         ctx.begin_write()
         if ctx.kind == "NEW":
             ctx.save_state()  # sin esto la marca y el diario existirían sin estado y el siguiente check daría LOST_STATE
-        effects = ledger_records()
+        effects = ledger_records(ctx)
         scopes = [a.scope] if a.scope else sorted(ctx.stops)
         scopes = [s for s in scopes if s in ctx.stops]
         gone = sorted(known_indeterminate(ctx, scopes) - set(effects))
@@ -770,7 +793,9 @@ def cmd_reconcile(a):
                            "irreversible": bool(rec.get("irreversible"))})
         for s in scopes:
             indet = sorted(r["effect_id"] for r in report if s in r["scopes"] and r["class"] == "INDETERMINATE")
-            covered.append({"scope": s, "stop_seq": ctx.stops[s]["stop_seq"], "indeterminate": indet})
+            done = sorted(r["effect_id"] for r in report if s in r["scopes"] and r["class"] != "INDETERMINATE")
+            covered.append({"scope": s, "stop_seq": ctx.stops[s]["stop_seq"], "indeterminate": indet,
+                            "resolved": done})
         path = os.path.join(ctx.cdir, "reports", f"reconcile-{ctx.stop_seq}-{int(time.time() * 1000)}.json")
         atomic_write(path, json.dumps({"at": now(), "scopes": covered, "effects": report}, indent=1) + "\n")
         ctx.append({"op": "reconcile", "scopes": covered, "report": os.path.basename(path), "actor": actor()})
@@ -845,9 +870,8 @@ def origin_tier(ctx, files):
         raise Fail(4, "TIER_UNVERIFIABLE: risk-tier.py de origin/main no respondió")
 
 
-def merge_sprint_merged(pr):
-    home = os.environ.get("MERGE_SPRINT_HOME") or os.path.join(os.path.expanduser("~"), ".savia", "merge-sprint")
-    p = os.path.join(home, "ledger.jsonl")
+def merge_sprint_merged(ctx, pr):
+    p = os.path.join(ctx.paths["merge_sprint_home"], "ledger.jsonl")
     if not os.path.exists(p):
         return False
     try:
@@ -912,7 +936,7 @@ def verify_pr(ctx, scope, entry):
         raise Fail(4, f"TIER_UNVERIFIABLE: la PR #{n} tiene ficheros con espacios en el nombre")
     if origin_tier(ctx, names) != 4:
         raise Fail(4, f"TIER_NOT_4: la PR #{n} no sale tier 4 con el risk-tier.py de origin/main")
-    if merge_sprint_merged(n):
+    if merge_sprint_merged(ctx, n):
         raise Fail(4, f"MERGED_BY_SPRINT: la PR #{n} figura MERGED en el ledger del merge-sprint")
     return blob, ap["accept"], n
 
