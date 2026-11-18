@@ -13,6 +13,7 @@
 #
 # Env:
 #   SLDC_VAULTS_URL        A2A base (default http://127.0.0.1:8923)
+#   SLDC_VAULTS_TOKEN      credencial de escritura (token personal sv_… con rol writer; SE-424 H5)
 #   SLDC_WRITE_DOME        dome destino (default example-context)
 #   SLDC_MAX_CONFIDENTIALITY  nivel maximo (default N2)
 #   SLDC_PENDING_DIR       pendientes locales (default ~/.savia/sldc-pending)
@@ -117,7 +118,10 @@ feed_note() {
   fi
   local resp
   # curl caido (conexion rechazada, timeout) o respuesta vacia = no entregada: nunca "OK"
-  resp=$(curl -s --max-time 10 -X POST "$VAULTS_URL/share" -H "Content-Type: application/json" -d "$1") || return 1
+  # SE-424 H5: A2A no escribe sin credencial. El token va por stdin (-K -), no en la línea de órdenes (ps).
+  local auth_cfg=""
+  [[ -n "${SLDC_VAULTS_TOKEN:-}" ]] && auth_cfg="header = \"Authorization: Bearer ${SLDC_VAULTS_TOKEN}\""
+  resp=$(printf '%s\n' "$auth_cfg" | curl -s --max-time 10 -K - -X POST "$VAULTS_URL/share" -H "Content-Type: application/json" -d "$1") || return 1
   [[ -n "$resp" ]] || return 1
   if echo "$resp" | grep -q '"error"'; then
     return 1

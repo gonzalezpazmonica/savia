@@ -109,7 +109,9 @@ program.command('serve').description('Start MCP, A2A or HTTP (Savia Files) serve
       const access = domeReg
         ? new AccessController(userStore ?? new UserStore('savia-vaults.users.json'), domeReg, new AuditLogger())
         : undefined;
-      const server = new A2AServer(config, domeReg, { corsOrigins, access });
+      // SE-424 H5: nombres admitidos en Host además de bucle local, IP literales y el --host de escucha.
+      const allowedHosts = (process.env.SAVIA_A2A_ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean);
+      const server = new A2AServer(config, domeReg, { corsOrigins, access, allowedHosts });
       if (autosyncMin !== undefined && domeReg) {
         const { RagService } = await import('../rag/service.js');
         const { RagAutosync } = await import('../rag/autosync.js');

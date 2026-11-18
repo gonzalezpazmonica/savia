@@ -66,7 +66,18 @@ if [[ -z "$TENANT" ]]; then
   exit 2
 fi
 
+# El tenant es un nombre de directorio: sin "/" ni "..", o rbac.yaml se escribe fuera de tenants/.
+if [[ ! "$TENANT" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]]; then
+  echo "rbac-manager: tenant inválido (solo letras, cifras, '_' y '-')" >&2
+  exit 2
+fi
+
 RBAC_FILE="$PROJECT_DIR/tenants/$TENANT/rbac.yaml"
+
+# Roles y usuarios se guardan en una lista YAML separada por comas y se recorren por palabras:
+# un espacio, una coma o un corchete en el valor crearía miembros que nadie pidió.
+valid_role() { [[ "$1" =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]]; }
+valid_user() { [[ "$1" =~ ^[A-Za-z0-9_.@-]+$ ]]; }
 
 ensure_file() {
   if [[ ! -f "$RBAC_FILE" ]]; then
@@ -276,10 +287,12 @@ cmd_check() {
 case "$ACTION" in
   grant)
     [[ ${#ARGS[@]} -ge 2 ]] || { usage; exit 2; }
+    valid_role "${ARGS[0]}" && valid_user "${ARGS[1]}" || { echo "rbac-manager: rol o usuario inválido" >&2; exit 2; }
     cmd_grant "${ARGS[0]}" "${ARGS[1]}"
     ;;
   revoke)
     [[ ${#ARGS[@]} -ge 2 ]] || { usage; exit 2; }
+    valid_role "${ARGS[0]}" && valid_user "${ARGS[1]}" || { echo "rbac-manager: rol o usuario inválido" >&2; exit 2; }
     cmd_revoke "${ARGS[0]}" "${ARGS[1]}"
     ;;
   list)
@@ -287,6 +300,8 @@ case "$ACTION" in
     ;;
   check)
     [[ ${#ARGS[@]} -ge 2 ]] || { usage; exit 2; }
+    # Usuario no válido nunca puede ser miembro: se deniega sin leer el fichero (fail-closed).
+    valid_user "${ARGS[0]}" || { echo "DENY"; exit 1; }
     if cmd_check "${ARGS[0]}" "${ARGS[1]}"; then
       echo "ALLOW"; exit 0
     else

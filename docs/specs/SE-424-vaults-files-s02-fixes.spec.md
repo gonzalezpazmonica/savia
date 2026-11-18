@@ -184,3 +184,58 @@ Desviaciones:
    ONNX del modelo de maquetación.
 3. **`status` comprueba tamaño y fecha**; el SHA-256 completo lo comprueba `setup`
    (unos 2 s por ejecución), para que `status` siga siendo instantáneo.
+
+## Enmienda H5 (2026-11-17) — contención de rutas y «sin escritura sin contraseña»
+
+Origen: auditoría de seguridad interna (2026-11-16), reproducida en una instancia aislada.
+Decisión de la operadora del 2026-11-17: el servicio local deja de escribir sin credencial
+en cualquier nivel, y nada sale de la carpeta de su cúpula. Es la continuación de H2 (la
+guarda de A2A ya prohibía servir rutas absolutas); extiende la guarda al almacenamiento,
+que es donde se toca disco, para que valga igual por A2A, MCP y CLI.
+
+### Problema
+
+| # | Fallo | Consecuencia |
+|---|---|---|
+| H5a | `VaultStorage.read/write/delete/diff/log` unían la ruta pedida con la raíz sin comprobar el resultado; `guardRead`/`guardWrite` no tenían llamantes | `../`, rutas absolutas y enlaces que salen leen, escriben y comparan fuera de la cúpula; por MCP, un permiso sobre una N1 alcanza la N4 vecina |
+| H5b | `git diff <ruta>` sin `--` | una «ruta» `--output=<fichero>` hace que git escriba donde se le diga |
+| H5c | A2A sin credencial escribía en N1/N2 | cualquier proceso local escribe en las cúpulas de la persona |
+| H5d | A2A no validaba `Host` | una web con DNS reasignado a 127.0.0.1 lee lo público por el navegador |
+
+### Solución
+
+- `VaultSecurity.contain(ruta)`: única puerta del almacenamiento a disco. Rechaza vacía/NUL,
+  absoluta (POSIX, unidad, UNC), cualquier segmento `..` (también tras descodificar `%xx`),
+  barra invertida como separador, `.git`/`.savia-vault`/`.trash`/`deniedPaths`, profundidad
+  máxima, y cualquier prefijo existente que sea un enlace fuera de la raíz real (o roto).
+  `guardRead`/`guardWrite` se construyen sobre ella. El nivel se sigue comprobando en la
+  cúpula del almacenamiento, que tras la contención es siempre la de destino.
+- git recibe siempre `--` antes de la ruta (`add`, `rm`, `diff`).
+- A2A: escritura sin credencial válida ⇒ 401 en todos los niveles; rutas rechazadas ⇒ 400.
+  Credenciales: las que ya existían (token personal de SE-423 con rol `writer`, o el secreto
+  obsoleto `SAVIA_VAULTS_TOKEN` en loopback). Ningún mecanismo nuevo.
+- A2A: `Host` admitido = bucle local, IP literal, `--host` de escucha y
+  `SAVIA_A2A_ALLOWED_HOSTS`; el resto ⇒ 403 antes de cualquier ruta (también `/health`).
+- `scripts/sldc-context-loop.sh` envía `SLDC_VAULTS_TOKEN` (por stdin de curl).
+
+### Criterios de aceptación
+
+- **AC6 (H5a/b)** Pruebas con directorio temporal: lectura, escritura, comparación,
+  historial y borrado con `..`, absolutas, `%2e%2e`, `%2f`, barras invertidas, unidad
+  Windows, NUL, enlaces de fichero, de directorio y rotos ⇒ rechazo sin tocar nada fuera;
+  `--output=` no crea fichero; prueba que falla si una operación no pasa por `contain`.
+  Por MCP (stdio real), con permiso en una N1, ni lectura, ni escritura ni comparación
+  alcanzan la N4 vecina.
+- **AC7 (H5c)** A2A sin credencial ⇒ 401 en N1, N2 y vault por defecto, sin fichero creado;
+  con credencial, escribe; `../` desde la N1 ⇒ 400.
+- **AC8 (H5d)** `Host` ajeno ⇒ 403; bucle local, IP literal y nombre configurado ⇒ 200;
+  la CLI lee `SAVIA_A2A_ALLOWED_HOSTS`.
+- **AC9** Suite completa en verde; mutación: quitar cada comprobación nueva hace fallar
+  alguna prueba. README y `docs/USAGE.md` dicen qué se rompe al actualizar y cómo se arregla.
+
+### Fuera de alcance (H5)
+
+Aplicar la lista de extensiones y el tamaño máximo de `guardRead` a la API de notas (hoy
+nunca se aplicaron; activarlos cambiaría qué se puede leer). Límite de tamaño del cuerpo de
+`POST /share`. Carreras (TOCTOU) entre la comprobación y la escritura por un proceso que
+ya puede escribir dentro de la cúpula.
