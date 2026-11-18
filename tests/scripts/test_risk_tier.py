@@ -68,8 +68,8 @@ def test_rationale_presente(rt):
 def test_codigo_mas_doc_es_tier_2_en_cualquier_orden(rt):
     # Regresión: all_docs miraba solo el último fichero del bucle (variable `fl` filtrada),
     # así que un script seguido de un .md salía tier 1.
-    assert rt.classify(["scripts/validate-ci-local.sh", "CLAUDE.md"])["tier"] == 2
-    assert rt.classify(["CLAUDE.md", "scripts/validate-ci-local.sh"])["tier"] == 2
+    assert rt.classify(["scripts/validate-ci-local.sh", "README.md"])["tier"] == 2
+    assert rt.classify(["README.md", "scripts/validate-ci-local.sh"])["tier"] == 2
     assert rt.classify(["src/x.py", "docs/guide.md", "README.md"])["tier"] == 2
 
 
@@ -155,3 +155,33 @@ def test_vecinos_del_nucleo_no_son_gobernanza(rt):
     assert not rt.is_governance("docs/rules/domain/savia-core-notes.md")
     assert not rt.is_governance("scripts/generate-savia-core-helper.py")
     assert rt.classify(["docs/rules/domain/savia-core-notes.md"])["tier"] == 1
+
+
+# Decisión 2026-11-18: guardas, CLAUDE.md, freno de emergencia y puente son gobernanza (tier 4).
+@pytest.mark.parametrize("path", [
+    ".claude/hooks/validate-bash-global.sh", ".claude/hooks/lib/dome_guard.py", ".claude/hooks/_legacy/x.sh",
+    ".claude/enterprise/hooks/network-egress-guard.sh",
+    ".opencode/plugins/guards/block-force-push.ts", ".opencode/plugins/savia-foundation.ts",
+    "CLAUDE.md", "projects/demo/CLAUDE.md", ".opencode/CLAUDE.md",
+    "scripts/savia-control.py", "config/control/REVOCATION_EPOCH",
+    "scripts/savia-bridge.py", "scripts/bridge_auth.py", "scripts/savia-bridge.service",
+    "scripts/install-savia-bridge-system.sh",
+    "scripts/repeat-tool-guard.py", "scripts/budget-guard.sh",
+])
+def test_ejecucion_y_guardas_son_gobernanza_tier_4(rt, path):
+    res = rt.classify([path])
+    assert res["tier"] == 4 and res["requires_human"] is True
+    assert "gobernanza" in res["rationale"]
+
+
+def test_claude_md_junto_a_codigo_sube_el_lote(rt):
+    assert rt.classify(["scripts/validate-ci-local.sh", "CLAUDE.md"])["tier"] == 4
+
+
+@pytest.mark.parametrize("path", [
+    "tests/fixtures/sam/valid/CLAUDE.md", "scripts/guardrail-audit.sh", "scripts/test-wellbeing-guardian.sh",
+    "scripts/bridge_auth_notes.py", ".claude/hooksmore/x.sh", "docs/hooks/readme.md",
+])
+def test_vecinos_no_suben_a_tier_4(rt, path):
+    # Casos límite: el prefijo/nombre debe ser exacto, no una coincidencia parcial.
+    assert rt.classify([path])["tier"] < 4

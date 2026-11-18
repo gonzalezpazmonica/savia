@@ -663,7 +663,7 @@ SH
   G add .claude scripts; G commit -qm "auditoría con librería"; G push -q origin main
 }
 
-@test "rev-1469 P1-2 block: la librería .claude/hooks/lib de la rama nunca se ejecuta; el escáner carga la de main" {
+@test "rev-1469 P1-2 block: una PR que cambia .claude/hooks/lib es tier 4: se aparca y su librería nunca se ejecuta" {
   reg_main; gate_lib_audit
   G switch -q -c pr-175 main
   printf 'touch "%s"\ngate_ok() { return 0; }\n' "$TMPDIR_T/trampa-lib" > "$MERGE_SPRINT_GIT_ROOT/.claude/hooks/lib/gate-result.sh"
@@ -672,9 +672,11 @@ SH
   main_moves y175.txt main
   plan_and_grant
   run bash "$SCRIPT" run
+  # Desde 2026-11-18 las guardas son gobernanza (tier 4): la PR no se fusiona, y la trampa tampoco corre.
   [ ! -e "$TMPDIR_T/trampa-lib" ]
   [ "$status" -eq 0 ]
-  grep -qx 175 "$FAKE/merged"
+  [ ! -e "$FAKE/merged" ] || ! grep -qx 175 "$FAKE/merged"
+  ledger_has '"candidates":"0"'   # el plan la excluyó por tier 4: no hay candidatas
 }
 
 @test "rev-1469 P2-2 boundary: restos de raíces congeladas de un run anterior no bloquean la integración" {
