@@ -103,15 +103,15 @@ if invalid:
 # ── Invariant check (AC3) ─────────────────────────────────────────────────────
 
 @test "SPEC-181: L0+L1 total tokens <= 3000" {
-  run bash "$SCRIPT" --json
+  bats_require_minimum_version 1.5.0
+  run --separate-stderr bash "$SCRIPT" --json
   [ "$status" -eq 0 ]
-  run python3 -c "
+  printf '%s' "$output" | python3 -c "
 import json, sys
-d = json.loads('''$output''')
+d = json.load(sys.stdin)
 eager = d['eager_total']
 assert eager <= 3000, f'L0+L1={eager} > 3000'
 "
-  [ "$status" -eq 0 ]
 }
 
 @test "SPEC-181: audit script exit 0 on valid workspace" {
@@ -138,6 +138,7 @@ assert eager <= 3000, f'L0+L1={eager} > 3000'
   run --separate-stderr bash "$SCRIPT" --json
   [[ -z "$stderr" ]] || echo "stderr: $stderr" >&3
   echo "stdout: $output"
+  [ "$status" -eq 0 ]
   printf '%s' "$output" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
@@ -151,6 +152,7 @@ for t in ('L0','L1','L2','L3'):
   run --separate-stderr bash "$SCRIPT" --json
   [[ -z "$stderr" ]] || echo "stderr: $stderr" >&3
   echo "stdout: $output"
+  [ "$status" -eq 0 ]
   printf '%s' "$output" | python3 -c "
 import json, sys
 d = json.load(sys.stdin)

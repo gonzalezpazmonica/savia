@@ -66,6 +66,14 @@ print([h.get('model') for a in d['hooks'].values() for g in a for h in g['hooks'
   grep -q 'entrypoint=sdk-cli' "$TMP/.savia/shield-autostart.log"
 }
 
+@test "shield-autostart: con CI=true sale pronto y no arranca nada" {
+  run bash -c "echo '{}' | HOME='$TMP' CI=true CLAUDE_CODE_ENTRYPOINT=cli bash .claude/hooks/shield-autostart.sh"
+  [ "$status" -eq 0 ]
+  grep -q 'CI/GHA=true, skipping' "$TMP/.savia/shield-autostart.log"
+  run grep -q 'entrypoint=' "$TMP/.savia/shield-autostart.log"
+  [ "$status" -ne 0 ]
+}
+
 @test "settings.json: no http hooks that fail when the Shield daemon is down" {
   run python3 -c "
 import json; d=json.load(open('.claude/settings.json'))

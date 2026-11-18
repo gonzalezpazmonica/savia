@@ -4,7 +4,7 @@
 # Invoca linter disponible (dotnet/ruff/eslint/gofmt/rustfmt/rubocop/php-cs-fixer/terraform).
 # Ref: batch 47 hook coverage — SPEC-lint multi-lang auto-check
 
-HOOK="${PEL_HOOK:-.opencode/hooks/post-edit-lint.sh}"  # PEL_HOOK: solo para la prueba de mutación
+HOOK=".opencode/hooks/post-edit-lint.sh"
 
 setup() {
   cd "$BATS_TEST_DIRNAME/.."
@@ -24,8 +24,9 @@ setup() {
 }
 
 # Aserción: el linter `$1` se invocó con el fichero `$2`; si `$2` va vacío, no se invocó ninguno.
+# Línea completa: nombre del linter y ruta en la misma invocación.
 assert_linter_called() {
-  [[ -f "$CALLS" ]] && grep -qF "$1 " "$CALLS" && grep -qF "$2" "$CALLS"
+  [[ -f "$CALLS" ]] && grep -E "^$1 .*" "$CALLS" | grep -qF "$2"
 }
 assert_no_linter() { [[ ! -s "$CALLS" ]]; }
 teardown() {
@@ -55,7 +56,7 @@ teardown() {
 @test "pass-through: empty JSON exits 0" {
   run bash "$HOOK" <<< ''
   # jq returns empty for empty input, FILE_PATH empty → exit 0
-  [ "$status" -eq 0 ] || [[ "$status" -ge 0 ]]
+  [ "$status" -eq 0 ]
 }
 
 @test "pass-through: unknown extension exits 0" {
@@ -155,6 +156,9 @@ teardown() {
   echo 'def x(): pass' > "$TEST_DIR/x.py"
   mkdir -p "$TEST_DIR/onlyjq"
   for t in jq cat; do ln -s "$(command -v "$t")" "$TEST_DIR/onlyjq/$t"; done
+  # Un linter de otro lenguaje sí está en el PATH: el stub prueba que la ausencia de ruff
+  # no hace que el hook invoque otro linter (y que assert_no_linter puede fallar).
+  ln -s "$STUBS/gofmt" "$TEST_DIR/onlyjq/gofmt"
   local bash_bin; bash_bin="$(command -v bash)"
   PATH="$TEST_DIR/onlyjq" run "$bash_bin" "$HOOK" <<< "{\"tool_input\":{\"file_path\":\"$TEST_DIR/x.py\"}}"
   [ "$status" -eq 0 ]

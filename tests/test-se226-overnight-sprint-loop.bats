@@ -82,7 +82,7 @@ setup() {
 @test "coherence wiring is off-by-default non-blocking (OVERNIGHT_COHERENCE_GATE=off)" {
     tmpdir=$(mktemp -d)
     export OVERNIGHT_COHERENCE_GATE=off
-    export SAVIA_WORKSPACE_DIR="$tmpdir/ws"
+    # El bucle deriva AGENT_RUNS_DIR de aquí: el audit log queda en $tmpdir/output/agent-runs.
     export SAVIA_WORKSPACE_DIR="$tmpdir"
     echo '[{"id":1,"description":"test","status":"pending"}]' > "$tmpdir/tasks.json"
     # SE-472: el bucle exige grant vigente; grant real en un almacén aislado

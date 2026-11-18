@@ -85,7 +85,9 @@ teardown() { cd /; }
 }
 
 @test "el barrido no emite errores aritméticos (salida del auditor con un solo documento)" {
-  [ ! -s "$BATS_FILE_TMPDIR/full.err" ]
+  # Solo el error que corrige el barrido: otros avisos de stderr (locale, jq) no son este bug.
+  run grep -EiH 'syntax error|error sintáctico|arithmetic|aritm' "$BATS_FILE_TMPDIR/full.err"
+  [ "$status" -eq 1 ]
 }
 
 @test "output reports VERDICT, Files scanned and Compliance" {
