@@ -168,7 +168,199 @@ def test_descubrimiento_usa_git_ls_files(tmp_path):
     assert osv.discover(tmp_path) == ["Cargo.lock", "a/package-lock.json", "requirements-dev.txt"]
 
 
+def _sin_git_env(tmp_path):
+    # GIT_CEILING_DIRECTORIES impide que git suba a un repo padre si TMPDIR está dentro de uno
+    import os
+    env = dict(os.environ, GIT_CEILING_DIRECTORIES=str(tmp_path.parent))
+    env.pop("GIT_DIR", None)
+    env.pop("GIT_WORK_TREE", None)
+    return env
+
+
 def test_cli_fuera_de_git_falla_cerrado(tmp_path):
-    p = subprocess.run([sys.executable, str(SCRIPT), "--root", str(tmp_path), "--offline", "x.json"],
-                       capture_output=True, text=True)
+    root = tmp_path / "nogit"
+    root.mkdir()
+    p = subprocess.run([sys.executable, str(SCRIPT), "--root", str(root), "--list"],
+                       capture_output=True, text=True, env=_sin_git_env(root))
     assert p.returncode == 2
+    assert "no se pudo listar ficheros con git" in p.stderr
+    assert p.stdout == ""
+
+
+def test_cli_fuera_de_git_con_offline_valido_falla_por_git(tmp_path):
+    root = tmp_path / "nogit"
+    root.mkdir()
+    off = tmp_path / "off.json"
+    write_offline(off, [], {})
+    p = subprocess.run([sys.executable, str(SCRIPT), "--root", str(root), "--offline", str(off)],
+                       capture_output=True, text=True, env=_sin_git_env(root))
+    assert p.returncode == 2
+    assert "no se pudo listar ficheros con git" in p.stderr
+
+
+# --------------------------------------------------- fix-1612 (revisión independiente)
+def test_alias_sin_severidad_primero_y_critico_despues_sube(repo, tmp_path, capsys):
+    off = tmp_path / "off.json"
+    write_offline(off, [["PYSEC-2022-1", "GHSA-aaaa-bbbb-cccc"]], {
+        "GHSA-aaaa-bbbb-cccc": vuln("GHSA-aaaa-bbbb-cccc", ["PYSEC-2022-1"], V3_CRITICAL),
+        "PYSEC-2022-1": vuln("PYSEC-2022-1", ["GHSA-aaaa-bbbb-cccc"]),
+    })
+    assert run(repo, off) == 0
+    rep = json.loads(capsys.readouterr().out)
+    adv = rep["advisories"][0]
+    assert rep["summary"]["unique_advisories"] == 1
+    assert (adv["severity"], adv["cvss"]) == ("critical", 9.8)
+    # la tabla por hallazgo cuadra con el aviso fusionado
+    assert {f["severity"] for f in rep["lockfiles"][0]["findings"]} == {"critical"}
+
+
+def test_alias_sin_severidad_primero_y_etiqueta_despues_sube(repo, tmp_path, capsys):
+    off = tmp_path / "off.json"
+    write_offline(off, [["PYSEC-2022-2", "GHSA-dddd-eeee-ffff"]], {
+        "GHSA-dddd-eeee-ffff": vuln("GHSA-dddd-eeee-ffff", ["PYSEC-2022-2"], label="MODERATE"),
+        "PYSEC-2022-2": vuln("PYSEC-2022-2", ["GHSA-dddd-eeee-ffff"]),
+    })
+    assert run(repo, off) == 0
+    s = json.loads(capsys.readouterr().out)["summary"]
+    assert s["by_severity"] == {"moderate": 1}
+    assert s["high_or_above"] == 0
+
+
+def test_mismo_rango_completa_cvss_ausente(repo, tmp_path, capsys):
+    off = tmp_path / "off.json"
+    write_offline(off, [["PYSEC-2022-3", "GHSA-gggg-hhhh-iiii"]], {
+        "PYSEC-2022-3": vuln("PYSEC-2022-3", ["GHSA-gggg-hhhh-iiii"], label="CRITICAL"),
+        "GHSA-gggg-hhhh-iiii": vuln("GHSA-gggg-hhhh-iiii", ["PYSEC-2022-3"], V3_CRITICAL),
+    })
+    assert run(repo, off) == 0
+    adv = json.loads(capsys.readouterr().out)["advisories"][0]
+    assert (adv["severity"], adv["cvss"]) == ("critical", 9.8)
+
+
+def test_cvss_cero_es_none_no_low():
+    v = vuln("GHSA-0", score="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N")
+    assert osv.severity_of(v) == ("none", 0.0)
+    assert osv._label_from_score(0.1) == "low"
+
+
+def test_aviso_retirado_no_cuenta(repo, tmp_path, capsys):
+    off = tmp_path / "off.json"
+    w = vuln("GHSA-wwww-wwww-wwww", score=V3_CRITICAL)
+    w["withdrawn"] = "2024-01-01T00:00:00Z"
+    write_offline(off, [["GHSA-wwww-wwww-wwww"]], {"GHSA-wwww-wwww-wwww": w})
+    assert run(repo, off) == 0
+    s = json.loads(capsys.readouterr().out)["summary"]
+    assert s["unique_advisories"] == 0
+    assert s["withdrawn_ignored"] == 1
+
+
+@pytest.mark.parametrize("batch", [
+    {"results": [{"vulns": [{"sin": "id"}]}]},
+    {"results": [{"vulns": None}]},
+    {"results": [{"vulns": ["no-es-dict"]}]},
+])
+def test_forma_inesperada_sale_2_no_traceback(repo, tmp_path, capsys, batch):
+    off = tmp_path / "off.json"
+    off.write_text(json.dumps({"batch": batch, "vulns": {}}))
+    assert run(repo, off) == 2
+    assert "ERROR:" in capsys.readouterr().err
+
+
+def test_error_inesperado_sale_2(repo, tmp_path, monkeypatch, capsys):
+    off = tmp_path / "off.json"
+    write_offline(off, [[]], {})
+    monkeypatch.setattr(osv, "build_report", lambda *a, **k: 1 / 0)
+    assert run(repo, off) == 2
+    assert "error inesperado" in capsys.readouterr().err
+
+
+def test_record_a_ruta_inexistente_sale_2(repo, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(osv, "query_online", lambda q: ({"results": [{"vulns": []}]}, {}))
+    rc = osv.main(["--root", str(repo), "--lockfile", "requirements.txt",
+                   "--record", str(tmp_path / "no" / "existe" / "r.json")])
+    assert rc == 2
+    assert "no se pudo guardar" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("name,text", [
+    ("Cargo.lock", "basura truncada\n"),
+    ("uv.lock", "version = 1\n[[pack"),
+    ("package-lock.json", '{"name": "x", "lockfileVersion": 3}'),
+    ("pnpm-lock.yaml", "packages:\n  formato-raro:\n    x: 1\n"),
+])
+def test_lockfile_reconocido_sin_estructura_sale_2(tmp_path, name, text):
+    (tmp_path / name).write_text(text)
+    off = tmp_path / "off.json"
+    write_offline(off, [], {})
+    assert osv.main(["--root", str(tmp_path), "--lockfile", name, "--offline", str(off)]) == 2
+
+
+def test_lockfiles_legitimos_vacios_no_fallan(tmp_path):
+    # Cargo.lock con solo crates locales y package-lock solo con la raíz: 0 paquetes es correcto
+    assert osv.parse_lockfile("Cargo.lock", '[[package]]\nname = "local"\nversion = "0.1.0"\n') == set()
+    assert osv.parse_lockfile("package-lock.json", '{"packages": {"": {"name": "r"}}}') == set()
+
+
+def test_requirements_sin_pins_se_avisa(tmp_path, capsys):
+    (tmp_path / "requirements.txt").write_text("flask>=2\nrequests\n")
+    off = tmp_path / "off.json"
+    write_offline(off, [], {})
+    assert osv.main(["--root", str(tmp_path), "--lockfile", "requirements.txt",
+                     "--offline", str(off), "--format", "json"]) == 0
+    rep = json.loads(capsys.readouterr().out)
+    assert rep["lockfiles"][0]["unpinned"] == ["flask>=2", "requests"]
+    assert rep["summary"]["unpinned"] == 2
+
+
+def test_sin_lockfiles_descubiertos_sale_2(tmp_path, capsys):
+    subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
+    (tmp_path / "README.md").write_text("x")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+    off = tmp_path / "off.json"
+    write_offline(off, [], {})
+    assert osv.main(["--root", str(tmp_path), "--offline", str(off)]) == 2
+    assert "ningún lockfile" in capsys.readouterr().err
+
+
+def test_descubrimiento_con_nombres_no_ascii(tmp_path):
+    subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
+    d = tmp_path / "módulo"
+    d.mkdir()
+    (d / "Cargo.lock").write_text("x")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+    assert osv.discover(tmp_path) == ["módulo/Cargo.lock"]
+
+
+def test_parsers_casos_borde():
+    pnpm5 = ("lockfileVersion: 5.4\npackages:\n  /foo/1.0.0_@babel+core@7.0.0:\n    resolution: {}\n"
+             "  /@s/bar/2.0.0:\n    resolution: {}\n")
+    assert osv.parse_lockfile("pnpm-lock.yaml", pnpm5) == {("npm", "foo", "1.0.0"), ("npm", "@s/bar", "2.0.0")}
+    npm = {"packages": {"": {"name": "root"}, "packages/ws": {"version": "0.0.1", "name": "ws-local"},
+                        "node_modules/ws-local": {"link": True},
+                        "node_modules/alias": {"version": "1.2.3", "name": "real-pkg"}}}
+    assert osv.parse_lockfile("package-lock.json", json.dumps(npm)) == {("npm", "real-pkg", "1.2.3")}
+    cargo = ('[[package]]\nname = "priv"\nversion = "1.0.0"\n'
+             'source = "registry+https://my.registry.example/index"\n\n'
+             '[[package]]\nname = "serde"\nversion = "1.0.0"\nsource = "sparse+https://index.crates.io/"\n')
+    assert osv.parse_lockfile("Cargo.lock", cargo) == {("crates.io", "serde", "1.0.0")}
+
+
+def test_paginacion_con_token_repetido_sale_2(monkeypatch):
+    def fake(url, payload):
+        return {"results": [{"vulns": [], "next_page_token": "T"}] * len((payload or {}).get("queries", []))}
+    monkeypatch.setattr(osv, "_http_json", fake)
+    with pytest.raises(osv.AuditError, match="paginación"):
+        osv.query_online([("PyPI", "x", "1")])
+
+
+def test_id_de_aviso_se_escapa_en_la_url(monkeypatch):
+    urls = []
+
+    def fake(url, payload):
+        if payload is not None:
+            return {"results": [{"vulns": [{"id": "../x?y=1"}]}]}
+        urls.append(url)
+        return {"id": "../x?y=1"}
+    monkeypatch.setattr(osv, "_http_json", fake)
+    osv.query_online([("PyPI", "x", "1")])
+    assert urls == [osv.OSV_VULN_URL + "..%2Fx%3Fy%3D1"]
