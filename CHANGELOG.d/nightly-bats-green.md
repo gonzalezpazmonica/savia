@@ -9,3 +9,4 @@ section: Fixed
 - Los dos tests intermitentes del nocturno (SPEC-181 JSON y commit-guard sin jq) parsean solo stdout y, si fallan, dejan stdout y stderr en el TAP.
 - El ejecutor de la suite nocturna pasa a `scripts/nightly-bats-run.sh` (con tests): las rutas llegan entrecomilladas como argumento, una suite que no registra su código de salida cuenta como fallo `missing` en vez de desaparecer del total, y el checkout ya no deja el token en `.git/config`.
 - El marcador `# nightly: serial` solo vale en las 3 primeras líneas de la suite, el resumen de la nocturna muestra el timeout configurado y el test de `missing` ya no depende del orden de arranque de xargs.
+- `test-knowledge-graph` dejaba de ser intermitente: `echo "$output" | grep -q` con `pipefail` falla por SIGPIPE cuando grep cierra antes de que echo termine de escribir una salida grande; ahora usa here-string.
