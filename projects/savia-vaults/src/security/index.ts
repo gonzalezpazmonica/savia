@@ -11,6 +11,9 @@ export class SecurityError extends Error {
   }
 }
 
+/** Metadatos de la cúpula que la API de notas nunca lee ni escribe (escribir en `.git/hooks` ejecutaría código). */
+const CONTAIN_DENIED = ['.git', '.savia-vault', '.trash'];
+
 export class VaultSecurity {
   private config: VaultConfig;
   private defaultAllowed: Set<string>;
@@ -20,6 +23,62 @@ export class VaultSecurity {
     this.config = config;
     this.defaultAllowed = new Set(['.md', '.yaml', '.yml', '.json', '.txt', '.canvas', '.base']);
     this.defaultDenied = new Set(['.git', '.obsidian', 'node_modules', '.savia-vault', '.trash']);
+  }
+
+  /**
+   * SE-424 H5: única puerta de VaultStorage a disco. Devuelve la ruta absoluta y la relativa (POSIX)
+   * de `requested` solo si queda dentro de la raíz REAL de la cúpula, también tras resolver enlaces
+   * simbólicos del destino y de cada directorio intermedio. Rechaza (SecurityError, sin tocar disco):
+   * vacía, NUL, absoluta (POSIX o unidad), cualquier segmento `..`, cualquier barra invertida
+   * (separador en Windows; también UNC), segmentos que al descodificar `%xx` dan `..` o una barra,
+   * metadatos internos (`.git`, `.savia-vault`, `.trash` y `deniedPaths`) y la profundidad máxima.
+   */
+  contain(requested: string): { abs: string; rel: string } {
+    if (typeof requested !== 'string' || requested === '' || requested.includes('\0')) {
+      throw new SecurityError('PATH_OUTSIDE_DOME: ruta vacía o no válida');
+    }
+    if (requested.startsWith('/') || /^[a-zA-Z]:/.test(requested)) {
+      throw new SecurityError('PATH_OUTSIDE_DOME: ruta absoluta');
+    }
+    const segments = requested.split('/').filter((s) => s !== '' && s !== '.');
+    if (segments.length === 0) throw new SecurityError('PATH_OUTSIDE_DOME: ruta vacía o no válida');
+    const denied = new Set([...CONTAIN_DENIED, ...this.config.deniedPaths.map((d) => d.toLowerCase())]);
+    for (const seg of segments) {
+      let decoded = seg;
+      try { decoded = decodeURIComponent(seg); } catch { /* `%` suelto: se compara tal cual */ }
+      if (seg === '..' || decoded === '..' || /[\\/]/.test(decoded)) {
+        throw new SecurityError('PATH_OUTSIDE_DOME: la ruta sale de la cúpula');
+      }
+      if (denied.has(seg.toLowerCase()) || denied.has(decoded.toLowerCase())) {
+        throw new SecurityError(`PATH_OUTSIDE_DOME: ruta interna no accesible (${seg})`);
+      }
+    }
+    if (segments.length > this.config.maxDepth) {
+      throw new SecurityError(`Path exceeds max depth of ${this.config.maxDepth}`);
+    }
+
+    // Raíz aún sin crear (la primera escritura la crea): no hay enlaces dentro que resolver todavía.
+    const lexicalRoot = path.resolve(this.config.path);
+    const realRoot = fs.existsSync(lexicalRoot) ? fs.realpathSync(lexicalRoot) : lexicalRoot;
+    const inside = (p: string) => p === realRoot || p.startsWith(realRoot + path.sep);
+    const rel = segments.join('/');
+    const abs = path.join(realRoot, ...segments);
+
+    // Cada prefijo existente se resuelve: un directorio o fichero enlazado fuera queda fuera.
+    let cur = realRoot;
+    for (const seg of segments) {
+      cur = path.join(cur, seg);
+      let st: fs.Stats;
+      try { st = fs.lstatSync(cur); } catch { break; } // lo que no existe aún se creará dentro
+      if (!st.isSymbolicLink()) continue;
+      let target: string;
+      try { target = fs.realpathSync(cur); } catch {
+        // Enlace roto: escribir lo seguiría y crearía el fichero donde apunte.
+        throw new SecurityError('PATH_OUTSIDE_DOME: enlace simbólico roto');
+      }
+      if (!inside(target)) throw new SecurityError('PATH_OUTSIDE_DOME: enlace simbólico fuera de la cúpula');
+    }
+    return { abs, rel };
   }
 
   resolve(relativePath: string): string {
@@ -58,8 +117,9 @@ export class VaultSecurity {
       const lstat = fs.lstatSync(absPath);
       if (lstat.isSymbolicLink()) {
         const target = fs.realpathSync(absPath);
-        const resolved = path.resolve(this.config.path);
-        if (!target.startsWith(resolved)) {
+        // Raíz real y con separador: `/vault-otra` no empieza por `/vault` (SE-424 H5).
+        const resolved = fs.realpathSync(path.resolve(this.config.path));
+        if (target !== resolved && !target.startsWith(resolved + path.sep)) {
           throw new SecurityError('Symlink points outside vault boundary');
         }
       }
@@ -87,9 +147,8 @@ export class VaultSecurity {
   }
 
   guardRead(relativePath: string): string {
-    this.checkDepth(relativePath);
-    const absPath = this.resolve(relativePath);
-    this.checkDenied(absPath);
+    const { abs: absPath, rel } = this.contain(relativePath);
+    this.checkDenied(rel);
 
     if (fs.existsSync(absPath)) {
       this.checkSymlink(absPath);
@@ -104,9 +163,8 @@ export class VaultSecurity {
   }
 
   guardWrite(relativePath: string): string {
-    this.checkDepth(relativePath);
-    const absPath = this.resolve(relativePath);
-    this.checkDenied(absPath);
+    const { abs: absPath, rel } = this.contain(relativePath);
+    this.checkDenied(rel);
 
     const dir = path.dirname(absPath);
     if (!fs.existsSync(dir)) {
