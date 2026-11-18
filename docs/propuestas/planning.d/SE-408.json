@@ -1,0 +1,11 @@
+{
+  "id": "SE-408",
+  "status": "DEFERRED",
+  "priority": "P2",
+  "title": "Automatización móvil por árbol de accesibilidad (mobile-mcp) bajo soberanía",
+  "note": "Primer paso: feasibility probe S0 (telemetría desactivada verificada, versión fijada)",
+  "evidence": "docs/specs/SE-408-mobile-accessibility-automation.spec.md",
+  "phase": "aparcado",
+  "approval": "Operadora 2026-10-27: AskUserQuestion",
+  "deferral": "2026-11-18 (operadora): aparcada. Fase E y P2: ningún caso de uso móvil en curso que consuma la automatización, y la spec empieza por una sonda de viabilidad sin producto detrás. Nada construido. Retoma con un caso de uso concreto y la Fase E abierta."
+}

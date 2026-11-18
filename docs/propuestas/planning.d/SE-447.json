@@ -1,0 +1,11 @@
+{
+  "id": "SE-447",
+  "status": "DEFERRED",
+  "priority": "P2",
+  "title": "Contexto acotado en sesiones largas: una sola captura viva, tope absoluto de compactación y clasificación de acciones de riesgo",
+  "note": "S1 mide antes de fijar valores; S2 y S4 esperan a SE-439 tras F0.",
+  "evidence": "docs/specs/SE-447-bounded-context-long-sessions.spec.md",
+  "phase": "aparcado",
+  "approval": "Operadora 2026-10-27: AskUserQuestion",
+  "deferral": "2026-11-18 (operadora): aparcada. Fase E y P2: S1 solo mide y S2/S4 esperan a SE-439, que aún no ha cerrado F0; sin incidente medido de contexto desbordado. Nada construido. Retoma cuando SE-439 cierre F0 o aparezca una sesión larga que falle."
+}

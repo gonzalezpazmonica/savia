@@ -1,0 +1,11 @@
+{
+  "id": "SE-452",
+  "status": "DEFERRED",
+  "priority": "P3",
+  "title": "Suite de conformidad ejecutable publicada junto a cada contrato de interoperabilidad",
+  "note": "Piloto sobre un solo contrato; prematura sin implementadores externos, se encola dentro del laboratorio de conformidad.",
+  "evidence": "docs/specs/SE-452-contract-conformance-suites.spec.md",
+  "phase": "aparcado",
+  "approval": "Operadora 2026-10-27: AskUserQuestion",
+  "deferral": "2026-11-18 (operadora): aparcada. P3 y fase C: la propia spec la califica de prematura sin implementadores externos del contrato; no hay quien consuma la suite de conformidad. Nada construido. Retoma cuando exista un implementador externo."
+}

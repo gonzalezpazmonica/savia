@@ -1,5 +1,7 @@
 ---
-status: APPROVED
+status: DEFERRED
+deferred_at: 2026-11-18
+deferred_reason: "2026-11-18 (operadora): aparcada. Fase E y P2: S1 solo mide y S2/S4 esperan a SE-439, que aún no ha cerrado F0; sin incidente medido de contexto desbordado. Nada construido. Retoma cuando SE-439 cierre F0 o aparezca una sesión larga que falle."
 approved_at: 2026-10-27
 approved_by: "operadora, AskUserQuestion 2026-10-27"
 priority: P2

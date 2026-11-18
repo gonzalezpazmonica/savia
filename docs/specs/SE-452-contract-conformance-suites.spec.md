@@ -1,5 +1,7 @@
 ---
-status: APPROVED
+status: DEFERRED
+deferred_at: 2026-11-18
+deferred_reason: "2026-11-18 (operadora): aparcada. P3 y fase C: la propia spec la califica de prematura sin implementadores externos del contrato; no hay quien consuma la suite de conformidad. Nada construido. Retoma cuando exista un implementador externo."
 approved_at: 2026-10-27
 approved_by: "operadora, AskUserQuestion 2026-10-27"
 priority: P3

@@ -1,0 +1,11 @@
+{
+  "id": "SE-450",
+  "status": "DEFERRED",
+  "priority": "P2",
+  "title": "Instaladores aditivos e idempotentes y propiedad de procesos con identidad de arranque",
+  "note": "S1 y S3 empiezan con auditoría o prueba, no con cambio.",
+  "evidence": "docs/specs/SE-450-installer-and-process-ownership-hygiene.spec.md",
+  "phase": "aparcado",
+  "approval": "Operadora 2026-10-27: AskUserQuestion",
+  "deferral": "2026-11-18 (operadora): aparcada. P2: S1 y S3 empiezan con una auditoría o prueba sin cambio de producto y no hay fallo de instalador o de procesos huérfanos medido pendiente; el trabajo de rutas Windows ya entró aparte. Nada construido. Retoma con un fallo de instalación reproducible."
+}
