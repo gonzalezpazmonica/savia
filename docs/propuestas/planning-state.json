@@ -1941,7 +1941,7 @@
           "SE-447"
         ],
         "title": "Savia Space 0.2 y la seguridad de su canal de aprobación",
-        "action": "Cerrar Space 0.2 (SE-428) y seguir por modo mediado (SE-434), experiencia (SE-432), proyectos y cúpulas (SE-436) e interoperabilidad (SE-429). SE-446 S0: sonda de autoaprobación contra el servidor real; si encuentra una vía abierta, su mitigación pasa a P0. SE-443, SE-447, SE-430, SE-435 y SE-439 después.",
+        "action": "Cerrar Space 0.2 (SE-428) y seguir por modo mediado (SE-434), experiencia (SE-432), proyectos y cúpulas (SE-436) e interoperabilidad (SE-429). SE-446 S0: sonda de autoaprobación contra el servidor real; si encuentra una vía abierta, su mitigación pasa a P0. SE-443, SE-430, SE-435 y SE-439 después. SE-447 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): se retoma solo si se reactiva.",
         "necessity": "alta",
         "urgency": "media",
         "value": "alto",
@@ -2056,7 +2056,7 @@
           "SE-503"
         ],
         "title": "Un laboratorio de conformidad y benchmark",
-        "action": "Unificar matriz negativa, bypass, caos, receipts y replay; baseline con trazas y selección fijadas. SE-495 y SE-503 (PROPOSED) aportan el banco de tareas reales y el verificador por proyecto. Las sondas adversariales de Savia Viva (P12, P14) se alojan aquí, sin suite paralela. Último slice: piloto de suite de conformidad sobre un solo contrato (SE-452).",
+        "action": "Unificar matriz negativa, bypass, caos, receipts y replay; baseline con trazas y selección fijadas. SE-495 y SE-503 (PROPOSED) aportan el banco de tareas reales y el verificador por proyecto. Las sondas adversariales de Savia Viva (P12, P14) se alojan aquí, sin suite paralela. SE-452 (piloto de conformidad) aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): este bloque no la incluye hasta reactivarla.",
         "necessity": "alta",
         "urgency": "media",
         "value": "alto",
@@ -2080,7 +2080,7 @@
           "SE-514"
         ],
         "title": "Atención humana y aprobaciones contestables",
-        "action": "SE-458 (tope y lotes de PRs en revisión), SE-459 S1 y S3 (tarjeta), SE-492 (estado declarado, no inferido), SE-507 (latido de runs, con el digest de SE-471 leyendo del ledger) y, encima, la cola única de SE-514. SE-461 a SE-463: composición de efectos, marca de sesión y cobertura de supervisión.",
+        "action": "SE-458 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar; tope y lotes de PRs en revisión sin decidir). SE-459 S1 y S3 (tarjeta), SE-492 (estado declarado, no inferido), SE-507 (latido de runs, con el digest de SE-471 leyendo del ledger) y, encima, la cola única de SE-514. SE-461 y SE-462: composición de efectos y marca de sesión. SE-463 (cobertura de supervisión) aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar).",
         "necessity": "media",
         "urgency": "media",
         "value": "alto",
@@ -2124,14 +2124,14 @@
           "SE-466"
         ],
         "title": "Higiene de contexto, instalación y operación",
-        "action": "SE-448 S0 y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores; SE-454 invariantes negativos como tests; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-472 se retira si ese bucle ya no se usa. SE-464 sin dependientes: se decide al llegar; SE-506 aplazada.",
+        "action": "SE-448 S0 y canario; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-472 se retira si ese bucle ya no se usa. SE-464 sin dependientes: se decide al llegar; SE-506 aplazada. SE-449, SE-450 y SE-454 aparcadas (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): no se ejecutan hasta reactivarlas.",
         "necessity": "media",
         "urgency": "baja",
         "value": "medio",
         "dependency_value": "reduce superficie sin bloquear otras fases",
         "effort": "slices pequeños independientes",
         "prerequisites": "Specs aprobadas salvo SE-464 (PROPOSED) y SE-506 (aplazada); se ejecutan por separado, una por vez; sin hueco WIP nuevo.",
-        "done": "Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición. Los invariantes de SE-454 llevan caso negativo y declaran lo que no demuestran."
+        "done": "Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición."
       },
       {
         "id": "S21",

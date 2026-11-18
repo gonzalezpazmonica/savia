@@ -47,7 +47,7 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: decide si el resto de Savia Viva se construye, se recorta o se descarta; esfuerzo: tres slices pequeños de lectura.
 
 - **S25 · P1 · fase A** — Savia Space 0.2 y la seguridad de su canal de aprobación
-  Acción: Cerrar Space 0.2 (SE-428) y seguir por modo mediado (SE-434), experiencia (SE-432), proyectos y cúpulas (SE-436) e interoperabilidad (SE-429). SE-446 S0: sonda de autoaprobación contra el servidor real; si encuentra una vía abierta, su mitigación pasa a P0. SE-443, SE-447, SE-430, SE-435 y SE-439 después.
+  Acción: Cerrar Space 0.2 (SE-428) y seguir por modo mediado (SE-434), experiencia (SE-432), proyectos y cúpulas (SE-436) e interoperabilidad (SE-429). SE-446 S0: sonda de autoaprobación contra el servidor real; si encuentra una vía abierta, su mitigación pasa a P0. SE-443, SE-430, SE-435 y SE-439 después. SE-447 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): se retoma solo si se reactiva.
   Entrada: Specs aprobadas; hueco WIP temporal de SE-428 (addendum ADR-002). El código vive en el repo de Space.
   Salida: Space 0.2 cerrado y el WIP vuelve a 3; informe de la sonda por vía y test permanente de que el agente no contesta su propio aviso.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: la política por herramienta presupone un canal de aprobación seguro; S22 se apoya en Space; esfuerzo: un slice cada vez dentro del hueco de Space.
@@ -83,13 +83,13 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: evita duplicar autoridad; esfuerzo: F0 L31 8-16 h estimadas; implementación aparte.
 
 - **S06 · P1 · fase C** — Un laboratorio de conformidad y benchmark
-  Acción: Unificar matriz negativa, bypass, caos, receipts y replay; baseline con trazas y selección fijadas. SE-495 y SE-503 (PROPOSED) aportan el banco de tareas reales y el verificador por proyecto. Las sondas adversariales de Savia Viva (P12, P14) se alojan aquí, sin suite paralela. Último slice: piloto de suite de conformidad sobre un solo contrato (SE-452).
+  Acción: Unificar matriz negativa, bypass, caos, receipts y replay; baseline con trazas y selección fijadas. SE-495 y SE-503 (PROPOSED) aportan el banco de tareas reales y el verificador por proyecto. Las sondas adversariales de Savia Viva (P12, P14) se alojan aquí, sin suite paralela. SE-452 (piloto de conformidad) aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): este bloque no la incluye hasta reactivarla.
   Entrada: Gate B y corpus/contratos pinned; no ejecutar todos los experimentos Labs a la vez.
   Salida: Cero violaciones de invariantes bajo fallos en los tres frontends y cuatro niveles de replay; evidencia auditable.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: evidencia para portabilidad y pilotos; esfuerzo: slices por frontend/invariante.
 
 - **S30 · P1 · fase D** — Atención humana y aprobaciones contestables
-  Acción: SE-458 (tope y lotes de PRs en revisión), SE-459 S1 y S3 (tarjeta), SE-492 (estado declarado, no inferido), SE-507 (latido de runs, con el digest de SE-471 leyendo del ledger) y, encima, la cola única de SE-514. SE-461 a SE-463: composición de efectos, marca de sesión y cobertura de supervisión.
+  Acción: SE-458 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar; tope y lotes de PRs en revisión sin decidir). SE-459 S1 y S3 (tarjeta), SE-492 (estado declarado, no inferido), SE-507 (latido de runs, con el digest de SE-471 leyendo del ledger) y, encima, la cola única de SE-514. SE-461 y SE-462: composición de efectos y marca de sesión. SE-463 (cobertura de supervisión) aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar).
   Entrada: Aprobación de SE-492 y SE-507 por la operadora, con escenas confirmadas (SE-505). SE-514 ya aprobada (2026-11-09): su S1 va después de S22.
   Salida: Peticiones a la persona medidas antes y después; ningún permiso inferido del silencio; cada spec con sus negativos.
   Necesidad: media; urgencia: media; valor: alto; desbloqueo: protege el recurso más escaso; SE-515 con revisión obligatoria necesita esta cola; esfuerzo: slices pequeños independientes.
@@ -101,9 +101,9 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: media; urgencia: baja; valor: alto; desbloqueo: las lecciones y la evidencia de Savia Viva se sirven desde Vaults; esfuerzo: SE-489 decisión; SE-486 media.
 
 - **S14 · P2 · fase D** — Higiene de contexto, instalación y operación
-  Acción: SE-448 S0 y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores; SE-454 invariantes negativos como tests; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-472 se retira si ese bucle ya no se usa. SE-464 sin dependientes: se decide al llegar; SE-506 aplazada.
+  Acción: SE-448 S0 y canario; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-472 se retira si ese bucle ya no se usa. SE-464 sin dependientes: se decide al llegar; SE-506 aplazada. SE-449, SE-450 y SE-454 aparcadas (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): no se ejecutan hasta reactivarlas.
   Entrada: Specs aprobadas salvo SE-464 (PROPOSED) y SE-506 (aplazada); se ejecutan por separado, una por vez; sin hueco WIP nuevo.
-  Salida: Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición. Los invariantes de SE-454 llevan caso negativo y declaran lo que no demuestran.
+  Salida: Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición.
   Necesidad: media; urgencia: baja; valor: medio; desbloqueo: reduce superficie sin bloquear otras fases; esfuerzo: slices pequeños independientes.
 
 - **S21 · P2 · fase D** — Verificación honesta tras la revisión de Anthropic Research
