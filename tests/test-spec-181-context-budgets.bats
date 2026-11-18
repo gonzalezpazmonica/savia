@@ -132,25 +132,31 @@ assert eager <= 3000, f'L0+L1={eager} > 3000'
 }
 
 @test "SPEC-181: JSON output has tiers key with L0/L1/L2/L3" {
-  run bash "$SCRIPT" --json
-  run python3 -c "
-import json
-d = json.loads('''$output''')
+  # Mismo patrón que el test anterior: se parsea solo stdout, por stdin, y si falla se ve
+  # qué salió (en la suite nocturna falló sin dejar rastro de la salida).
+  bats_require_minimum_version 1.5.0
+  run --separate-stderr bash "$SCRIPT" --json
+  [[ -z "$stderr" ]] || echo "stderr: $stderr" >&3
+  echo "stdout: $output"
+  printf '%s' "$output" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
 for t in ('L0','L1','L2','L3'):
     assert t in d['tiers'], f'Missing tier {t}'
 "
-  [ "$status" -eq 0 ]
 }
 
 @test "SPEC-181: JSON output has eager_total and invariant field" {
-  run bash "$SCRIPT" --json
-  run python3 -c "
-import json
-d = json.loads('''$output''')
+  bats_require_minimum_version 1.5.0
+  run --separate-stderr bash "$SCRIPT" --json
+  [[ -z "$stderr" ]] || echo "stderr: $stderr" >&3
+  echo "stdout: $output"
+  printf '%s' "$output" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
 assert 'eager_total' in d
 assert 'invariant_L0_L1_lte_3000' in d
 "
-  [ "$status" -eq 0 ]
 }
 
 # ── Edge: missing frontmatter detected as WARN ────────────────────────────────
