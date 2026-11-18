@@ -1195,7 +1195,9 @@ def consume_use(ctx):
 
 
 def audit_append(ctx, result, mode, extra=None):
-    """extra: campos adicionales (p. ej. los del adaptador en sombra de F1); nunca pisan los del kernel."""
+    """extra: campos adicionales (p. ej. los del adaptador en sombra de F1); nunca pisan los del kernel.
+
+    El audit mezcla decisiones reales y de sombra (`mode`): quien cuente ALLOW debe filtrar por `mode`."""
     d = os.path.join(ctx.home, ".savia", "authority")
     os.makedirs(d, exist_ok=True)
     plain = set((ctx.descriptor or {}).get("audit_plain") or [])

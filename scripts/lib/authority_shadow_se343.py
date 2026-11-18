@@ -18,8 +18,10 @@ Que hace `run`:
    del kernel, el paso que la fijo y si discrepa del grant.
 
 Lo que NO hace:
-- No decide nada. El exit es 0 si la pasada termino (haya o no discrepancias) y 2 si no pudo hacerse.
-  Nadie debe leer ese exit como autorizacion; la salida lleva `"shadow": true`.
+- No decide nada. El exit es 0 si la pasada termino entera (haya o no discrepancias) y 2 si no pudo
+  hacerse o quedo incompleta: un fichero de grant ilegible o un `check` que no pudo correr (sin bash,
+  sin operator-grant.sh, timeout) dejan la fila en la salida, el `summary` los cuenta en `incompletos`
+  y el exit es 2. Nadie debe leer ese exit como autorizacion; la salida lleva `"shadow": true`.
 - Los pasos 1-3 (contrato en disco y firma `savia-delegation`) no aplican: el contrato proyectado no
   existe en disco ni esta firmado. Su equivalente es la firma `savia-operator-grant` que ya verifico
   SE-343 en el paso 2, y por eso solo se proyectan grants vigentes. El contrato proyectado no se escribe
@@ -29,6 +31,20 @@ Lo que NO hace:
 - Los grants `autonomy:*` y los de merge sobre `task:<id>` no tienen capacidad equivalente: se registran
   como `UNMAPPED` (discrepancia de cobertura), sin evaluar.
 - SE-491 (`project.publish`) no tiene adaptador aqui: su spec no esta aprobada.
+
+Limites de la medida (para leer el informe de F1):
+- `head_sha` firmado en el grant no se proyecta: el kernel puede dar ALLOW donde SE-343 negaria por
+  cabeza movida. Sesga la medida hacia la coincidencia.
+- `check` sale 1 tanto si el grant no esta vigente como si falla `gh` al leer la cabeza del PR; la
+  sombra no puede separarlos sin tocar operator-grant.sh (R7). El `summary` cuenta `no_vigentes`.
+- `principal` es el `grantor`. SE-343 (`check`) ya exige que el grantor sea el perfil activo, asi
+  que los grants de otra operadora no llegan a proyectarse (`no_vigentes`); `DENY PRINCIPAL_MISMATCH`
+  solo aparece si kernel y SE-343 resuelven perfiles distintos, y `por_motivo` lo muestra aparte.
+- Cada `run` registra una linea por grant vigente con su `shadow_run`; `report` da `runs`,
+  `grants_distintos` y `grants_con_discrepancia` ademas de las lineas brutas, y cuenta las lineas
+  ilegibles del audit en `lineas_ilegibles` en lugar de saltarlas en silencio.
+- Las lineas `mode: shadow-se343` comparten audit con las decisiones reales: un consumidor que cuente
+  `ALLOW` debe filtrar por `mode`.
 """
 import json
 import os
@@ -157,9 +173,11 @@ def unmapped_ctx(scope):
 
 
 def run_shadow(delegate=DEFAULT_DELEGATE):
+    """-> (filas, completa). completa=False si algun grant no pudo evaluarse (ilegible o sin check)."""
     d = grants_dir()
     root = k.root_dir()
-    lines, n_vig, n_disc = [], 0, 0
+    run_id = os.urandom(8).hex()
+    lines, n_vig, n_disc, n_inc, n_novig = [], 0, 0, 0, 0
     for scope, path in grant_files(d):
         try:
             with open(path, encoding="utf-8") as f:
@@ -167,11 +185,18 @@ def run_shadow(delegate=DEFAULT_DELEGATE):
         except (OSError, ValueError):
             rec = None
         if not isinstance(rec, dict):
+            n_inc += 1
             lines.append({"scope": scope, "grant_exit": None, "projected": False, "note": "grant ilegible"})
             continue
         gx = grant_verdict(scope, rec, d)
         row = {"scope": scope, "grant_id": rec.get("id"), "resource": rec.get("resource"), "grant_exit": gx}
+        if gx is None:  # check no pudo correr: la pasada no es completa (fail-closed, nunca "no vigente")
+            n_inc += 1
+            row.update(projected=False, note="check no pudo correr")
+            lines.append(row)
+            continue
         if gx != 0:  # solo los vigentes se proyectan (la firma la verifica SE-343)
+            n_novig += 1
             row.update(projected=False)
             lines.append(row)
             continue
@@ -186,35 +211,50 @@ def run_shadow(delegate=DEFAULT_DELEGATE):
             res, ctx = shadow_evaluate(*proj)
         disc = res["decision"] != "ALLOW"
         n_disc += disc
-        extra = {"grant_scope": scope, "grant_id": rec.get("id"), "grant_exit": gx,
+        extra = {"shadow_run": run_id, "grant_scope": scope, "grant_id": rec.get("id"), "grant_exit": gx,
                  "kernel_step": res["step"], "discrepancy": disc}
         k.audit_append(ctx, res, MODE, extra=extra)
         row.update(projected=proj is not None, kernel_decision=res["decision"], kernel_reason=res["reason"],
                    kernel_step=res["step"], discrepancy=disc)
         lines.append(row)
-    lines.append({"summary": {"grants": len(lines), "vigentes": n_vig, "discrepancias": n_disc}})
-    return lines
+    lines.append({"summary": {"grants": len(lines), "vigentes": n_vig, "discrepancias": n_disc,
+                              "no_vigentes": n_novig, "incompletos": n_inc, "shadow_run": run_id}})
+    return lines, n_inc == 0
 
 
 def report():
     path = os.path.join(k.home(), ".savia", "authority", "audit.jsonl")
-    counts, total, disc = {}, 0, 0
+    counts, total, disc, bad = {}, 0, 0, 0
+    runs, grants, grants_disc = set(), set(), set()
     try:
         with open(path, encoding="utf-8") as f:
             for l in f:
+                if not l.strip():
+                    continue
                 try:
                     e = json.loads(l)
                 except ValueError:
+                    bad += 1
                     continue
-                if not isinstance(e, dict) or e.get("mode") != MODE:
+                if not isinstance(e, dict):
+                    bad += 1
+                    continue
+                if e.get("mode") != MODE:
                     continue
                 total += 1
-                disc += bool(e.get("discrepancy"))
+                runs.add(e.get("shadow_run"))
+                gid = (e.get("grant_scope"), e.get("grant_id"))
+                grants.add(gid)
+                if e.get("discrepancy"):
+                    disc += 1
+                    grants_disc.add(gid)
                 key = "%s %s" % (e.get("decision"), e.get("reason"))
                 counts[key] = counts.get(key, 0) + 1
     except FileNotFoundError:
         pass
-    return {"shadow": True, "evaluaciones": total, "discrepancias": disc,
+    return {"shadow": True, "evaluaciones": total, "discrepancias": disc, "runs": len(runs),
+            "grants_distintos": len(grants), "grants_con_discrepancia": len(grants_disc),
+            "lineas_ilegibles": bad,
             "por_motivo": dict(sorted(counts.items()))}
 
 
@@ -222,10 +262,11 @@ def main(argv):
     cmd = argv[0] if argv else ""
     if cmd == "run" and (len(argv) == 1 or (len(argv) == 3 and argv[1] == "--delegate"
                                              and DELEGATE_RE.match(argv[2]))):
-        rows = run_shadow(argv[2] if len(argv) == 3 else DEFAULT_DELEGATE)
-        return 0, "\n".join(json.dumps(dict(r, shadow=True), sort_keys=True, ensure_ascii=False) for r in rows)
+        rows, complete = run_shadow(argv[2] if len(argv) == 3 else DEFAULT_DELEGATE)
+        return (0 if complete else 2), "\n".join(json.dumps(dict(r, shadow=True), sort_keys=True, ensure_ascii=False) for r in rows)
     if cmd == "report" and len(argv) == 1:
-        return 0, json.dumps(report(), sort_keys=True, ensure_ascii=False)
+        rep = report()
+        return (0 if rep["lineas_ilegibles"] == 0 else 2), json.dumps(rep, sort_keys=True, ensure_ascii=False)
     sys.stderr.write(__doc__)
     return 2, ""
 

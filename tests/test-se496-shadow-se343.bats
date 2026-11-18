@@ -59,3 +59,21 @@ setup() {
   [ "$status" -eq 0 ]
   [ "$output" = "OK" ]
 }
+
+@test "fail-closed: operator-grant.sh no puede correr -> fila sin proyectar, incompletos: 1, exit 2 (nunca 'vigentes: 0' con exit 0)" {
+  run $X no-check
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+@test "fail-closed: un grant ilegible se registra, el resto se evalúa y la pasada sale con exit 2" {
+  run $X corrupt-grant
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+@test "report: runs y grants distintos separados de las líneas, grant de otra operadora no vigente, audit con línea rota -> exit 2" {
+  run $X report-runs
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}

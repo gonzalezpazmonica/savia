@@ -271,9 +271,76 @@ def c_reserved_extra():
     return bad
 
 
+def c_no_check():
+    """operator-grant.sh no puede correr: la pasada es incompleta -> exit 2, nunca 0 con 'vigentes: 0'."""
+    bad, w = [], ShadowWorld()
+    w.merge_grant()
+    os.remove(os.path.join(w.root, "scripts", "operator-grant.sh"))
+    rc, rows, err = w.shadow("run", "--delegate", "commit-guardian")
+    g = grant_rows(rows)
+    summ = [r["summary"] for r in rows if "summary" in r]
+    expect(bad, rc == 2, "sin check: exit %s (%s)" % (rc, err))
+    expect(bad, len(g) == 1 and g[0].get("grant_exit") is None and g[0].get("projected") is False
+           and g[0].get("note") == "check no pudo correr", "fila: %s" % g)
+    expect(bad, summ and summ[0].get("incompletos") == 1 and summ[0].get("vigentes") == 0, "summary: %s" % summ)
+    expect(bad, not [e for e in w.audit() if e.get("mode") == "shadow-se343"], "sin check llegó al audit")
+    w.close()
+    return bad
+
+
+def c_corrupt_grant():
+    """Un grant ilegible no se pierde en silencio: el resto se evalúa, pero la pasada sale con exit 2."""
+    bad, w = [], ShadowWorld()
+    w.autonomy_grant()
+    with open(os.path.join(w.grants, "merge.json"), "w") as f:
+        f.write("{roto")
+    rc, rows, err = w.shadow("run", "--delegate", "commit-guardian")
+    g = grant_rows(rows)
+    summ = [r["summary"] for r in rows if "summary" in r]
+    expect(bad, rc == 2, "grant ilegible: exit %s (%s)" % (rc, err))
+    expect(bad, any(r.get("note") == "grant ilegible" for r in g), "sin fila del ilegible: %s" % g)
+    expect(bad, any(r.get("kernel_decision") == "UNMAPPED" for r in g), "el resto no se evaluó: %s" % g)
+    expect(bad, summ and summ[0].get("incompletos") == 1, "summary: %s" % summ)
+    w.close()
+    return bad
+
+
+def c_report_runs():
+    """report separa runs y grants distintos de las líneas brutas y no salta en silencio las líneas
+    ilegibles del audit. Un grant de otra operadora no es vigente para SE-343: no llega a proyectarse."""
+    bad, w = [], ShadowWorld()
+    w.set_pr(7, isDraft=True)
+    w.merge_grant()
+    for _ in range(2):
+        rc, _, err = w.shadow("run", "--delegate", "commit-guardian")
+        expect(bad, rc == 0, "run: exit %s (%s)" % (rc, err))
+    rc, rows, _ = w.shadow("report")
+    rep = rows[0] if rows else {}
+    expect(bad, rc == 0 and rep.get("evaluaciones") == 2 and rep.get("runs") == 2
+           and rep.get("grants_distintos") == 1 and rep.get("grants_con_discrepancia") == 1
+           and rep.get("lineas_ilegibles") == 0, "report: %s" % rep)
+    w.merge_grant(signer="op-b")  # firmante válido, pero no es el perfil activo (op-a)
+    rc, rows, err = w.shadow("run", "--delegate", "commit-guardian")
+    g = grant_rows(rows)
+    summ = [r["summary"] for r in rows if "summary" in r]
+    expect(bad, rc == 0 and len(g) == 1 and g[0].get("grant_exit") == 1 and g[0].get("projected") is False
+           and summ and summ[0].get("no_vigentes") == 1, "op-b: %s %s (%s)" % (g, summ, err))
+    rc, rows, _ = w.shadow("report")
+    rep = rows[0] if rows else {}
+    expect(bad, rep.get("evaluaciones") == 2 and rep.get("grants_distintos") == 1, "report op-b: %s" % rep)
+    with open(os.path.join(w.home, ".savia", "authority", "audit.jsonl"), "a") as f:
+        f.write("{roto\n")
+    rc, rows, _ = w.shadow("report")
+    rep = rows[0] if rows else {}
+    expect(bad, rc == 2 and rep.get("lineas_ilegibles") == 1, "audit con línea rota: exit %s %s" % (rc, rep))
+    w.close()
+    return bad
+
+
 CASES = {"allow": c_allow, "draft": c_draft, "revoked": c_revoked, "not-vigente": c_not_vigente,
          "unmapped": c_unmapped, "default-delegate": c_default_delegate, "fail-closed": c_fail_closed,
-         "reserved-extra": c_reserved_extra}
+         "reserved-extra": c_reserved_extra,
+         "no-check": c_no_check, "corrupt-grant": c_corrupt_grant, "report-runs": c_report_runs}
 
 if __name__ == "__main__":
     bad = []
