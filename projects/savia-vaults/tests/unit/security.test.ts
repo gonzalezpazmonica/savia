@@ -123,6 +123,22 @@ describe('VaultSecurity', () => {
         fs.rmSync(outside, { recursive: true, force: true });
       }
     });
+
+    // SE-424 H5: `<raíz>-otra` empieza por `<raíz>` como texto pero no está dentro.
+    it.skipIf(!supportsSymlinks)('blocks symlinks to a sibling whose name shares the vault prefix', () => {
+      const sibling = `${config.path}-otra`;
+      const link = path.join(config.path, 'notes', 'prefijo.md');
+      fs.mkdirSync(sibling, { recursive: true });
+      fs.mkdirSync(path.dirname(link), { recursive: true });
+      fs.writeFileSync(path.join(sibling, 't.md'), 'vecina');
+      fs.symlinkSync(path.join(sibling, 't.md'), link);
+      try {
+        expect(() => security.checkSymlink(link)).toThrow(SecurityError);
+      } finally {
+        fs.unlinkSync(link);
+        fs.rmSync(sibling, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('checkExtension', () => {

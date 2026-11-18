@@ -11,7 +11,7 @@ import signal
 import subprocess
 import sys
 
-from . import backup, catalogo, events, schema, status, store
+from . import backup, catalogo, events, nocturna, schema, status, store
 from .store import EntradaInvalida, PulseError
 
 
@@ -64,6 +64,8 @@ def _p():
 
     s = sub.add_parser("catalogo", help="compara el catálogo de agentes con sus copias y anota deriva o resolución")
     s.add_argument("--repo", default=".", help="raíz del repositorio (por defecto, el directorio actual)")
+
+    sub.add_parser("nocturna", help="revisión diaria de la comprobación nocturna del forge (solo lectura; para un temporizador)")
 
     sub.add_parser("inbox", help="lo pendiente de ti, en llano")
     s = sub.add_parser("status", help="estado de la planta, en llano")
@@ -210,6 +212,9 @@ def main(argv=None):
                 print("El catálogo vuelve a coincidir: deriva resuelta.")
             else:
                 print("Sin cambios respecto a la última comprobación.")
+        elif a.cmd == "nocturna":
+            accion, ev = nocturna.comprobar(root)
+            print(nocturna.resumen(accion, ev))
         elif a.cmd == "inbox":
             print(backup.inbox_text(root))
         elif a.cmd == "status":

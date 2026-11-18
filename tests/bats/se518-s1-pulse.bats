@@ -85,3 +85,17 @@ setup() {
   [[ "$output" == *"ledger"* ]]
   [ ! -e "$BATS_TEST_TMPDIR/notificado" ]
 }
+
+@test "SE-518 A1 S1n: batería de la revisión diaria de la comprobación nocturna en verde" {
+  run python3 -I "$REPO_ROOT/projects/pulse/tests/test_nocturna.py"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"* ]]
+}
+
+@test "SE-518 A1 S1n negativo: sin configuración nocturna sale con 1 y no consulta" {
+  run env -u PULSE_NOCTURNA_REPO -u PULSE_NOCTURNA_FLUJO "$PULSE" nocturna
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no consulto nada"* ]]
+  run "$PULSE" status
+  [[ "$output" == *"Comprobación nocturna: sin configurar"* ]]
+}
