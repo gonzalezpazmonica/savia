@@ -135,7 +135,116 @@ P
         [ -f "$REPO/${s%% *}" ] || { echo "falta: $s"; false; }
     done < "$REPO/hooks/routing-pretooluse.tsv"
 }
-@test "el despachador real, con la tabla real, permite o bloquea con motivo (nunca error mudo)" {
-    run bash "$REPO/hooks/dispatchers/dispatch-pretooluse.sh" <<< "$IN"
-    [ "$status" -eq 0 ] || { [ "$status" -eq 2 ] && [[ "$output" == *"dispatch-pretooluse"* ]]; }
+
+# ── Revisión de la PR #1616: semántica de matcher, modo, orden y generador ────
+@test "P1: matcher regex mcp__.* casa con una herramienta MCP (el hook se ejecuta)" {
+    mkhook mark "touch $T/marca"; row 'mcp__.*|WebFetch' mark
+    run bash "$D" <<< '{"tool_name":"mcp__github__create_issue","tool_input":{}}'
+    [ "$status" -eq 0 ]; [ -e "$T/marca" ]
+}
+@test "P1 negativo: matcher mcp__.* no casa con Bash" {
+    mkhook mark "touch $T/marca"; row 'mcp__.*|WebFetch' mark
+    run bash "$D" <<< "$IN"; [ "$status" -eq 0 ]; [ ! -e "$T/marca" ]
+}
+@test "P2: matcher que no es regex válida -> 2 (no se salta la fila)" {
+    mkhook ok 'exit 0'; row '((Bash' ok
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]
+    [[ "$output" == *"matcher inválido"* ]]
+}
+@test "P2: modo source -> 2 (no se puede acotar con timeout)" {
+    mkhook ok 'exit 0'; row Bash ok source
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]
+    [[ "$output" == *"no soportado"* ]]
+}
+@test "P2: la última fila sin salto de línea también se ejecuta" {
+    mkhook no 'exit 2'; printf 'Bash\th/no.sh\tspawn\tyes\tprueba' > "$T/hooks/routing-pretooluse.tsv"
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]
+}
+@test "P2: los argumentos de la tabla llegan literales (sin expansión de globs)" {
+    mkhook args "printf '%s\n' \"\$@\" > $T/args"; touch "$T/glob-a" "$T/glob-b"
+    printf 'Bash\th/args.sh guard %s/glob-*\tspawn\tyes\tprueba\n' "$T" > "$T/hooks/routing-pretooluse.tsv"
+    run bash "$D" <<< "$IN"; [ "$status" -eq 0 ]
+    [ "$(cat "$T/args")" = "$(printf 'guard\n%s/glob-*' "$T")" ]
+}
+@test "P2: un comando repetido en la tabla se ejecuta una vez por acción" {
+    mkhook cnt "echo x >> $T/cuenta"; row Bash cnt; row 'Bash|Edit' cnt
+    run bash "$D" <<< "$IN"; [ "$status" -eq 0 ]
+    [ "$(wc -l < "$T/cuenta")" -eq 1 ]
+}
+@test "P1: los no bloqueantes corren después de los bloqueantes (un exit 2 los corta)" {
+    mkhook mark "touch $T/marca"; mkhook no 'exit 2'; row Bash mark spawn no; row Bash no
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [ ! -e "$T/marca" ]
+}
+@test "P1 negativo: un no bloqueante que sale 2 no bloquea" {
+    mkhook no 'exit 2'; row Bash no spawn no
+    run bash "$D" <<< "$IN"; [ "$status" -eq 0 ]; [[ "$output" == *"WARNING"* ]]
+}
+@test "P2: el tiempo agotado mata también los hijos del hook" {
+    mkhook slow "(sleep 2; touch $T/huerfano) & sleep 5"; row Bash slow
+    DISPATCH_HOOK_TIMEOUT=1 run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]
+    sleep 2.5; [ ! -e "$T/huerfano" ]
+}
+
+# Tabla REAL con hooks espía: comprueba la semántica de despacho de settings.json, no la autoconsistencia.
+spy_tree() {
+    cp "$REPO/hooks/routing-pretooluse.tsv" "$T/hooks/routing-pretooluse.tsv"
+    while IFS=$'\t' read -r m s rest; do
+        [[ -z "$m" || "$m" == \#* ]] && continue
+        mkdir -p "$T/$(dirname "${s%% *}")"
+        printf '#!/usr/bin/env bash\necho %s >> %s/log\n' "$(basename "${s%% *}")" "$T" > "$T/${s%% *}"
+    done < "$REPO/hooks/routing-pretooluse.tsv"
+}
+@test "tabla real: una herramienta MCP dispara mcp-effect-guard y no los guardas de Bash" {
+    spy_tree
+    run bash "$D" <<< '{"tool_name":"mcp__github__create_pull_request","tool_input":{}}'
+    [ "$status" -eq 0 ]
+    grep -qx mcp-effect-guard.sh "$T/log"
+    run grep -cx block-force-push.sh "$T/log"; [ "$output" = "0" ]
+}
+@test "tabla real: Bash dispara block-force-push y agent-git-discipline una sola vez" {
+    spy_tree
+    run bash "$D" <<< "$IN"; [ "$status" -eq 0 ]
+    grep -qx block-force-push.sh "$T/log"
+    [ "$(grep -cx agent-git-discipline.sh "$T/log")" -eq 1 ]
+    run grep -cx mcp-effect-guard.sh "$T/log"; [ "$output" = "0" ]
+}
+@test "tabla real: los hooks async de settings.json son bloqueante=no y el resto yes" {
+    run python3 "$BATS_TEST_DIRNAME/fixtures/se510-async-vs-table.py" "$REPO/.claude/settings.json" "$REPO/hooks/routing-pretooluse.tsv"
+    [ "$status" -eq 0 ]
+}
+@test "AC-6: async:true en settings.json genera bloqueante=no (y sin async, yes)" {
+    gen_tree
+    python3 - "$T/.claude/settings.json" <<'P'
+import json, sys
+p = sys.argv[1]; s = json.load(open(p))
+s["hooks"]["PreToolUse"].append({"matcher": "Bash", "hooks": [
+    {"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/asincrono.sh", "async": True},
+    {"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/sincrono.sh"}]})
+json.dump(s, open(p, "w"))
+P
+    run python3 "$T/scripts/dispatch-table.py" generate; [ "$status" -eq 0 ]
+    [[ "$output" == *$'.claude/hooks/asincrono.sh\tspawn\tno\t'* ]]
+    [[ "$output" == *$'.claude/hooks/sincrono.sh\tspawn\tyes\t'* ]]
+}
+@test "AC-6: matcher no despachable en un grupo command aborta (exit 2)" {
+    gen_tree
+    python3 - "$T/.claude/settings.json" <<'P'
+import json, sys
+p = sys.argv[1]; s = json.load(open(p))
+s["hooks"]["PreToolUse"][0]["matcher"] = "Bash(rm *)"
+json.dump(s, open(p, "w"))
+P
+    run python3 "$T/scripts/dispatch-table.py" generate; [ "$status" -eq 2 ]
+    [[ "$output" == *"matcher no despachable"* ]]
+}
+@test "AC-6: command con metacaracteres de shell aborta la generación (exit 2)" {
+    gen_tree
+    python3 - "$T/.claude/settings.json" <<'P'
+import json, sys
+p = sys.argv[1]; s = json.load(open(p))
+s["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = "\"$CLAUDE_PROJECT_DIR\"/a.sh && \"$CLAUDE_PROJECT_DIR\"/b.sh"
+json.dump(s, open(p, "w"))
+P
+    run python3 "$T/scripts/dispatch-table.py" generate; [ "$status" -eq 2 ]
+    [[ "$output" == *"no despachable"* ]]
 }

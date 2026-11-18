@@ -10,17 +10,19 @@ Salida 0 (permitir) o 2 (bloquear). Nada más. Un hook bloqueante que sale con c
 |---|---|
 | Tabla ausente o ilegible | 2 |
 | stdin vacío, JSON roto o sin nombre de herramienta | 2 |
-| Fila de la tabla mal formada | 2 |
+| Fila de la tabla mal formada, modo distinto de `spawn` o matcher que no es regex válida | 2 |
 | Hook bloqueante registrado que no existe | 2 |
 | Hook bloqueante con exit distinto de 0 y 2 (incluido 1) | 2 |
 | Hook bloqueante que excede el tiempo | 2 |
 | Hook no bloqueante que falla | 0, con aviso |
 
-El JSON se parsea una vez; cada hook recibe la misma entrada por stdin. El primer exit 2 corta la cadena.
+El JSON se parsea una vez; cada hook recibe la misma entrada por stdin. Primero corren los bloqueantes en orden de tabla y el primer exit 2 corta la cadena; después, los no bloqueantes. Un mismo comando corre una vez por acción aunque aparezca en dos filas (Claude Code deduplica comandos idénticos). El matcher se evalúa como regex anclada, igual que en Claude Code (`mcp__.*` casa con `mcp__github__create_issue`).
 
 ## Decisiones
 
-- Todo hook `command` de settings.json entra como bloqueante: Claude Code bloquea con exit 2 en cualquiera. Declarar uno no bloqueante exige un cambio explícito en el generador y una revisión (aún no hay ninguno).
+- Un hook `command` de settings.json entra como bloqueante salvo que tenga `async: true`: en Claude Code un hook asíncrono no puede bloquear, así que sale `bloqueante=no`. La tabla anterior, escrita a mano, marcaba como no bloqueantes otros hooks (`plan-gate`, `auto-grill-me`…) sin respaldo en settings.json; ahora manda settings.json.
+- El generador solo acepta matchers en `[A-Za-z0-9_|.*]` (donde la regex de Claude Code y la de bash coinciden) y argumentos literales; un `&&`, `;`, `|`, `$(...)`, redirección o glob aborta la generación en vez de perder el segundo comando en silencio.
+- Solo existe el modo `spawn`: `source` no se puede acotar con `timeout` y un `exit` interno escaparía al contrato. `timeout` mata el grupo de procesos del hook, hijos incluidos.
 - Los hooks `prompt` no se despachan por shell: salen en la tabla como `# EXCLUIDO(...)`.
 - Tiempo por hook: 100 s uniforme (el mayor `timeout` de settings.json); el generador rechaza un settings con un timeout mayor.
 - El exit 1 de un hook suelto es no bloqueante en Claude Code y bloqueante aquí: esa diferencia es buscada y es lo que el modo sombra (S3 restante) debe inventariar antes de sustituir registros (AC-9).

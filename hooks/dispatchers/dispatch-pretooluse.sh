@@ -40,54 +40,64 @@ print(name)
 [[ -f "$ROUTING" && -r "$ROUTING" ]] || block "tabla de despacho ausente o ilegible: $ROUTING"
 command -v timeout >/dev/null 2>&1 || block "timeout no disponible: no se puede acotar el tiempo de los hooks"
 
-# ── Despacha hooks cuyo matcher coincide con TOOL, en el orden de la tabla ────
-while IFS=$'\t' read -r matcher script_spec mode blocking desc; do
+# ── Lee y valida la tabla entera antes de ejecutar nada ───────────────────────
+# `|| [[ -n "$matcher" ]]`: la última fila cuenta aunque no acabe en salto de línea.
+ROW_MATCH=() ROW_SPEC=() ROW_BLOCK=()
+while IFS=$'\t' read -r matcher script_spec mode blocking desc || [[ -n "$matcher" ]]; do
     [[ -z "$matcher" ]] && continue
     [[ "$matcher" =~ ^[[:space:]]*# ]] && continue
-
     [[ -n "$script_spec" && ( "$mode" == "spawn" || "$mode" == "source" ) \
         && ( "$blocking" == "yes" || "$blocking" == "no" ) ]] \
         || block "fila mal formada en la tabla (matcher=$matcher)"
-
-    if [[ "$matcher" != ".*" ]]; then
-        regex="^(${matcher//\./\\.})$"
-        [[ ! "$TOOL" =~ $regex ]] && continue
-    fi
-
-    script="${script_spec%% *}"
-    script_args=""
-    [[ "$script_spec" == *" "* ]] && script_args="${script_spec#* }"
-
-    script_path="$REPO_ROOT/$script"
-    if [[ ! -f "$script_path" ]]; then
-        [[ "$blocking" == "yes" ]] && block "hook registrado que falta: $script"
-        echo "[dispatch-pretooluse] WARNING: hook no bloqueante ausente: $script" >&2
-        continue
-    fi
-
-    # ── Ejecuta el hook ───────────────────────────────────────────────────────
-    exit_code=0
-    if [[ "$mode" == "source" ]]; then
-        (source "$script_path" <<< "$INPUT") && exit_code=$? || exit_code=$?
-    else
-        # shellcheck disable=SC2086 — script_args son literales de la tabla generada
-        printf '%s' "$INPUT" | timeout "$HOOK_TIMEOUT" bash "$script_path" $script_args && exit_code=$? || exit_code=$?
-    fi
-
-    [[ "$exit_code" -eq 0 ]] && continue
-
-    if [[ "$blocking" == "yes" ]]; then
-        if [[ "$exit_code" -eq 2 ]]; then
-            echo "[dispatch-pretooluse] bloqueado por $script" >&2
-            exit 2
-        fi
-        if [[ "$exit_code" -eq 124 ]]; then
-            block "tiempo agotado (${HOOK_TIMEOUT}s) en $script"
-        fi
-        block "$script salió con exit $exit_code (solo 0 o 2 son válidos en un hook bloqueante)"
-    fi
-    echo "[dispatch-pretooluse] WARNING: hook no bloqueante $script salió con exit $exit_code" >&2
-
+    # `source` no se puede acotar con timeout y un `exit` interno escapa al contrato.
+    [[ "$mode" == "spawn" ]] || block "modo $mode no soportado (solo spawn): $script_spec"
+    ROW_MATCH+=("$matcher"); ROW_SPEC+=("$script_spec"); ROW_BLOCK+=("$blocking")
 done < "$ROUTING" || block "fallo leyendo la tabla de despacho"
+
+# El matcher es una regex, como en Claude Code (`mcp__.*` casa con `mcp__github__x`).
+# rc 0 = casa, 1 = no casa; cualquier otro (regex inválida) bloquea: nunca se salta mudo.
+matches() {
+    [[ "$1" == ".*" ]] && return 0
+    local regex="^($1)$" rc=0
+    [[ "$TOOL" =~ $regex ]] 2>/dev/null || rc=$?
+    [[ "$rc" -le 1 ]] || block "matcher inválido en la tabla: $1"
+    return "$rc"
+}
+
+# ── Despacha: primero los bloqueantes en orden de tabla, después los no bloqueantes ──
+# Un mismo comando se ejecuta una vez por acción (Claude Code deduplica comandos idénticos).
+declare -A DONE=()
+for pass in yes no; do
+    for i in "${!ROW_SPEC[@]}"; do
+        [[ "${ROW_BLOCK[$i]}" == "$pass" ]] || continue
+        matches "${ROW_MATCH[$i]}" || continue
+        script_spec="${ROW_SPEC[$i]}"
+        [[ -n "${DONE[$script_spec]:-}" ]] && continue
+        DONE[$script_spec]=1
+
+        read -r -a parts <<< "$script_spec"   # sin expansión de globs ni eval
+        script="${parts[0]}"
+        script_path="$REPO_ROOT/$script"
+        if [[ ! -f "$script_path" ]]; then
+            [[ "$pass" == "yes" ]] && block "hook registrado que falta: $script"
+            echo "[dispatch-pretooluse] WARNING: hook no bloqueante ausente: $script" >&2
+            continue
+        fi
+
+        exit_code=0
+        printf '%s' "$INPUT" | timeout "$HOOK_TIMEOUT" bash "$script_path" "${parts[@]:1}" || exit_code=$?
+        [[ "$exit_code" -eq 0 ]] && continue
+
+        if [[ "$pass" == "yes" ]]; then
+            if [[ "$exit_code" -eq 2 ]]; then
+                echo "[dispatch-pretooluse] bloqueado por $script" >&2
+                exit 2
+            fi
+            [[ "$exit_code" -eq 124 ]] && block "tiempo agotado (${HOOK_TIMEOUT}s) en $script"
+            block "$script salió con exit $exit_code (solo 0 o 2 son válidos en un hook bloqueante)"
+        fi
+        echo "[dispatch-pretooluse] WARNING: hook no bloqueante $script salió con exit $exit_code" >&2
+    done
+done
 
 exit 0

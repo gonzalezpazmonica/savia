@@ -19,7 +19,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SETTINGS = ROOT / ".claude" / "settings.json"
 TABLE = ROOT / "hooks" / "routing-pretooluse.tsv"
-CMD_RE = re.compile(r'^(?:bash\s+)?"?\$CLAUDE_PROJECT_DIR"?/(\S+\.sh)((?:\s+\S+)*)\s*$')
+# Args: solo tokens literales; `&&`, `;`, `|`, `$(...)`, `>` o globs abortan (el despachador no los ejecutaría).
+CMD_RE = re.compile(r'^(?:bash\s+)?"?\$CLAUDE_PROJECT_DIR"?/([\w./-]+\.sh)((?:\s+[\w./=:,+-]+)*)\s*$')
+# Matcher: subconjunto en el que la regex de Claude Code (JS) y la ERE de bash coinciden.
+MATCHER_RE = re.compile(r'^[A-Za-z0-9_|.*]+$')
 # Tiempo máximo por hook en el despachador; debe cubrir el mayor `timeout` de settings.json.
 DISPATCH_TIMEOUT = 100
 
@@ -29,7 +32,14 @@ class TableError(Exception):
 
 
 def _matcher(raw):
-    return ".*" if raw in ("", "*", ".*") else raw
+    m = ".*" if raw in ("", "*", ".*") else raw
+    if not isinstance(m, str) or not MATCHER_RE.match(m):
+        raise TableError(f"matcher no despachable (solo [A-Za-z0-9_|.*]): {raw!r}")
+    try:
+        re.compile(f"^({m})$")
+    except re.error as exc:
+        raise TableError(f"matcher no es una regex válida: {raw!r}: {exc}")
+    return m
 
 
 def build():
@@ -40,8 +50,13 @@ def build():
         raise TableError(f"settings.json ilegible o sin PreToolUse: {exc}")
     rows, excluded, max_timeout = [], [], 0
     for g in groups:
-        matcher = _matcher(g.get("matcher", ""))
-        for h in g.get("hooks", []):
+        raw = g.get("matcher", "")
+        hooks = g.get("hooks", [])
+        if all(h.get("type") != "command" for h in hooks):
+            excluded += [(raw, h.get("type", "?")) for h in hooks]
+            continue
+        matcher = _matcher(raw)
+        for h in hooks:
             if h.get("type") != "command":
                 excluded.append((matcher, h.get("type", "?")))
                 continue
@@ -50,7 +65,9 @@ def build():
                 raise TableError(f"command no despachable: {h.get('command')!r}")
             script = m.group(1) + m.group(2).rstrip()
             desc = (h.get("statusMessage") or m.group(1)).replace("\t", " ").replace("\n", " ")
-            rows.append((matcher, script, "spawn", "yes", desc))
+            # `async: true` en Claude Code no puede bloquear: aquí es bloqueante=no.
+            blocking = "no" if h.get("async") is True else "yes"
+            rows.append((matcher, script, "spawn", blocking, desc))
             max_timeout = max(max_timeout, int(h.get("timeout") or 0))
     if max_timeout > DISPATCH_TIMEOUT:
         raise TableError(f"timeout de settings ({max_timeout}s) > despachador ({DISPATCH_TIMEOUT}s)")
@@ -66,7 +83,8 @@ def render():
         "# No editar a mano: `python3 scripts/dispatch-table.py write`. Un test exige que coincida con settings.json.",
         "# Columnas: matcher<TAB>hook_script [args]<TAB>mode<TAB>bloqueante<TAB>descripcion",
         "# bloqueante=yes: exit 2, exit distinto de 0, tiempo agotado o hook ausente => el despachador sale 2.",
-        "# Orden = orden de settings.json (primero el primer exit 2 corta).",
+        "# bloqueante=no (async:true en settings.json): corre tras los bloqueantes; su fallo solo avisa.",
+        "# Orden = orden de settings.json (el primer exit 2 corta). Un comando repetido corre una vez.",
     ]
     out += [f"# EXCLUIDO({t}) matcher={m}: no se despacha por shell" for m, t in excluded]
     out += ["\t".join(r) for r in rows]
