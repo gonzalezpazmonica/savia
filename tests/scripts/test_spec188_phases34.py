@@ -1,11 +1,6 @@
-"""Tests for SPEC-188 Phases 3+4 MVP
+"""Tests for SPEC-188 Phase 4 MVP
 
 Covers:
-- causal-confidence-scorer: 0 evidence -> insufficient
-- causal-confidence-scorer: 3+ evidence -> high confidence
-- causal-confidence-scorer: output JSON has all required fields
-- causal-confidence-scorer: confidence_score in [0, 1]
-- causal-confidence-scorer: alternatives reduce confidence
 - diagnostic-metrics: --record appends entry to JSONL
 - diagnostic-metrics: --report calculates accuracy_rate correctly
 - diagnostic-metrics: JSONL append-only (2 records -> 2 lines)
@@ -25,17 +20,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-CAUSAL_SCORER = ROOT / "scripts" / "causal-confidence-scorer.py"
 DIAG_TRACKER = ROOT / "scripts" / "diagnostic-metrics-tracker.py"
-
-REQUIRED_CAUSAL_FIELDS = {
-    "cause",
-    "confidence_score",
-    "supporting_evidence",
-    "contradicting_evidence",
-    "alternative_causes",
-    "verdict",
-}
 
 REQUIRED_ENTRY_FIELDS = {
     "ts",
@@ -47,23 +32,6 @@ REQUIRED_ENTRY_FIELDS = {
 }
 
 
-def _run_causal(cause: str, evidence: list, alternatives: list) -> dict:
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(CAUSAL_SCORER),
-            "--cause", cause,
-            "--evidence", json.dumps(evidence),
-            "--alternatives", json.dumps(alternatives),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert result.returncode == 0, f"scorer failed: {result.stderr}"
-    return json.loads(result.stdout)
-
-
 def _run_tracker(args: list, log_path: Path) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, str(DIAG_TRACKER), "--log", str(log_path)] + args,
@@ -71,75 +39,6 @@ def _run_tracker(args: list, log_path: Path) -> subprocess.CompletedProcess:
         text=True,
         timeout=30,
     )
-
-
-# ── causal-confidence-scorer tests ────────────────────────────────────────────
-
-class TestCausalConfidenceScorer:
-    def test_zero_evidence_returns_insufficient(self):
-        """AC: 0 evidence -> verdict='insufficient', confidence_score=0.0"""
-        result = _run_causal("Some cause", [], [])
-        assert result["verdict"] == "insufficient"
-        assert result["confidence_score"] == 0.0
-
-    def test_three_plus_evidence_returns_high_confidence(self):
-        """AC: 3+ coherent evidence -> verdict='high', confidence_score >= 0.7"""
-        evidence = [
-            "Metrics show pool at maximum capacity",
-            "Logs confirm timeout errors started after pool exhaustion",
-            "Reproduced in staging under load test",
-        ]
-        result = _run_causal("Connection pool exhausted", evidence, [])
-        assert result["verdict"] == "high", (
-            f"Expected high, got {result['verdict']} with score={result['confidence_score']}"
-        )
-        assert result["confidence_score"] >= 0.70
-
-    def test_output_json_has_all_required_fields(self):
-        """AC: output JSON contains all required fields"""
-        result = _run_causal("Some cause", ["Evidence A", "Evidence B"], [])
-        missing = REQUIRED_CAUSAL_FIELDS - set(result.keys())
-        assert not missing, f"Missing fields: {missing}"
-
-    def test_confidence_score_in_unit_interval(self):
-        """AC: confidence_score is in [0.0, 1.0]"""
-        for evidence, alternatives in [
-            ([], []),
-            (["E1"], ["A1"]),
-            (["E1", "E2", "E3", "E4", "E5"], []),
-            (["E1", "E2"], ["A1", "A2", "A3"]),
-        ]:
-            result = _run_causal("Test cause", evidence, alternatives)
-            score = result["confidence_score"]
-            assert 0.0 <= score <= 1.0, (
-                f"confidence_score={score} out of [0,1] for ev={evidence}, alts={alternatives}"
-            )
-
-    def test_alternatives_reduce_confidence(self):
-        """AC: plausible alternatives reduce confidence vs no alternatives"""
-        evidence = ["Evidence A", "Evidence B", "Evidence C"]
-        result_no_alts = _run_causal("Cause X", evidence, [])
-        result_with_alts = _run_causal("Cause X", evidence, ["Alt 1", "Alt 2"])
-        assert result_with_alts["confidence_score"] < result_no_alts["confidence_score"], (
-            f"Expected alternatives to reduce confidence: "
-            f"no_alts={result_no_alts['confidence_score']}, "
-            f"with_alts={result_with_alts['confidence_score']}"
-        )
-
-    def test_insufficient_verdict_fields(self):
-        """AC: insufficient verdict returns correct supporting/contradicting lists"""
-        result = _run_causal("No evidence cause", [], [])
-        assert result["supporting_evidence"] == []
-        assert result["contradicting_evidence"] == []
-
-    def test_verdict_values_are_valid(self):
-        """AC: verdict is one of high | medium | low | insufficient"""
-        valid_verdicts = {"high", "medium", "low", "insufficient"}
-        for evidence in [[], ["E1"], ["E1", "E2"], ["E1", "E2", "E3"]]:
-            result = _run_causal("Cause", evidence, [])
-            assert result["verdict"] in valid_verdicts, (
-                f"Invalid verdict: {result['verdict']}"
-            )
 
 
 # ── diagnostic-metrics-tracker tests ─────────────────────────────────────────

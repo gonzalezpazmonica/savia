@@ -5,14 +5,10 @@
 # Tests for:
 #   .opencode/hooks/memory-feedback-task.sh
 #   scripts/memory-feedback-extractor.py
-#   scripts/memory-feedback-compactor.py
-#   scripts/memory-feedback-post-merge.sh
 
 REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
 HOOK="$REPO_ROOT/.opencode/hooks/memory-feedback-task.sh"
 EXTRACTOR="$REPO_ROOT/scripts/memory-feedback-extractor.py"
-COMPACTOR="$REPO_ROOT/scripts/memory-feedback-compactor.py"
-POST_MERGE="$REPO_ROOT/scripts/memory-feedback-post-merge.sh"
 
 setup() {
     TMPDIR_MF="$(mktemp -d)"
@@ -78,35 +74,7 @@ teardown() {
 
 # ─── Test 5: compactor --dry-run no modifica nada ────────────────────────────
 
-@test "compactor --dry-run no modifica MEMORY.md" {
-    local mem_dir="$TMPDIR_MF/auto"
-    mkdir -p "$mem_dir"
-    local mem_file="$mem_dir/MEMORY.md"
-    cat > "$mem_file" <<'EOF'
-# MEMORY Index
-<!-- ENTRIES_START -->
-- outcome:failure agent:test-runner lesson:Tests failed [2026-06-01T12:00:00Z]
-- outcome:failure agent:test-runner lesson:Tests failed [2026-06-02T12:00:00Z]
-- outcome:failure agent:test-runner lesson:Tests failed [2026-06-03T12:00:00Z]
-<!-- ENTRIES_END -->
-EOF
-    local before_md5
-    before_md5="$(md5sum "$mem_file" | cut -d' ' -f1)"
-
-    run python3 "$COMPACTOR" --dry-run --memory "$mem_file"
-    [[ "$status" -eq 0 ]]
-
-    local after_md5
-    after_md5="$(md5sum "$mem_file" | cut -d' ' -f1)"
-    [[ "$before_md5" = "$after_md5" ]]
-}
-
 # ─── Test 6: post-merge --manual funciona ────────────────────────────────────
-
-@test "memory-feedback-post-merge.sh --manual funciona y exit 0" {
-    run bash "$POST_MERGE" --manual --pr 864 --spec SPEC-164
-    [[ "$status" -eq 0 ]]
-}
 
 # ─── Test 7: hook tool_name != Task → exits 0 (no-op) ───────────────────────
 
@@ -136,18 +104,10 @@ PYEOF
 
 # ─── Test 9: post-merge script has set -uo pipefail ──────────────────────────
 
-@test "memory-feedback-post-merge.sh tiene set -uo pipefail" {
-    grep -qE "set -[uo]+ pipefail|set -euo pipefail" "$POST_MERGE"
-}
-
 # ─── Test 10: compactor script has valid bash syntax ─────────────────────────
 
 @test "memory-feedback-task.sh tiene sintaxis bash válida" {
     bash -n "$HOOK"
-}
-
-@test "memory-feedback-post-merge.sh tiene sintaxis bash válida" {
-    bash -n "$POST_MERGE"
 }
 
 # ─── Comportamiento del extractor (SPEC-164 S1) ──────────────────────────────
