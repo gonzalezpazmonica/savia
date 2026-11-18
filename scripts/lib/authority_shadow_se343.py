@@ -7,7 +7,8 @@ Uso (siempre `python3 -I`):
   authority_shadow_se343.py report    # resume lo registrado en sombra en el audit del kernel
 
 Que hace `run`:
-1. Recorre el ledger de grants de SE-343 (`~/.savia/grants/<scope>.json`, home por la base de usuarios).
+1. Recorre el ledger de grants de SE-343 (`grants/<scope>.json` en el directorio local de Savia del home real,
+   resuelto por la base de usuarios; el mismo que usa operator-grant.sh).
 2. Pregunta a `scripts/operator-grant.sh check` si cada grant esta vigente. Esa respuesta es la unica
    que cuenta hoy y este adaptador no la cambia: `operator-grant.sh` no se toca (R7).
 3. Proyecta cada grant vigente a su contrato de delegacion equivalente (grant de merge `pr:<n>` ->
@@ -22,7 +23,7 @@ Lo que NO hace:
 - Los pasos 1-3 (contrato en disco y firma `savia-delegation`) no aplican: el contrato proyectado no
   existe en disco ni esta firmado. Su equivalente es la firma `savia-operator-grant` que ya verifico
   SE-343 en el paso 2, y por eso solo se proyectan grants vigentes. El contrato proyectado no se escribe
-  nunca en `config/delegations/` ni en `~/.savia/delegations/`: un `recheck` con esta salida da
+  nunca en ninguno de los dos directorios de delegaciones que lee el kernel: un `recheck` con esta salida da
   `NO_CONTRACT`.
 - No consume usos (no llama a `recheck`).
 - Los grants `autonomy:*` y los de merge sobre `task:<id>` no tienen capacidad equivalente: se registran
