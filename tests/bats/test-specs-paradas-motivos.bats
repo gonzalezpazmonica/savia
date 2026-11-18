@@ -26,8 +26,8 @@ ficheros() {
 @test "ningún motivo atribuye la decisión a la operadora fuera de la frase de atribución" {
   for i in $IDS; do
     for f in $(ficheros "$i"); do
-      # Se quita la frase de atribución completa; si "operadora" aún aparece en una línea de motivo, atribuye la decisión.
-      resto="$(grep -iE 'deferral|deferred_reason|aparcad' "$f" | sed 's/propuesta de la orquestadora, pendiente de confirmar por la operadora//g' | grep -i 'operadora' || true)"
+      # Se quita la frase de atribución completa; si queda una fórmula que da la decisión por tomada por la operadora, falla.
+      resto="$(grep -iE 'deferral|deferred_reason|aparcad' "$f" | sed 's/propuesta de la orquestadora, pendiente de confirmar por la operadora//g' | grep -iE '\(operadora\)|operadora (decid|aprob|acord|pid|quis|prefier)|(decidid|aprobad|acordad|aparcad|pedid)[oa]s? por (la )?operadora|operadora,? 20[0-9]{2}-' || true)"
       [ -z "$resto" ] || { echo "atribución a la operadora en $f: $resto"; return 1; }
     done
   done
