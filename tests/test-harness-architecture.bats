@@ -1,6 +1,10 @@
 #!/usr/bin/env bats
-# check-skill-evals.py — forma de evals.json (SE-457 AC6/AC7)
+# harness-architecture — pruebas de comportamiento de scripts/check-skill-evals.py,
+# el validador de la forma de evals.json de la skill (SE-457 AC6/AC7; SE-376 S03).
+# SCRIPT="scripts/check-skill-evals.py"
 # Ref: docs/specs/SE-457-harness-architecture-skill.spec.md
+# Mutación (SE-376 S03 grupo 4): 32 mutantes del script, uno por condición/umbral/código de
+# salida/flag/campo; cada uno cae con esta suite salvo 2 equivalentes (ver «equivalentes» abajo).
 
 setup() {
   cd "$BATS_TEST_DIRNAME/.." || exit 1
@@ -134,3 +138,42 @@ P
     [[ "$output" != *Traceback* ]]
   done
 }
+
+# ── Cierre de huecos hallados por mutación (S03 grupo 4) ──
+
+@test "four evals fail too: the evals count is exact, not a minimum (mutant evals<3)" {
+  evals_json "$T/e.json" 20 10 4
+  run python3 scripts/check-skill-evals.py "$T/e.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"evals=4 (esperado 3)"* ]]
+}
+
+@test "verdict lines go to stderr and stdout stays empty (mutant print to stdout)" {
+  evals_json "$T/e.json" 20 9 3
+  python3 scripts/check-skill-evals.py "$T/e.json" >"$T/out" 2>"$T/err" || rc=$?
+  [ "${rc:-0}" -eq 1 ]
+  [ ! -s "$T/out" ]
+  grep -q "FAIL: positivas=9 (esperado 10)" "$T/err"
+}
+
+@test "a failing verdict survives a pipe under set -o pipefail" {
+  evals_json "$T/e.json" 20 9 3
+  run bash -c 'set -o pipefail; python3 scripts/check-skill-evals.py "$1" 2>/dev/null | cat' _ "$T/e.json"
+  [ "$status" -eq 1 ]
+}
+
+@test "flags override the defaults independently (bad flag value fails, matching passes)" {
+  evals_json "$T/e.json" 5 5 2
+  run python3 scripts/check-skill-evals.py "$T/e.json" --total 5 --positives 5 --evals 2
+  [ "$status" -eq 0 ]
+  run python3 scripts/check-skill-evals.py "$T/e.json" --total 5 --positives 4 --evals 2
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"positivas=5 (esperado 4)"* ]]
+  run python3 scripts/check-skill-evals.py "$T/e.json" --total 5 --positives 5 --evals 1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"evals=2 (esperado 1)"* ]]
+}
+
+# Equivalentes (no se pueden matar): cambiar solo el `else None` de trigger_evals o solo el de
+# evals por `[]` no altera el veredicto, porque la otra variable sigue siendo None y la
+# validación de forma sale con 2 igualmente.

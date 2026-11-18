@@ -1,0 +1,14 @@
+# EJEMPLO, no instalado. Ver README.md de esta carpeta.
+# Copiar a ~/.config/systemd/user/pulse-nocturna.timer. Una vez al día, a la hora que prefieras.
+[Unit]
+Description=Pulse: revisión diaria de la comprobación nocturna
+
+[Timer]
+OnCalendar=*-*-* 08:20:00
+# Si el equipo estaba apagado a esa hora, lanza la pasada al volver a encender.
+Persistent=true
+RandomizedDelaySec=120
+Unit=pulse-nocturna.service
+
+[Install]
+WantedBy=timers.target
