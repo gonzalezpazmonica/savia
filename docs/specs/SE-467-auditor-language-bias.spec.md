@@ -1,7 +1,7 @@
 ---
 status: DEFERRED
 deferred_at: 2026-11-18
-deferred_reason: "2026-11-18 (operadora): aparcada. P2: el sesgo de idioma del auditor de tests está medido, pero la spec obliga a elegir entre cambiar el motor y renombrar 1483 tests (D1) y esa decisión no está tomada. Nada construido. Retoma al decidir D1; el trabajo de mutación de S03 sigue sin depender de ella."
+deferred_reason: "2026-11-18 (propuesta de la orquestadora, pendiente de confirmar por la operadora): aparcada. P2: el sesgo de idioma del auditor de tests está medido, pero la spec obliga a elegir entre cambiar el motor y renombrar 1483 tests (D1) y esa decisión no está tomada. Nada construido. Retoma al decidir D1; el trabajo de mutación de S03 sigue sin depender de ella."
 approved_at: 2026-10-27
 approved_by: "operadora, AskUserQuestion 2026-10-27"
 priority: P2

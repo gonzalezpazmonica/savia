@@ -1,3 +1,3 @@
 ## 2026-11-18 SE-469 DEFERRED
 
-2026-11-18 (operadora): aparcada. Ejecutar los golden sets de los tribunales cuesta dinero de modelo y exige fijar el tope D1 y dónde se publica el informe D2, aún sin decidir; sin un incidente de tribunal que lo exija. Nada construido. Retoma al fijar D1/D2.
+2026-11-18 (propuesta de la orquestadora, pendiente de confirmar por la operadora): aparcada. Ejecutar los golden sets de los tribunales cuesta dinero de modelo y exige fijar el tope D1 y dónde se publica el informe D2, aún sin decidir; sin un incidente de tribunal que lo exija. Nada construido. SE-474 y SE-477 citan esta spec como apoyo (dependencia por reconfirmar al retomarla). Retoma al fijar D1/D2.

@@ -60,7 +60,7 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
 
 - **S19 · P1 · fase A** — Medir jueces y relevos antes de confiar en ellos
   Acción: SE-469: 30 casos de los golden sets en vivo con tope de gasto e IC95 por tribunal. SE-474: proveedor independiente opcional; la métrica de hallazgos que solo ve el segundo proveedor se mide una vez y la comparte con SE-476. SE-471 ya está en main (#1486) y pasa a S27.
-  Entrada: SE-469 ya APPROVED y después de SE-468; SE-474 sigue PROPOSED y necesita decisión de la operadora.
+  Entrada: SE-469 aparcada (DEFERRED desde 2026-11-18) y, al retomarla, después de SE-468; SE-474 sigue PROPOSED y necesita decisión de la operadora.
   Salida: Informe de concordancia con IC95 y decisión según kill criterion; decisión registrada sobre SE-474.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: da el primer dato de acierto de los tribunales que pesan en merges y separa el OK autodeclarado de lo validado; esfuerzo: SE-469 medio (M); SE-474 por decidir.
 
@@ -110,7 +110,7 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Acción: SE-476: acuerdo de jueces del mismo proveedor como correlacionado y autorrevisión fuera de la verificación. SE-477: IC, diferencia pareada y censura en comparativas. SE-479: casos imposibles dentro del alcance con control posible. SE-475 (clase del bloqueo) se hace dentro de SE-510.
   Entrada: Aprobación de SE-476, SE-477 y SE-479 por la operadora (PROPOSED); SE-475 queda absorbida por SE-510 (S26); SE-479 S3 después de SE-468 y SE-477; sin hueco WIP nuevo.
   Salida: Cada spec aprobada o descartada; las aprobadas con sus AC verificados, tests que fallan antes y pasan después, y paridad bash/TS donde aplica.
-  Necesidad: media; urgencia: baja; valor: medio; desbloqueo: frena los rodeos ante bloqueos de política y evita contar como evidencia independiente lo que no lo es; SE-477 da la estadística que usan SE-469 y SE-479; esfuerzo: cuatro specs de slices pequeñas (S); SE-475 S2 y SE-479 S2 medianas.
+  Necesidad: media; urgencia: baja; valor: medio; desbloqueo: frena los rodeos ante bloqueos de política y evita contar como evidencia independiente lo que no lo es; SE-477 da la estadística que usan SE-469 (aparcada, DEFERRED) y SE-479; esfuerzo: cuatro specs de slices pequeñas (S); SE-475 S2 y SE-479 S2 medianas.
 
 - **S07 · P2 · fase D** — Kernel mínimo y portabilidad
   Acción: Ablación acotada F0 revisada; SAM F5/F6; runtime/canaries comunes y coste de complejidad. Curación de skills sólo si demuestra utilidad.

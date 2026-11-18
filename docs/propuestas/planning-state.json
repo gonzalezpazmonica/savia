@@ -1985,7 +1985,7 @@
         "value": "alto",
         "dependency_value": "da el primer dato de acierto de los tribunales que pesan en merges y separa el OK autodeclarado de lo validado",
         "effort": "SE-469 medio (M); SE-474 por decidir",
-        "prerequisites": "SE-469 ya APPROVED y después de SE-468; SE-474 sigue PROPOSED y necesita decisión de la operadora.",
+        "prerequisites": "SE-469 aparcada (DEFERRED desde 2026-11-18) y, al retomarla, después de SE-468; SE-474 sigue PROPOSED y necesita decisión de la operadora.",
         "done": "Informe de concordancia con IC95 y decisión según kill criterion; decisión registrada sobre SE-474."
       },
       {
@@ -2148,7 +2148,7 @@
         "necessity": "media",
         "urgency": "baja",
         "value": "medio",
-        "dependency_value": "frena los rodeos ante bloqueos de política y evita contar como evidencia independiente lo que no lo es; SE-477 da la estadística que usan SE-469 y SE-479",
+        "dependency_value": "frena los rodeos ante bloqueos de política y evita contar como evidencia independiente lo que no lo es; SE-477 da la estadística que usan SE-469 (aparcada, DEFERRED) y SE-479",
         "effort": "cuatro specs de slices pequeñas (S); SE-475 S2 y SE-479 S2 medianas",
         "prerequisites": "Aprobación de SE-476, SE-477 y SE-479 por la operadora (PROPOSED); SE-475 queda absorbida por SE-510 (S26); SE-479 S3 después de SE-468 y SE-477; sin hueco WIP nuevo.",
         "done": "Cada spec aprobada o descartada; las aprobadas con sus AC verificados, tests que fallan antes y pasan después, y paridad bash/TS donde aplica."
