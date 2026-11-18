@@ -5,6 +5,7 @@ savia-gates y la prueba de paridad) más comprobaciones del analizador de órden
 """
 from __future__ import annotations
 
+import atexit
 import importlib.util
 import io
 import json
@@ -16,6 +17,11 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
+
+# SE-462 S1: una lectura N2+ deja marca de sesión; nunca en el HOME real.
+_MARKS_TMP = tempfile.mkdtemp(prefix="dome-read-")
+os.environ["SAVIA_DOME_READ_DIR"] = os.path.join(_MARKS_TMP, "dome-read")
+atexit.register(shutil.rmtree, _MARKS_TMP, ignore_errors=True)
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES = ROOT / "tests/hooks/fixtures/dome-guard-cases.json"
@@ -159,6 +165,74 @@ def decide_text(text: str, ws: str) -> tuple[str, str]:
         for k in ("SAVIA_SPACE_DOMES_FILE", "SAVIA_DOME_GUARD", "SAVIA_GATES_PIN"):
             os.environ.pop(k, None)
         return dg.decide_payload(text, ws)
+
+
+class SessionMarks(unittest.TestCase):
+    """SE-462 S1: write_marks (el núcleo de la marca de sesión), sin pasar por el hook."""
+
+    MARKS = [{"id": "gallinero", "level": 2}]
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="marks-")
+        self.root = os.path.join(self.tmp, "area", "dome-read")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def tree(self):
+        return sorted((os.path.join(d, n), os.lstat(os.path.join(d, n)).st_mode)
+                      for d, ds, fs in os.walk(self.tmp) for n in ds + fs)
+
+    def test_valid_id_writes_one_line_per_dome_without_duplicates(self):
+        self.assertTrue(dg.write_marks(self.root, "s1", self.MARKS))
+        self.assertTrue(dg.write_marks(self.root, "s1", self.MARKS + [{"id": "secreta", "level": 3}]))
+        lines = Path(self.root, "s1").read_text(encoding="utf-8").splitlines()
+        self.assertEqual([json.loads(x) for x in lines],
+                         [{"cupula": "gallinero", "nivel": "N2"}, {"cupula": "secreta", "nivel": "N3"}])
+        self.assertEqual(os.stat(self.root).st_mode & 0o777, 0o700)
+        self.assertEqual(os.stat(os.path.join(self.root, "s1")).st_mode & 0o777, 0o600)
+
+    def test_invalid_ids_touch_nothing(self):
+        for bad in ["../../x", "a/b", "", "a" * 129, "a b", "a\nb", None, 42, "..", "x\x00y"]:
+            before = self.tree()
+            self.assertFalse(dg.write_marks(self.root, bad, self.MARKS), repr(bad))
+            self.assertEqual(self.tree(), before, repr(bad))
+        self.assertFalse(os.path.exists(self.root))
+
+    def test_id_of_128_characters_is_the_limit(self):
+        self.assertTrue(dg.write_marks(self.root, "a" * 128, self.MARKS))
+        self.assertFalse(dg.write_marks(self.root, "a" * 129, self.MARKS))
+
+    def test_symlink_or_file_instead_of_the_directory_is_refused(self):
+        os.makedirs(os.path.join(self.tmp, "area", "destino"))
+        os.symlink(os.path.join(self.tmp, "area", "destino"), self.root)
+        self.assertFalse(dg.write_marks(self.root, "s1", self.MARKS))
+        self.assertEqual(os.listdir(os.path.join(self.tmp, "area", "destino")), [])
+        os.unlink(self.root)
+        Path(self.root).write_text("")
+        self.assertFalse(dg.write_marks(self.root, "s1", self.MARKS))
+
+    def test_symlinked_mark_file_is_refused(self):
+        os.makedirs(self.root, mode=0o700)
+        target = os.path.join(self.tmp, "otro")
+        Path(target).write_text("")
+        os.symlink(target, os.path.join(self.root, "s1"))
+        self.assertFalse(dg.write_marks(self.root, "s1", self.MARKS))
+        self.assertEqual(Path(target).read_text(), "")
+
+    def test_purge_removes_only_files_older_than_seven_days(self):
+        os.makedirs(self.root, mode=0o700)
+        old, fresh = os.path.join(self.root, "vieja"), os.path.join(self.root, "reciente")
+        Path(old).write_text(""); Path(fresh).write_text("")
+        os.utime(old, (1000, 1000))
+        now = 1000 + 7 * 24 * 3600 + 1
+        os.utime(fresh, (now - 10, now - 10))
+        self.assertTrue(dg.write_marks(self.root, "s1", self.MARKS, now=now))
+        self.assertFalse(os.path.exists(old))
+        self.assertTrue(os.path.exists(fresh))
+
+    def test_mark_reads_ignores_n1(self):
+        ctx = {}
+        dg.mark_reads(ctx, [{"id": "a", "level": 1}, {"id": "b", "level": 2}])
+        self.assertEqual(ctx["marks"], [{"id": "b", "level": 2}])
 
 
 class Monotonic(unittest.TestCase):

@@ -30,7 +30,13 @@
 // (`python3 -c "open('gall'+'inero/a','w')"`, variables calculadas) no se ve. La defensa en profundidad es el
 // sandbox del motor o el modo mediado de Savia Space (SE-434).
 
-import { lstatSync, statSync, readdirSync, readFileSync, readlinkSync, realpathSync } from "node:fs"
+import {
+  chmodSync, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync,
+  statSync, unlinkSync, writeSync, constants as fsc,
+} from "node:fs"
+import { execFileSync } from "node:child_process"
+import { homedir } from "node:os"
+import { join as pathJoin } from "node:path"
 
 export type DomeDecision = "pass" | "ask" | "deny"
 export interface DomeVerdict {
@@ -53,6 +59,8 @@ export interface DomeRequest {
   context?: unknown
   /** El directorio de la llamada se conoce; si no, bash pregunta siempre. Por defecto, sí (el plugin lo sabe). */
   cwdKnown?: boolean
+  /** Sesión (SE-462 S1): `session_id` del payload o `sessionID` de OpenCode; sin uno válido, una lectura N2+ pregunta. */
+  sessionId?: unknown
   env: Record<string, string | undefined>
 }
 
@@ -904,6 +912,8 @@ interface Ctx {
   cloud: boolean
   attached: string[]
   granted: string[]
+  /** SE-462 S1: cúpulas N2+ que las lecturas de la llamada tocan. */
+  marks?: Dome[]
 }
 
 function wordText(word: Word): string {
@@ -1239,6 +1249,7 @@ function analyseBash(domes: Dome[], files: string[], project: string, ctx: Ctx, 
     if (!touched.some((t) => t.id === d.id) && traversalReaches(cmds, base, d.root)) touched.push(d)
   }
   if (touched.length === 0) return { decision: "pass", reason: "" }
+  markReads(ctx, touched)
   return readVerdict(ctx, touched)
 }
 
@@ -1330,9 +1341,13 @@ function decideTool(registry: Registry, project: string, tool: string, rawInput:
   }
   if (permission === "bash") return decideBash(domes, files, project, ctx, rawInput, cwdKnown)
   const root = searchRoot(project, permission, input)
-  if (root === null) return readVerdict(ctx, domes)
+  if (root === null) {
+    markReads(ctx, domes)
+    return readVerdict(ctx, domes)
+  }
   const recursive = permission !== "read"
   const touched = domes.filter((d) => touches(d.root, project, root, recursive) || (recursive && reachesByLink(project, root, d.root)))
+  markReads(ctx, touched)
   return readVerdict(ctx, touched)
 }
 
@@ -1445,11 +1460,93 @@ function sessionContext(raw: unknown): Ctx {
   return { cloud: o.cloud !== false, attached: ids(o.attached), granted: ids(o.granted) }
 }
 
+
+// ── Marca de sesión (SE-462 S1) ──────────────────────────────────────────────
+// Gemelo de `write_marks` de lib/dome_guard.py: mismo formato (una línea JSON por cúpula y nivel), mismo
+// directorio, misma validación del identificador. El PreToolUse no sabe si la persona aprobó un «ask»: se
+// marca al emitir el permitir o el «ask» de la lectura (una lectura preguntada y denegada también marca).
+
+const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
+const MARK_TTL_MS = 7 * 24 * 3600 * 1000
+const MARK_DIR_ENV = "SAVIA_DOME_READ_DIR" // solo pruebas: redirige la raíz de las marcas
+const MARK_FAILED =
+  "no se pudo dejar constancia de la lectura de una cúpula N2 o superior; sin ella no se puede vigilar adónde va lo leído"
+const MARK_BAD_SESSION =
+  "la llamada no trae un identificador de sesión válido; sin él no se puede dejar constancia de la lectura de una cúpula N2 o superior"
+
+function markReads(ctx: Ctx, touched: Dome[]): void {
+  const marks = (ctx.marks ??= [])
+  for (const d of touched) {
+    if (d.level >= 2 && !marks.some((m) => m.id === d.id && m.level === d.level)) marks.push(d)
+  }
+}
+
+function validSession(id: unknown): id is string {
+  return isStr(id) && SESSION_ID_RE.test(id)
+}
+
+export function marksRoot(env: Record<string, string | undefined>): string {
+  return env[MARK_DIR_ENV] || pathJoin(homedir(), ".savia", "dome-read")
+}
+
+function autonomousRun(env: Record<string, string | undefined>, project: string): boolean {
+  if (env.SAVIA_AUTONOMOUS_RUN === "1") return true
+  try {
+    const out = execFileSync("git", ["-C", project, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] })
+    return out.trim().startsWith("agent/")
+  } catch {
+    return false
+  }
+}
+
+/** Añade las marcas a `<root>/<sessionId>` (directorio 0700, fichero 0600; purga a 7 días). `false` si algo falla. */
+export function writeMarks(root: string, sessionId: unknown, marks: Dome[], now: number = Date.now()): boolean {
+  if (!validSession(sessionId)) return false
+  try {
+    mkdirSync(root, { recursive: true, mode: 0o700 })
+    if (!lstatSync(root).isDirectory()) return false // un enlace o un fichero en su lugar no es el directorio de marcas
+    chmodSync(root, 0o700)
+    for (const name of readdirSync(root)) {
+      if (!SESSION_ID_RE.test(name)) continue
+      try {
+        const st = lstatSync(pathJoin(root, name))
+        if (st.isFile() && st.mtimeMs < now - MARK_TTL_MS) unlinkSync(pathJoin(root, name))
+      } catch {
+        /* otro proceso la purgó */
+      }
+    }
+    const fd = openSync(pathJoin(root, sessionId), fsc.O_RDWR | fsc.O_CREAT | fsc.O_APPEND | fsc.O_NOFOLLOW, 0o600)
+    try {
+      if (!fstatSync(fd).isFile()) return false
+      const have = new Set(readFileSync(pathJoin(root, sessionId), "utf8").split("\n"))
+      for (const m of marks) {
+        const line = JSON.stringify({ cupula: m.id, nivel: levelName(m.level) })
+        if (!have.has(line)) writeSync(fd, line + "\n")
+      }
+    } finally {
+      closeSync(fd)
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Decisión del guard sin mirar la delegación (la usan los tests de la tabla compartida). */
 export function decideDome(req: DomeRequest): DomeVerdict {
   const env = req.env.SAVIA_SPACE_DOMES_FILE ?? ""
   const file = env || join(req.root, "projects/savia-vaults/savia-vaults.domes.json")
-  return decide(loadRegistry(file, env !== ""), req.project, req.tool, req.input, sessionContext(req.context), req.cwdKnown ?? true)
+  const ctx = sessionContext(req.context)
+  const verdict = decide(loadRegistry(file, env !== ""), req.project, req.tool, req.input, ctx, req.cwdKnown ?? true)
+  if (verdict.decision === "deny" || !ctx.marks || ctx.marks.length === 0) return verdict
+  // SE-462 S1: lectura N2+ permitida o preguntada → constancia en la sesión. Sin constancia posible, falla cerrado.
+  const valid = validSession(req.sessionId)
+  if (valid && writeMarks(marksRoot(req.env), req.sessionId, ctx.marks)) return verdict
+  const failure: DomeVerdict = {
+    decision: autonomousRun(req.env, req.project) ? "deny" : "ask",
+    reason: valid ? MARK_FAILED : MARK_BAD_SESSION,
+  }
+  return strictest([verdict, failure])
 }
 
 /**
@@ -1522,6 +1619,7 @@ export function decidePayload(raw: string, root: string, env: Record<string, str
     tool: isStr(payload.tool_name) ? payload.tool_name : "",
     input: payload.tool_input,
     context: payload.dome_context,
+    sessionId: payload.session_id,
     env,
   })
 }
