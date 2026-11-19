@@ -451,7 +451,7 @@ assert h["additionalContext"] == "uno\ndos", h
 @test "P2: un error interno del despachador (variable sin definir) sale 2, no 1" {
     mkhook ok 'exit 0'; row Bash ok
     # Mutante: inyecta un error de `set -u` justo antes del despacho.
-    sed -i 's/^declare -A DONE=()$/: "$VARIABLE_QUE_NO_EXISTE"; declare -A DONE=()/' "$D"
+    sed -i 's/^declare -A EXECUTED=()$/: "$VARIABLE_QUE_NO_EXISTE"; declare -A EXECUTED=()/' "$D"
     grep -q 'VARIABLE_QUE_NO_EXISTE' "$D"
     run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [[ "$output" == *"fallo interno del despachador (rc 1)"* ]]
 }

@@ -47,7 +47,7 @@ on_exit() {
 trap on_exit EXIT
 # Muerto por señal, bash conservaría el 128+N aunque el trap EXIT haga `exit 2`: se sale a mano.
 trap 'exit 143' TERM; trap 'exit 130' INT; trap 'exit 129' HUP
-# `declare -A` necesita bash >= 4; en bash 3, DONE[...] sería un índice aritmético.
+# `declare -A` necesita bash >= 4; en bash 3, EXECUTED[...] sería un índice aritmético.
 [[ "${BASH_VERSINFO[0]:-0}" -ge 4 ]] || block "bash ${BASH_VERSION:-?} no soportado (hace falta >= 4)"
 
 # Entero 1..100: `timeout 0` desactivaría el límite y un hook colgado colgaría la sesión.
@@ -194,14 +194,14 @@ matches() {
 
 # ── Despacha: primero los bloqueantes en orden de tabla, después los no bloqueantes ──
 # Un mismo comando se ejecuta una vez por acción (Claude Code deduplica comandos idénticos).
-declare -A DONE=()
+declare -A EXECUTED=()
 for pass in yes no; do
     for i in "${!ROW_SPEC[@]}"; do
         [[ "${ROW_BLOCK[$i]}" == "$pass" ]] || continue
         matches "${ROW_MATCH[$i]}" || continue
         script_spec="${ROW_SPEC[$i]}"
-        [[ -n "${DONE[$script_spec]:-}" ]] && continue
-        DONE[$script_spec]=1
+        [[ -n "${EXECUTED[$script_spec]:-}" ]] && continue
+        EXECUTED[$script_spec]=1
 
         read -r -a parts <<< "$script_spec"   # sin expansión de globs ni eval
         script="${parts[0]}"
