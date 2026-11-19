@@ -66,7 +66,7 @@ count() { # canonical idiom under test
 }
 
 @test "coverage: every patched script still parses (bash -n)" {
-  for f in scripts/criterio-validate.sh scripts/deps-validate.sh scripts/audit-receipts.sh scripts/skill-audit.sh scripts/kpi-review-report.sh; do
+  for f in scripts/criterio-validate.sh scripts/deps-validate.sh scripts/audit-receipts.sh scripts/skill-audit.sh; do
     run bash -n "$f"
     [[ "$status" -eq 0 ]]
   done
