@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# nightly: serial (ejecuta ci-extended-checks.sh entero, cuyo check #9 mide la latencia real de los hooks)
 # BATS tests for ci-extended-checks.sh check #7 (SCM Freshness)
 # Ref: docs/propuestas/SE-031-query-library-nl.md (freshness gate pattern)
 # SPEC-055 quality gate (score >= 80)
