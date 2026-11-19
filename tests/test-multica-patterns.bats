@@ -10,19 +10,18 @@
 # Era: 223
 # Problem: PII leakage via filesystem paths, inaccurate agent cost tracking,
 #   sequential overnight execution
-# Solution: path-redact.sh, agent-result schema, concurrent-executor
+# Solution: path-redact.sh, agent-result schema
 # (skills-lock retired 2026-09-27: never verified by CI or hooks)
 # Acceptance: scripts functional, schema valid, redaction works
-# Dependencies: path-redact.sh, concurrent-executor.sh, agent-result.schema.json
+# Dependencies: path-redact.sh, agent-result.schema.json
 
 ## Problem: 4 tactical gaps identified from multica-ai/multica research
-## Solution: path redaction, agent result schema, concurrent executor
+## Solution: path redaction, agent result schema
 ## Acceptance: all scripts pass syntax, functional tests cover happy + edge paths
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   export PATH_REDACT="$REPO_ROOT/scripts/path-redact.sh"
-  export EXECUTOR="$REPO_ROOT/scripts/lib/concurrent-executor.sh"
   export SCHEMA="$REPO_ROOT/.claude/schemas/agent-result.schema.json"
 }
 
@@ -100,16 +99,3 @@ teardown() {
   done
 }
 
-## Concurrent executor tests
-
-@test "concurrent-executor.sh exists and valid syntax" {
-  [[ -f "$EXECUTOR" ]]
-  bash -n "$EXECUTOR"
-}
-
-@test "executor defines init, submit, drain functions" {
-  source "$EXECUTOR"
-  declare -f executor_init >/dev/null
-  declare -f executor_submit >/dev/null
-  declare -f executor_drain >/dev/null
-}
