@@ -364,3 +364,22 @@ def test_id_de_aviso_se_escapa_en_la_url(monkeypatch):
     monkeypatch.setattr(osv, "_http_json", fake)
     osv.query_online([("PyPI", "x", "1")])
     assert urls == [osv.OSV_VULN_URL + "..%2Fx%3Fy%3D1"]
+
+
+@pytest.mark.parametrize("src", [
+    "sparse+https://evil.example/index.crates.io/",
+    "registry+https://evil.example/github.com/rust-lang/crates.io-index",
+    "registry+https://github.com/rust-lang/crates.io-index.evil.example",
+    "sparse+https://index.crates.io.evil.example/",
+])
+def test_cargo_registro_alternativo_con_subcadena_no_es_crates_io(src):
+    # CodeQL py/incomplete-url-substring-sanitization: la subcadena no basta
+    assert osv._cargo_registry(src) is False
+
+
+@pytest.mark.parametrize("src", [
+    "registry+https://github.com/rust-lang/crates.io-index",
+    "sparse+https://index.crates.io/",
+])
+def test_cargo_crates_io_legitimo(src):
+    assert osv._cargo_registry(src) is True

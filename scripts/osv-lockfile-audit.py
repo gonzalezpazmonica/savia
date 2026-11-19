@@ -137,9 +137,16 @@ def _parse_pnpm(text: str) -> set[tuple[str, str, str]]:
     return pkgs
 
 
+_CARGO_CRATES_IO = frozenset({
+    "registry+https://github.com/rust-lang/crates.io-index",
+    "sparse+https://index.crates.io/",
+})
+
+
 def _cargo_registry(src: str) -> bool:
-    # solo crates.io (índice git o sparse); un registro alternativo no es crates.io en OSV
-    return "github.com/rust-lang/crates.io-index" in src or "index.crates.io" in src
+    # solo crates.io (índice git o sparse), por igualdad exacta: una subcadena aceptaría
+    # «sparse+https://otro.example/index.crates.io/», que no es crates.io en OSV
+    return src.strip().strip('"') in _CARGO_CRATES_IO
 
 
 def _uv_registry(src: str) -> bool:
