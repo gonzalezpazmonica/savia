@@ -49,7 +49,7 @@ NEW_STATUS=""
 NOTE=""
 BOOTSTRAP=0
 DRY_RUN=0
-NO_TIMELINE=0
+NO_TIMELINE=0  # deprecated no-op
 
 usage() {
   cat <<EOF
@@ -67,7 +67,7 @@ Options:
   --note TEXT       One-line rationale for the LOG.d entry (optional)
   --bootstrap       Generate LOG.md from last 10 specs + git history (seed)
   --dry-run         Show what would happen, don't modify files
-  --no-timeline     Skip automatic timeline entry (spec-timeline-append.py)
+  --no-timeline     Deprecated no-op (the timeline entry was removed; kept so old callers do not fail)
   -h, --help        This help
 
 Exit codes:
@@ -272,21 +272,4 @@ if [[ "$WRITE_LOG" -eq 1 ]]; then
   echo "Logged:  $LOGGED"
 else
   echo "WARN: '$SPEC_ID' es un id heredado fuera del registro SE-NNN: sin entrada de LOG (SE-500)" >&2
-fi
-
-# ── SPEC-182: auto-append bitemporal timeline entry ──────────────────────────
-if [[ "$NO_TIMELINE" -eq 0 ]]; then
-  TIMELINE_SCRIPT="$SCRIPT_DIR/spec-timeline-append.py"
-  if [[ -f "$TIMELINE_SCRIPT" ]]; then
-    python3 "$TIMELINE_SCRIPT" \
-      --file "$SPEC" \
-      --from "$DATE_STR" \
-      --learned "$DATE_STR" \
-      --value "$NEW_STATUS" \
-      --source "spec-lifecycle:auto" \
-      && echo "Timeline: entry appended ($NEW_STATUS)" \
-      || echo "WARN: timeline append failed (non-fatal)" >&2
-  else
-    echo "WARN: spec-timeline-append.py not found — skipping timeline (use --no-timeline to suppress)" >&2
-  fi
 fi
