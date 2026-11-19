@@ -24,7 +24,6 @@ check_pattern() {
   while IFS= read -r -d '' f; do
     [[ "$f" == *"no-write-assert"* ]] && continue
     [[ "$f" == *"corporate-attest"* ]] && continue
-    [[ "$f" == *"fleet-dashboard"* ]] && continue
     if grep -qn "$pat" "$f" 2>/dev/null; then
       FOUND+=("$f:$desc")
       EXIT_CODE=1
