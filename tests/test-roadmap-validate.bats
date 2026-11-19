@@ -525,3 +525,55 @@ add_retired_spec() { # <id> : registra SE-NNN como RETIRED (estado, spec y LOG c
   run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
   [ "$status" -ne 0 ]
 }
+
+# Fases aparcadas por spec retirada (decisión de la operadora): se aceptan con motivo; el resto sigue fallando.
+park_entry() { # <blocked_by> [reason] : añade un aparcado a S01
+  set_plan_filter ".route.session_plan[0].parked = [{\"slices\":\"SE-375 F3\",\"blocked_by\":\"$1\",\"reason\":\"${2-rediseñar a partir del 26-11}\"}]"
+}
+
+@test "parked: a phase parked for a RETIRED spec is accepted even if its prerequisites cite it" {
+  set_session_plan
+  add_retired_spec SE-376
+  set_plan_filter '.route.session_plan[0].prerequisites = "SE-376 implementada en la ruta piloto"'
+  park_entry SE-376
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: planning state consistente"* ]]
+}
+
+@test "parked: parking one RETIRED spec does not excuse a live dependency on another" {
+  set_session_plan
+  add_retired_spec SE-376
+  add_retired_spec SE-377
+  set_plan_filter '.route.session_plan[0].prerequisites = "SE-376 y SE-377 implementadas"'
+  park_entry SE-376
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"la cola depende de una spec RETIRED: S01:SE-377"* ]]
+  [[ "$output" != *"S01:SE-376"* ]]
+}
+
+@test "parked: an entry whose blocking spec is not RETIRED fails" {
+  set_session_plan
+  park_entry SE-375
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"fase aparcada inválida"* ]]
+}
+
+@test "parked: an entry without a reason fails" {
+  set_session_plan
+  add_retired_spec SE-376
+  park_entry SE-376 ""
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"fase aparcada inválida"* ]]
+}
+
+@test "parked: render shows the parked phase with its reason" {
+  set_session_plan
+  add_retired_spec SE-376
+  park_entry SE-376
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" current
+  [[ "$output" == *"Aparcado: SE-375 F3 — bloqueada por spec retirada (SE-376); rediseñar a partir del 26-11"* ]]
+}

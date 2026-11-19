@@ -39,7 +39,7 @@ render_sessions() {
   echo "## Cola de sesiones (orden por gates, sin fechas)"
   echo
   jq -r '.route.session_plan[] |
-    "- **\(.id) · \(.priority) · fase \(.phase)** — \(.title)\n  Acción: \(.action)\n  Entrada: \(.prerequisites)\n  Salida: \(.done)\n  Necesidad: \(.necessity); urgencia: \(.urgency); valor: \(.value); desbloqueo: \(.dependency_value); esfuerzo: \(.effort).\n"' "$STATE"
+    "- **\(.id) · \(.priority) · fase \(.phase)** — \(.title)\n  Acción: \(.action)\n  Entrada: \(.prerequisites)\n\((.parked // []) | map("  Aparcado: \(.slices) — bloqueada por spec retirada (\(.blocked_by)); \(.reason)\n") | join(""))  Salida: \(.done)\n  Necesidad: \(.necessity); urgencia: \(.urgency); valor: \(.value); desbloqueo: \(.dependency_value); esfuerzo: \(.effort).\n"' "$STATE"
 }
 
 case "$CMD" in
@@ -259,12 +259,25 @@ case "$CMD" in
         # Si jq falla, el check falla cerrado.
         if RETD=$(jq -r '(.initiatives | map({(.id): .status}) | add) as $st
           | .route.session_plan[]? | .id as $s
+          | ((.parked // []) | map(.blocked_by)) as $pk
           | ( ((.initiatives // [])[] | select($st[.] == "RETIRED")),
               ((.prerequisites // "") | scan("SE-[0-9]+") | select($st[.] == "RETIRED")) )
+          | select(. as $r | $pk | index($r) | not)
           | "\($s):\(.)"' "$STATE" 2>/dev/null); then
           [[ -n "$RETD" ]] && { echo "FAIL: la cola depende de una spec RETIRED: $(echo "$RETD" | sort -u | paste -sd, -)"; ERR=1; }
         else
           echo "FAIL: check de specs retiradas no evaluable (jq falló sobre $STATE)"; ERR=1
+        fi
+        # 12b. Una fase aparcada necesita motivo, el bloqueo debe ser una spec RETIRED y la
+        # operadora debe constar: un aparcado huérfano (spec ya no retirada) o sin motivo falla.
+        if PKB=$(jq -r '(.initiatives | map({(.id): .status}) | add) as $st
+          | .route.session_plan[]? | .id as $s | (.parked // [])[]
+          | select((.slices // "" | length) == 0 or (.reason // "" | length) == 0
+                   or ($st[.blocked_by // ""] != "RETIRED"))
+          | "\($s):\(.blocked_by // "?")"' "$STATE" 2>/dev/null); then
+          [[ -n "$PKB" ]] && { echo "FAIL: fase aparcada inválida (sin motivo o bloqueo no RETIRED): $(echo "$PKB" | sort -u | paste -sd, -)"; ERR=1; }
+        else
+          echo "FAIL: check de fases aparcadas no evaluable (jq falló sobre $STATE)"; ERR=1
         fi
       fi
     fi

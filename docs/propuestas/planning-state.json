@@ -1827,7 +1827,14 @@
         "dependency_value": "Savia Viva (SE-515 S3–S4), el sprint nocturno y el modo mediado de Space dependen de este bloque",
         "effort": "cinco specs medianas en serie; cuatro decisiones pendientes",
         "prerequisites": "SE-496, SE-498 y SE-508 aprobadas (2026-11-09, escenas confirmadas); falta el prototipo S0 de cada una antes de S1. Una en curso cada vez; riesgo alto: revisión humana del PR concreto. SE-512, SE-491, SE-499 y SE-494 siguen PROPOSED.",
-        "done": "Cada spec decidida; las aprobadas con sus AC y pruebas negativas en los dos frontends; ninguna ruta de efecto nueva sin su gate."
+        "done": "Cada spec decidida; las aprobadas con sus AC y pruebas negativas en los dos frontends; ninguna ruta de efecto nueva sin su gate.",
+        "parked": [
+          {
+            "slices": "SE-498 F3 y R7",
+            "blocked_by": "SE-493",
+            "reason": "decisión de la operadora 2026-11-19: rediseñar a partir del 26-11 sobre el registro existente"
+          }
+        ]
       },
       {
         "id": "S27",
@@ -2084,7 +2091,14 @@
         "dependency_value": "protege el recurso más escaso; SE-515 con revisión obligatoria necesita esta cola",
         "effort": "slices pequeños independientes",
         "prerequisites": "Aprobación de SE-492 y SE-507 por la operadora, con escenas confirmadas (SE-505). SE-514 ya aprobada (2026-11-09): su S1 va después de S22.",
-        "done": "Peticiones a la persona medidas antes y después; ningún permiso inferido del silencio; cada spec con sus negativos."
+        "done": "Peticiones a la persona medidas antes y después; ningún permiso inferido del silencio; cada spec con sus negativos.",
+        "parked": [
+          {
+            "slices": "SE-514 S2",
+            "blocked_by": "SE-513",
+            "reason": "decisión de la operadora 2026-11-19: rediseñar a partir del 26-11 sobre el registro existente"
+          }
+        ]
       },
       {
         "id": "S31",
@@ -2205,8 +2219,15 @@
         "value": "por demostrar",
         "dependency_value": "convierte una lección en garantía comprobable, o lo descarta con datos",
         "effort": "un dominio; medio",
-        "prerequisites": "S29 con GO; S23 con SE-498 implementada en la ruta piloto (el libro de efectos está retirado: la dependencia de SE-515 S3–S4 queda pendiente de la operadora); S28 con aprobación auténtica disponible.",
-        "done": "El efecto inválido se bloquea en la ruta cubierta aunque el modelo ignore la lección; garantía declarada por ruta; canario con retirada."
+        "prerequisites": "S29 con GO; S23 con SE-498 implementada en la ruta piloto (el libro de efectos está retirado: SE-515 S3–S4 queda aparcada por decisión de la operadora); S28 con aprobación auténtica disponible.",
+        "done": "El efecto inválido se bloquea en la ruta cubierta aunque el modelo ignore la lección; garantía declarada por ruta; canario con retirada.",
+        "parked": [
+          {
+            "slices": "SE-515 S3–S4",
+            "blocked_by": "SE-493",
+            "reason": "decisión de la operadora 2026-11-19: rediseñar a partir del 26-11 sobre el registro existente"
+          }
+        ]
       },
       {
         "id": "S09",
