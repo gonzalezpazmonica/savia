@@ -465,3 +465,63 @@ set_plan_filter() {
   run bash -c 'set -uo pipefail; . scripts/lib/planning-completion.sh; planning_pr_merged "$1" origin/main 9999' _ "$FIXTURE"
   [ "$status" -eq 1 ]
 }
+
+# Cola vs specs RETIRED: una entrada de la cola no puede depender de una spec retirada.
+add_retired_spec() { # <id> : registra SE-NNN como RETIRED (estado, spec y LOG coherentes)
+  jq --arg id "$1" '.initiatives += [{"id":$id,"status":"RETIRED","phase":"A"}]' \
+    "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  printf '%s\n' 'status: RETIRED' > "$FIXTURE/docs/specs/${1}-retired.spec.md"
+  printf '## 2026-09-06 %s RETIRED\n\nfixture\n' "$1" >> "$FIXTURE/docs/propuestas/LOG.md"
+}
+
+@test "retired: validate accepts a RETIRED spec that no queue entry uses" {
+  set_session_plan
+  add_retired_spec SE-376
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: planning state consistente"* ]]
+}
+
+@test "retired: validate rejects a queue entry listing a RETIRED initiative" {
+  set_session_plan
+  add_retired_spec SE-376
+  set_plan_filter '.route.session_plan[0].initiatives += ["SE-376"]'
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"la cola depende de una spec RETIRED: S01:SE-376"* ]]
+}
+
+@test "retired: validate rejects a queue entry citing a RETIRED spec in its prerequisites" {
+  set_session_plan
+  add_retired_spec SE-376
+  set_plan_filter '.route.session_plan[0].prerequisites = "SE-376 implementada en la ruta piloto"'
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"la cola depende de una spec RETIRED: S01:SE-376"* ]]
+}
+
+@test "retired: a non-RETIRED spec cited in prerequisites does not trip the check" {
+  set_session_plan
+  set_plan_filter '.route.session_plan[0].prerequisites = "SE-375 implementada en la ruta piloto"'
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"RETIRED"* ]]
+}
+
+@test "retired: mutating the RETIRED comparison lets the dependency through (the check is what fails)" {
+  set_session_plan
+  add_retired_spec SE-376
+  set_plan_filter '.route.session_plan[0].initiatives += ["SE-376"]'
+  local mut="$BATS_TEST_TMPDIR/mut/scripts" f
+  mkdir -p "$mut"
+  for f in scripts/*; do
+    [[ "$(basename "$f")" == roadmap.sh ]] || ln -s "$PWD/$f" "$mut/$(basename "$f")"
+  done
+  grep -q '== "RETIRED"' "$SCRIPT"
+  sed 's/== "RETIRED"/== "NO-EXISTE"/g' "$SCRIPT" > "$mut/roadmap.sh"
+  run env REPO_ROOT="$FIXTURE" bash "$mut/roadmap.sh" validate
+  [ "$status" -eq 0 ]
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+}

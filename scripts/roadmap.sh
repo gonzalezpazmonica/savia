@@ -254,6 +254,18 @@ case "$CMD" in
         else
           echo "FAIL: check de aprobaciones obsoletas no evaluable (jq falló sobre $STATE)"; ERR=1
         fi
+        # 12. Una entrada de la cola no puede depender de una spec RETIRED: ni en su lista de
+        # iniciativas ni citada en sus requisitos de entrada. Una spec retirada no se construye.
+        # Si jq falla, el check falla cerrado.
+        if RETD=$(jq -r '(.initiatives | map({(.id): .status}) | add) as $st
+          | .route.session_plan[]? | .id as $s
+          | ( ((.initiatives // [])[] | select($st[.] == "RETIRED")),
+              ((.prerequisites // "") | scan("SE-[0-9]+") | select($st[.] == "RETIRED")) )
+          | "\($s):\(.)"' "$STATE" 2>/dev/null); then
+          [[ -n "$RETD" ]] && { echo "FAIL: la cola depende de una spec RETIRED: $(echo "$RETD" | sort -u | paste -sd, -)"; ERR=1; }
+        else
+          echo "FAIL: check de specs retiradas no evaluable (jq falló sobre $STATE)"; ERR=1
+        fi
       fi
     fi
     # 11. Puerta de comprensión (SE-505): superficie humana aprobada exige escenas confirmadas
