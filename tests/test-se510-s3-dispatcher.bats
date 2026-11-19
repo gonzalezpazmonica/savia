@@ -13,7 +13,13 @@ setup() {
 teardown() { chmod -R u+rwx "$T" 2>/dev/null; rm -rf "$T"; }
 
 mkhook() { printf '#!/usr/bin/env bash\n%s\n' "$2" > "$T/h/$1.sh"; }
-row() { printf '%s\t%s\t%s\t%s\tprueba\n' "$1" "h/$2.sh" "${3:-spawn}" "${4:-yes}" >> "$T/hooks/routing-pretooluse.tsv"; }
+# Añade una fila y mantiene la línea de control `# filas=N` al final, como el generador.
+row() {
+    local f="$T/hooks/routing-pretooluse.tsv"
+    [[ -f "$f" ]] && sed -i '/^# filas=/d' "$f"
+    printf '%s\t%s\t%s\t%s\tprueba\n' "$1" "h/$2.sh" "${3:-spawn}" "${4:-yes}" >> "$f"
+    printf '# filas=%s\n' "$(grep -vc '^#' "$f")" >> "$f"
+}
 
 @test "AC-5: hook que sale 0 -> 0" {
     mkhook ok 'exit 0'; row Bash ok
@@ -79,10 +85,11 @@ row() { printf '%s\t%s\t%s\t%s\tprueba\n' "$1" "h/$2.sh" "${3:-spawn}" "${4:-yes
     run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]
     [ ! -e "$T/marca" ]
 }
-@test "la entrada llega a cada hook por stdin, intacta" {
+@test "la entrada llega a cada hook por stdin, intacta (byte a byte)" {
     mkhook eco "cat > $T/visto"; row Bash eco
-    run bash "$D" <<< "$IN"; [ "$status" -eq 0 ]
-    [ "$(cat "$T/visto")" = "$IN" ]
+    printf '%s' "$IN" > "$T/in.json"
+    run bash "$D" < "$T/in.json"; [ "$status" -eq 0 ]
+    cmp -s "$T/in.json" "$T/visto"
 }
 
 # ── AC-6: la tabla se genera desde settings.json ──────────────────────────────
@@ -157,12 +164,12 @@ P
     [[ "$output" == *"no soportado"* ]]
 }
 @test "P2: la última fila sin salto de línea también se ejecuta" {
-    mkhook no 'exit 2'; printf 'Bash\th/no.sh\tspawn\tyes\tprueba' > "$T/hooks/routing-pretooluse.tsv"
+    mkhook no 'exit 2'; printf '# filas=1\nBash\th/no.sh\tspawn\tyes\tprueba' > "$T/hooks/routing-pretooluse.tsv"
     run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]
 }
 @test "P2: los argumentos de la tabla llegan literales (sin expansión de globs)" {
     mkhook args "printf '%s\n' \"\$@\" > $T/args"; touch "$T/glob-a" "$T/glob-b"
-    printf 'Bash\th/args.sh guard %s/glob-*\tspawn\tyes\tprueba\n' "$T" > "$T/hooks/routing-pretooluse.tsv"
+    printf 'Bash\th/args.sh guard %s/glob-*\tspawn\tyes\tprueba\n# filas=1\n' "$T" > "$T/hooks/routing-pretooluse.tsv"
     run bash "$D" <<< "$IN"; [ "$status" -eq 0 ]
     [ "$(cat "$T/args")" = "$(printf 'guard\n%s/glob-*' "$T")" ]
 }
@@ -320,4 +327,102 @@ P
         head -1 "$REPO/${s%% *}" | grep -Eq '^#!(/usr/bin/env bash|/bin/bash|/usr/bin/bash)' \
             || { echo "shebang no bash: $s"; false; }
     done < "$REPO/hooks/routing-pretooluse.tsv"
+}
+
+# ── Revisión de la PR #1616 (ronda 3): decisiones por stdout, tabla vacía o truncada, rutas ──
+# stdout del despachador, sin stderr (lo que Claude Code interpreta como decisión).
+run_out() { run bash -c 'bash "$1" 2>/dev/null' _ "$D" <<< "${1:-$IN}"; }
+
+@test "P1: bloqueante con exit 0 y decision:block en stdout -> 2 con el motivo" {
+    mkhook blk 'printf %s "{\"decision\":\"block\",\"reason\":\"commit en main\"}"; exit 0'; row Bash blk
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]
+    [[ "$output" == *"commit en main"* ]]
+}
+@test "P1: permissionDecision deny corta la cadena aunque otros hooks emitan JSON" {
+    mkhook ctx 'printf %s "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"c\"}}"'
+    mkhook deny 'printf %s "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"merge sin grant\"}}"'
+    mkhook mark "touch $T/marca"
+    row '.*' ctx; row 'mcp__.*' deny; row '.*' mark
+    run bash "$D" <<< '{"tool_name":"mcp__github__merge_pull_request","tool_input":{}}'
+    [ "$status" -eq 2 ]; [[ "$output" == *"merge sin grant"* ]]; [ ! -e "$T/marca" ]
+}
+@test "P1: continue:false en stdout -> 2" {
+    mkhook stop 'printf %s "{\"continue\":false,\"stopReason\":\"parada\"}"'; row Bash stop
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [[ "$output" == *"parada"* ]]
+}
+@test "P1: dos hooks que emiten JSON -> un único objeto JSON fusionado (ask gana a allow)" {
+    mkhook allow 'printf %s "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"additionalContext\":\"uno\"}}"'
+    mkhook ask 'printf %s "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"cúpula\",\"additionalContext\":\"dos\"}}"'
+    row Bash allow; row Bash ask
+    run_out; [ "$status" -eq 0 ]
+    python3 -c '
+import json, sys
+d = json.loads(sys.argv[1]); h = d["hookSpecificOutput"]
+assert h["permissionDecision"] == "ask", h
+assert h["permissionDecisionReason"] == "cúpula", h
+assert h["additionalContext"] == "uno\ndos", h
+' "$output"
+}
+@test "P1 negativo: un solo allow se reenvía como allow" {
+    mkhook allow 'printf %s "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}"'
+    row Bash allow
+    run_out; [ "$status" -eq 0 ]
+    [ "$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["hookSpecificOutput"]["permissionDecision"])' "$output")" = allow ]
+}
+@test "P1: updatedInput de un hook se reenvía; dos distintos son incompatibles -> 2" {
+    mkhook u1 'printf %s "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"updatedInput\":{\"model\":\"a\"}}}"'
+    mkhook u2 'printf %s "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"updatedInput\":{\"model\":\"b\"}}}"'
+    row Bash u1
+    run_out; [ "$status" -eq 0 ]; [[ "$output" == *'"updatedInput": {"model": "a"}'* ]]
+    row Bash u2
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [[ "$output" == *"incompatibles"* ]]
+}
+@test "P1: stdout que parece JSON pero no se puede leer -> 2" {
+    mkhook roto 'printf %s "{\"decision\": "'; row Bash roto
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [[ "$output" == *"ilegible"* ]]
+}
+@test "P1: permissionDecision desconocida -> 2" {
+    mkhook raro 'printf %s "{\"hookSpecificOutput\":{\"permissionDecision\":\"quizá\"}}"'; row Bash raro
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [[ "$output" == *"desconocida"* ]]
+}
+@test "límite: texto libre en stdout no es decisión: 0 y stdout del despachador vacío" {
+    mkhook txt 'echo "revisando el comando"'; row Bash txt
+    run_out; [ "$status" -eq 0 ]; [ -z "$output" ]
+}
+@test "límite: el stdout de un no bloqueante se descarta (ni decide ni ensucia el JSON)" {
+    mkhook deny 'printf %s "{\"decision\":\"block\"}"'; row Bash deny spawn no
+    run_out; [ "$status" -eq 0 ]; [ -z "$output" ]
+}
+@test "tabla real: el deny de mcp-effect-guard bloquea el merge aunque los .* emitan JSON" {
+    spy_tree
+    printf '#!/usr/bin/env bash\nprintf %%s %s\n' "'{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"SE-343 sin grant\"}}'" \
+        > "$T/.opencode/hooks/mcp-effect-guard.sh"
+    printf '#!/usr/bin/env bash\nprintf %%s %s\n' "'{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"turnos\"}}'" \
+        > "$T/.opencode/hooks/turn-budget-inject.sh"
+    run bash "$D" <<< '{"tool_name":"mcp__github__merge_pull_request","tool_input":{}}'
+    [ "$status" -eq 2 ]; [[ "$output" == *"SE-343 sin grant"* ]]
+}
+@test "P2: tabla solo con comentarios (sin filas) -> 2" {
+    printf '# cabecera\n# filas=0\n' > "$T/hooks/routing-pretooluse.tsv"
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [[ "$output" == *"sin filas"* ]]
+}
+@test "P2: tabla sin línea de control (truncada) -> 2" {
+    mkhook ok 'exit 0'; row Bash ok; sed -i '/^# filas=/d' "$T/hooks/routing-pretooluse.tsv"
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [[ "$output" == *"línea de control"* ]]
+}
+@test "P2: línea de control que no cuadra con las filas -> 2" {
+    mkhook ok 'exit 0'; row Bash ok; row Edit ok; sed -i '0,/^Bash/{/^Bash/d}' "$T/hooks/routing-pretooluse.tsv"
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [[ "$output" == *"control dice 2"* ]]
+}
+@test "P2: ruta de hook con '..' o absoluta en la tabla -> 2 (no se ejecuta)" {
+    printf '#!/usr/bin/env bash\ntouch %s/fuera\n' "$T" > "$T/fuera.sh"
+    printf 'Bash\th/../fuera.sh\tspawn\tyes\tx\n# filas=1\n' > "$T/hooks/routing-pretooluse.tsv"
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [[ "$output" == *"fuera del repo"* ]]; [ ! -e "$T/fuera" ]
+    printf 'Bash\t%s/fuera.sh\tspawn\tyes\tx\n# filas=1\n' "$T" > "$T/hooks/routing-pretooluse.tsv"
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [[ "$output" == *"fuera del repo"* ]]; [ ! -e "$T/fuera" ]
+}
+@test "AC-6: la tabla generada acaba en la línea de control con el número de filas" {
+    run python3 "$REPO/scripts/dispatch-table.py" generate; [ "$status" -eq 0 ]
+    last="${lines[-1]}"; n=$(printf '%s\n' "$output" | grep -vc '^#')
+    [ "$last" = "# filas=$n" ]
 }

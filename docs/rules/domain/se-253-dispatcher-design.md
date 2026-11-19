@@ -4,11 +4,17 @@
 
 ## Contrato
 
-Salida 0 (permitir) o 2 (bloquear). Nada más. Un hook bloqueante que sale con cualquier otro código, o cualquier fallo del propio despachador, bloquea con el motivo en stderr (clase POLÍTICA: ante la duda, política).
+Salida 0 (permitir) o 2 (bloquear). Un hook bloqueante que sale con cualquier otro código, o cualquier fallo del propio despachador, bloquea con el motivo en stderr (clase POLÍTICA: ante la duda, política). En stdout, como mucho un objeto JSON con las decisiones fusionadas de los bloqueantes.
+
+Un hook puede decidir también con exit 0 y JSON en stdout, como en Claude Code (`mcp-effect-guard` deniega el merge así; `block-commit-to-main` emite `decision:"block"`). El despachador lee el stdout de cada bloqueante: `permissionDecision:"deny"`, `decision:"block"` o `continue:false` cortan con exit 2 y el motivo; `ask` y `allow` se fusionan (ask gana; deny ya habría cortado), igual que `additionalContext` y `systemMessage`; `updatedInput` se reenvía si lo emite un solo hook (o todos el mismo) y dos distintos bloquean. Los hooks siguientes reciben la entrada original, no la modificada. Texto libre en stdout no es decisión: va a stderr. El stdout de los no bloqueantes (async en Claude Code, que no decide) se descarta.
 
 | Situación | Resultado |
 |---|---|
 | Tabla ausente o ilegible | 2 |
+| Tabla sin filas, sin la línea de control `# filas=N` o con N distinto de las filas (truncada o editada) | 2 |
+| Ruta de hook absoluta o con `..` | 2 |
+| stdout de un bloqueante con `deny`, `block` o `continue:false` | 2 |
+| stdout que empieza por `{` y no es JSON válido, decisión desconocida o `updatedInput` incompatibles | 2 |
 | stdin vacío, JSON roto o sin nombre de herramienta | 2 |
 | Fila de la tabla mal formada, modo distinto de `spawn` o matcher que no es regex válida | 2 |
 | Hook bloqueante registrado que no existe | 2 |
@@ -24,5 +30,6 @@ El JSON se parsea una vez; cada hook recibe la misma entrada por stdin. Primero 
 - El generador solo acepta matchers en `[A-Za-z0-9_|.*]` (donde la regex de Claude Code y la de bash coinciden) y argumentos literales; un `&&`, `;`, `|`, `$(...)`, redirección o glob aborta la generación en vez de perder el segundo comando en silencio.
 - Solo existe el modo `spawn`: `source` no se puede acotar con `timeout` y un `exit` interno escaparía al contrato. `timeout` manda TERM al grupo de procesos del hook y, 5 s después, KILL; si vence el tiempo, el despachador mata el grupo entero, de modo que ningún hijo que ignore TERM queda vivo. La entrada llega a cada hook desde un fichero temporal, no por tubería: un hook que sale 0 sin leer stdin no provoca un SIGPIPE que se confunda con un fallo.
 - Los hooks `prompt` no se despachan por shell: salen en la tabla como `# EXCLUIDO(...)`.
+- Los no bloqueantes corren en serie tras los bloqueantes: su tiempo cuenta contra la acción (hasta el límite por hook). Lanzarlos en segundo plano queda para cuando se cablee el despachador (S3 restante), con la latencia medida en el modo sombra.
 - Tiempo por hook: 100 s uniforme (el mayor `timeout` de settings.json); el generador rechaza un settings con un timeout mayor o no numérico. `DISPATCH_HOOK_TIMEOUT` solo admite un entero de 1 a 100: `0` desactivaría el límite.
 - El exit 1 de un hook suelto es no bloqueante en Claude Code y bloqueante aquí: esa diferencia es buscada y es lo que el modo sombra (S3 restante) debe inventariar antes de sustituir registros (AC-9).

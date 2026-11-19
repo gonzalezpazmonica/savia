@@ -95,9 +95,12 @@ def render():
         "# bloqueante=yes: exit 2, exit distinto de 0, tiempo agotado o hook ausente => el despachador sale 2.",
         "# bloqueante=no (async:true en settings.json): corre tras los bloqueantes; su fallo solo avisa.",
         "# Orden = orden de settings.json (el primer exit 2 corta). Un comando repetido corre una vez.",
+        "# stdout JSON de un bloqueante (deny/block/continue:false) bloquea; ask/allow/updatedInput se fusionan.",
+        "# La última línea `# filas=N` es de control: sin ella, o si N no cuadra, el despachador bloquea.",
     ]
     out += [f"# EXCLUIDO({t}) matcher={m}: no se despacha por shell" for m, t in excluded]
     out += ["\t".join(r) for r in rows]
+    out.append(f"# filas={len(rows)}")
     return "\n".join(out) + "\n"
 
 
