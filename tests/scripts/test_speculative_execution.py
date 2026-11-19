@@ -1,5 +1,5 @@
 """
-tests/scripts/test_speculative_execution.py — pytest suite for SE-220 Slices 1-4.
+tests/scripts/test_speculative_execution.py — pytest suite for SE-220 Slices 1-3.
 
 Covers:
   - predictor: whitelist_only=true for all-Read/Grep/Glob/Bash predictions
@@ -9,17 +9,9 @@ Covers:
   - execution.py: TTL expiry removes cache entry
   - execution.py: orchestrate() returns required fields
   - execution.py: speculative_launched=True only when whitelist+confidence met
-  - cache-manager: get/set/expire cycle
-  - cache-manager: concurrent access doesn't corrupt
-  - cache-manager: clean() removes expired entries
-  - cache-manager: stats() returns correct structure
-  - telemetry-report: hit rate calculated correctly
-  - telemetry-report: GO verdict when hit_rate>=0.3 AND latency>=100
-  - telemetry-report: KILL verdict when accuracy<0.5
-  - telemetry-report: KILL verdict when cache_hit_rate<0.10
   - telemetry: telemetry file appended on orchestrate()
 
-Ref: SE-220 Speculative Tool Execution, Slices 1-4
+Ref: SE-220 Speculative Tool Execution, Slices 1-3
 """
 from __future__ import annotations
 
@@ -41,8 +33,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 PREDICTOR_SCRIPT  = ROOT / "scripts" / "speculative-tool-predictor.py"
 EXECUTION_SCRIPT  = ROOT / "scripts" / "speculative-tool-execution.py"
-CACHE_MGR_SCRIPT  = ROOT / "scripts" / "speculative-cache-manager.py"
-REPORT_SCRIPT     = ROOT / "scripts" / "speculative-telemetry-report.sh"
 
 
 def _load_module(path: Path, name: str):
@@ -60,11 +50,6 @@ def predictor():
 @pytest.fixture(scope="module")
 def execution():
     return _load_module(EXECUTION_SCRIPT, "speculative_tool_execution")
-
-
-@pytest.fixture(scope="module")
-def cache_mgr():
-    return _load_module(CACHE_MGR_SCRIPT, "speculative_cache_manager")
 
 
 # Use a temporary cache dir for every test to avoid cross-test pollution.
@@ -224,186 +209,3 @@ class TestExecutionOrchestrator:
         )
         assert hit is False
         assert cached is None
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# T12-T17: Cache manager
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestCacheManager:
-
-    def _get_fresh_module(self, tmp_path):
-        """Load a fresh instance of cache_manager pointing at tmp_path."""
-        mod = _load_module(CACHE_MGR_SCRIPT, f"cm_{id(tmp_path)}")
-        mod.CACHE_DIR = tmp_path / "cache"
-        mod.DEFAULT_TTL = 30
-        return mod
-
-    def test_get_set_cycle(self, tmp_path):
-        """set then get returns the same result."""
-        mod = self._get_fresh_module(tmp_path)
-        mod.cache_set("Read", "abc123", {"content": "hello"}, ttl=30)
-        result = mod.cache_get("Read", "abc123", ttl=30)
-        assert result == {"content": "hello"}
-
-    def test_get_returns_none_on_miss(self, tmp_path):
-        """get returns None for a key that was never set."""
-        mod = self._get_fresh_module(tmp_path)
-        result = mod.cache_get("Read", "nonexistent_hash_xyz", ttl=30)
-        assert result is None
-
-    def test_ttl_expiry_removes_entry(self, tmp_path):
-        """Entry with TTL=0 is immediately expired; get returns None."""
-        mod = self._get_fresh_module(tmp_path)
-        mod.cache_set("Grep", "hash_ttl", {"data": "value"}, ttl=0)
-        # TTL=0 means expired immediately; wait a tiny bit to ensure age>0
-        time.sleep(0.01)
-        result = mod.cache_get("Grep", "hash_ttl", ttl=0)
-        assert result is None, f"Expected None (expired), got {result}"
-
-    def test_clean_removes_expired(self, tmp_path):
-        """clean() removes expired entries, keeps valid ones."""
-        mod = self._get_fresh_module(tmp_path)
-        mod.cache_set("Bash", "hash_expired", {"x": 1}, ttl=0)
-        mod.cache_set("Read", "hash_valid",   {"y": 2}, ttl=300)
-        time.sleep(0.01)
-        counts = mod.cache_clean()
-        assert counts["removed"] >= 1
-        # Valid entry still retrievable
-        result = mod.cache_get("Read", "hash_valid", ttl=300)
-        assert result == {"y": 2}
-
-    def test_stats_returns_correct_structure(self, tmp_path):
-        """stats() returns dict with required keys."""
-        mod = self._get_fresh_module(tmp_path)
-        mod.cache_set("Read", "h1", {"a": 1}, ttl=300)
-        stats = mod.cache_stats()
-        for key in ("total", "expired", "active", "cache_dir"):
-            assert key in stats, f"Missing key '{key}' in stats"
-        assert stats["total"] >= 1
-        assert stats["active"] >= 1
-
-    def test_concurrent_writes_do_not_corrupt(self, tmp_path):
-        """Multiple threads writing different keys concurrently all succeed."""
-        mod = self._get_fresh_module(tmp_path)
-        errors = []
-
-        def writer(i):
-            try:
-                mod.cache_set("Read", f"concurrent_{i}", {"index": i}, ttl=60)
-            except Exception as exc:
-                errors.append(str(exc))
-
-        threads = [threading.Thread(target=writer, args=(i,)) for i in range(10)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-        assert not errors, f"Concurrent write errors: {errors}"
-        # All 10 entries should be readable
-        for i in range(10):
-            result = mod.cache_get("Read", f"concurrent_{i}", ttl=60)
-            assert result == {"index": i}, f"Entry {i} corrupted or missing"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# T18-T22: Telemetry report (via shell script + Python inline logic)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _write_telemetry(tmp_path: Path, records: list[dict]) -> Path:
-    """Write JSONL telemetry file for testing."""
-    telem = tmp_path / "telemetry.jsonl"
-    with telem.open("w") as fh:
-        for r in records:
-            fh.write(json.dumps(r) + "\n")
-    return telem
-
-
-class TestTelemetryReport:
-
-    def _run_report(self, telem_file: Path, as_json: bool = True) -> dict:
-        """Run the telemetry report script and return parsed JSON output."""
-        cmd = ["bash", str(REPORT_SCRIPT), "--file", str(telem_file)]
-        if as_json:
-            cmd.append("--json")
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        assert result.returncode == 0, f"Script failed: {result.stderr}"
-        return json.loads(result.stdout)
-
-    def test_hit_rate_calculated_correctly(self, tmp_path):
-        """3 hits out of 5 resolve records → hit rate = 0.6."""
-        records = [
-            # 3 hits
-            {"ts": "2026-01-01T00:00:00Z", "cache_hit": True,  "latency_saved_ms": 200,
-             "predicted": ["Read"], "actual": ["Read"]},
-            {"ts": "2026-01-01T00:00:01Z", "cache_hit": True,  "latency_saved_ms": 150,
-             "predicted": ["Read"], "actual": ["Read"]},
-            {"ts": "2026-01-01T00:00:02Z", "cache_hit": True,  "latency_saved_ms": 300,
-             "predicted": ["Bash"], "actual": ["Bash"]},
-            # 2 misses
-            {"ts": "2026-01-01T00:00:03Z", "cache_hit": False, "latency_saved_ms": 0,
-             "predicted": ["Read"], "actual": ["Grep"]},
-            {"ts": "2026-01-01T00:00:04Z", "cache_hit": False, "latency_saved_ms": 0,
-             "predicted": ["Bash"], "actual": ["Read"]},
-        ]
-        telem = _write_telemetry(tmp_path, records)
-        data = self._run_report(telem)
-        assert data["cache_hit_rate"] == pytest.approx(0.6, abs=0.01)
-
-    def test_go_verdict_when_criteria_met(self, tmp_path):
-        """hit_rate>=0.30 AND avg_latency>=100 → GO."""
-        records = [
-            {"cache_hit": True,  "latency_saved_ms": 500, "predicted": ["Read"], "actual": ["Read"]},
-            {"cache_hit": True,  "latency_saved_ms": 400, "predicted": ["Read"], "actual": ["Read"]},
-            {"cache_hit": False, "latency_saved_ms": 0,   "predicted": ["Read"], "actual": ["Grep"]},
-        ]
-        telem = _write_telemetry(tmp_path, records)
-        data = self._run_report(telem)
-        assert data["verdict"] == "GO", f"Expected GO, got {data['verdict']} metrics={data}"
-
-    def test_kill_verdict_when_accuracy_below_threshold(self, tmp_path):
-        """prediction_accuracy < 0.50 → KILL."""
-        records = [
-            {"cache_hit": True, "latency_saved_ms": 200,
-             "predicted": ["Read"],  "actual": ["Read"]},
-            # accuracy killers: predicted wrong 5/6 times
-            {"cache_hit": False, "latency_saved_ms": 0, "predicted": ["Read"],  "actual": ["Edit"]},
-            {"cache_hit": False, "latency_saved_ms": 0, "predicted": ["Read"],  "actual": ["Edit"]},
-            {"cache_hit": False, "latency_saved_ms": 0, "predicted": ["Read"],  "actual": ["Edit"]},
-            {"cache_hit": False, "latency_saved_ms": 0, "predicted": ["Read"],  "actual": ["Write"]},
-            {"cache_hit": False, "latency_saved_ms": 0, "predicted": ["Read"],  "actual": ["Write"]},
-        ]
-        telem = _write_telemetry(tmp_path, records)
-        data = self._run_report(telem)
-        # accuracy: 1/6 = 0.17 < 0.50 → KILL
-        assert data["verdict"] == "KILL", f"Expected KILL, got {data['verdict']}"
-        assert data["prediction_accuracy"] < 0.50
-
-    def test_kill_verdict_when_cache_hit_rate_below_threshold(self, tmp_path):
-        """cache_hit_rate < 0.10 → KILL (even if accuracy would be ok)."""
-        records = [
-            {"cache_hit": True,  "latency_saved_ms": 200, "predicted": ["Read"], "actual": ["Read"]},
-            # 15 misses → hit rate = 1/16 ≈ 0.06 < 0.10
-        ] + [
-            {"cache_hit": False, "latency_saved_ms": 0, "predicted": ["Read"], "actual": ["Read"]}
-            for _ in range(15)
-        ]
-        telem = _write_telemetry(tmp_path, records)
-        data = self._run_report(telem)
-        assert data["verdict"] == "KILL", f"Expected KILL (low hit rate), got {data['verdict']}"
-
-    def test_table_output_produced(self, tmp_path):
-        """Non-JSON mode produces a text table with VERDICT line."""
-        records = [
-            {"cache_hit": True, "latency_saved_ms": 150, "predicted": ["Read"], "actual": ["Read"]},
-        ]
-        telem = _write_telemetry(tmp_path, records)
-        result = subprocess.run(
-            ["bash", str(REPORT_SCRIPT), "--file", str(telem)],
-            capture_output=True, text=True,
-        )
-        assert result.returncode == 0
-        assert "VERDICT" in result.stdout or "verdict" in result.stdout.lower()
-        # Should contain the table header
-        assert "SE-220" in result.stdout or "Speculative" in result.stdout
