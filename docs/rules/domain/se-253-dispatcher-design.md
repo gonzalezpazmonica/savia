@@ -21,6 +21,8 @@ Un hook puede decidir también con exit 0 y JSON en stdout, como en Claude Code 
 | Hook bloqueante con exit distinto de 0 y 2 (incluido 1) | 2 |
 | Hook bloqueante que excede el tiempo | 2 |
 | Hook no bloqueante que falla | 0, con aviso |
+| Error del propio despachador (p. ej. variable sin definir) o muerte por TERM/INT/HUP | 2 (el trap de salida normaliza todo lo que no sea 0 o 2 y mata el hook en marcha) |
+| Línea de control `# filas=` que no es decimal canónico de 1 a 6 cifras (`08`, desbordes) | 2 |
 
 El JSON se parsea una vez; cada hook recibe la misma entrada por stdin. Primero corren los bloqueantes en orden de tabla y el primer exit 2 corta la cadena; después, los no bloqueantes. Un mismo comando corre una vez por acción aunque aparezca en dos filas (Claude Code deduplica comandos idénticos). El matcher se evalúa como regex anclada, igual que en Claude Code (`mcp__.*` casa con `mcp__github__create_issue`).
 
@@ -33,3 +35,11 @@ El JSON se parsea una vez; cada hook recibe la misma entrada por stdin. Primero 
 - Los no bloqueantes corren en serie tras los bloqueantes: su tiempo cuenta contra la acción (hasta el límite por hook). Lanzarlos en segundo plano queda para cuando se cablee el despachador (S3 restante), con la latencia medida en el modo sombra.
 - Tiempo por hook: 100 s uniforme (el mayor `timeout` de settings.json); el generador rechaza un settings con un timeout mayor o no numérico. `DISPATCH_HOOK_TIMEOUT` solo admite un entero de 1 a 100: `0` desactivaría el límite.
 - El exit 1 de un hook suelto es no bloqueante en Claude Code y bloqueante aquí: esa diferencia es buscada y es lo que el modo sombra (S3 restante) debe inventariar antes de sustituir registros (AC-9).
+
+## Pendiente antes de registrar el despachador (S3 restante / S4)
+
+Señalado en la revisión de #1616; no bloquea mientras el despachador no esté registrado:
+
+- **Timeout exterior.** Si Claude Code mata al despachador por su propio `timeout`, lo trata como error no bloqueante y la acción pasa. El `timeout` del registro debe cubrir la suma de los bloqueantes y medirse con el bench de latencia (AC-8).
+- **Semántica del matcher.** La regex anclada `^(m)$` se asume igual a la de Claude Code; el modo sombra (AC-9) debe confirmarlo antes de sustituir registros.
+- **`updatedInput` y guards siguientes.** Los guards evalúan la entrada original, no la reescrita. Antes de S4: limitar qué hooks pueden emitir `updatedInput` o reevaluar los bloqueantes sobre la entrada nueva.

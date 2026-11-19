@@ -27,6 +27,29 @@ block() {
     exit 2
 }
 
+# Cualquier salida distinta de 0 y 2 (error del propio bash con `-u`, señal, fallo no previsto)
+# se normaliza a 2: Claude Code trata el exit 1 como no bloqueante y eso sería fallar abierto.
+WORK="" INPUT_FILE="" HOOK_OUT="" DECISIONS=""
+on_exit() {
+    local rc=$?
+    if [[ -n "$WORK" ]]; then
+        rm -f -- "$INPUT_FILE" "$HOOK_OUT" "$DECISIONS"
+        rmdir -- "$WORK" 2>/dev/null
+    fi
+    # Si al despachador lo matan con un hook en marcha, el grupo del hook no queda huérfano.
+    [[ -n "${hook_pid:-}" ]] && kill -KILL -- "-$hook_pid" 2>/dev/null
+    if [[ "$rc" -ne 0 && "$rc" -ne 2 ]]; then
+        echo "[dispatch-pretooluse] BLOQUEO (POLÍTICA): fallo interno del despachador (rc $rc)" >&2
+        exit 2
+    fi
+    exit "$rc"
+}
+trap on_exit EXIT
+# Muerto por señal, bash conservaría el 128+N aunque el trap EXIT haga `exit 2`: se sale a mano.
+trap 'exit 143' TERM; trap 'exit 130' INT; trap 'exit 129' HUP
+# `declare -A` necesita bash >= 4; en bash 3, DONE[...] sería un índice aritmético.
+[[ "${BASH_VERSINFO[0]:-0}" -ge 4 ]] || block "bash ${BASH_VERSION:-?} no soportado (hace falta >= 4)"
+
 # Entero 1..100: `timeout 0` desactivaría el límite y un hook colgado colgaría la sesión.
 [[ "$HOOK_TIMEOUT" =~ ^[1-9][0-9]*$ && "$HOOK_TIMEOUT" -le 100 ]] \
     || block "DISPATCH_HOOK_TIMEOUT inválido (entero 1..100): $HOOK_TIMEOUT"
@@ -52,7 +75,6 @@ command -v timeout >/dev/null 2>&1 || block "timeout no disponible: no se puede 
 # sin leer stdin dejaba a printf con SIGPIPE (141) y el despachador bloqueaba en falso.
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/dispatch-pretooluse.XXXXXX") || block "no se pudo crear el directorio de trabajo"
 INPUT_FILE="$WORK/input" HOOK_OUT="$WORK/out" DECISIONS="$WORK/decisions.jsonl"
-trap 'rm -f -- "$INPUT_FILE" "$HOOK_OUT" "$DECISIONS"; rmdir -- "$WORK" 2>/dev/null' EXIT
 printf '%s' "$INPUT" > "$INPUT_FILE" || block "no se pudo escribir el fichero de entrada"
 : > "$DECISIONS" || block "no se pudo crear el registro de decisiones"
 
@@ -132,11 +154,15 @@ if len(hso) > 1 or msgs:
 # ── Lee y valida la tabla entera antes de ejecutar nada ───────────────────────
 # `|| [[ -n "$matcher" ]]`: la última fila cuenta aunque no acabe en salto de línea.
 # La línea de control `# filas=N` (la última que escribe el generador) detecta una tabla vacía,
-# truncada o con filas añadidas a mano: sin ella, o si N no coincide, se bloquea.
+# truncada o con filas añadidas a mano: sin ella, o si N no coincide, se bloquea. N es decimal
+# canónico de hasta 6 cifras: `08` no se lee como octal y un número enorme no desborda hasta
+# coincidir con el recuento. Una línea `# filas=` con otra forma es un control inválido.
 ROW_MATCH=() ROW_SPEC=() ROW_BLOCK=() EXPECTED_ROWS=""
 while IFS=$'\t' read -r matcher script_spec mode blocking desc || [[ -n "$matcher" ]]; do
     [[ -z "$matcher" ]] && continue
-    if [[ "$matcher" =~ ^#\ filas=([0-9]+)$ ]]; then
+    if [[ "$matcher" == "# filas="* ]]; then
+        [[ "$matcher" =~ ^#\ filas=(0|[1-9][0-9]{0,5})$ ]] \
+            || block "línea de control inválida en la tabla: $matcher"
         [[ -z "$EXPECTED_ROWS" ]] || block "línea de control '# filas=' repetida en la tabla"
         EXPECTED_ROWS="${BASH_REMATCH[1]}"; continue
     fi
@@ -200,6 +226,7 @@ for pass in yes no; do
         if [[ "$exit_code" -eq 124 || "$exit_code" -eq 137 ]]; then
             kill -KILL -- "-$hook_pid" 2>/dev/null
         fi
+        hook_pid=""   # el pid puede reutilizarse: on_exit solo mata un grupo aún en marcha
         if [[ "$exit_code" -eq 0 ]]; then
             [[ "$pass" == "yes" && -s "$HOOK_OUT" ]] || continue   # sin stdout: sin decisión
             parse_rc=0

@@ -3,7 +3,7 @@
 # El despachador se copia a un árbol temporal con su propia tabla y hooks de prueba.
 
 setup() {
-    REPO="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+    REPO="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
     T="$(mktemp -d)"
     mkdir -p "$T/hooks/dispatchers" "$T/h" "$T/scripts" "$T/.claude"
     cp "${DISPATCHER_UNDER_TEST:-$REPO/hooks/dispatchers/dispatch-pretooluse.sh}" "$T/hooks/dispatchers/dispatch-pretooluse.sh"
@@ -18,7 +18,8 @@ row() {
     local f="$T/hooks/routing-pretooluse.tsv"
     [[ -f "$f" ]] && sed -i '/^# filas=/d' "$f"
     printf '%s\t%s\t%s\t%s\tprueba\n' "$1" "h/$2.sh" "${3:-spawn}" "${4:-yes}" >> "$f"
-    printf '# filas=%s\n' "$(grep -vc '^#' "$f")" >> "$f"
+    # Mismo criterio que el despachador: ni comentarios ni líneas en blanco son filas.
+    printf '# filas=%s\n' "$(grep -vcE '^([[:space:]]*#|[[:space:]]*$)' "$f")" >> "$f"
 }
 
 @test "AC-5: hook que sale 0 -> 0" {
@@ -28,6 +29,7 @@ row() {
 @test "AC-5: hook que sale 2 -> 2" {
     mkhook no 'exit 2'; row Bash no
     run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]
+    [[ "$output" == *"bloqueado por h/no.sh"* ]]
 }
 @test "AC-5: hook bloqueante que sale 1 -> 2 con el motivo" {
     mkhook e1 'exit 1'; row Bash e1
@@ -47,6 +49,7 @@ row() {
     [ "$(id -u)" -ne 0 ] || skip "root lee todo"
     mkhook ok 'exit 0'; row Bash ok; chmod 000 "$T/hooks/routing-pretooluse.tsv"
     run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]
+    [[ "$output" == *"ausente o ilegible"* ]]
 }
 @test "AC-5: JSON malformado -> 2" {
     mkhook ok 'exit 0'; row Bash ok
@@ -56,6 +59,7 @@ row() {
 @test "AC-5: stdin vacío -> 2" {
     mkhook ok 'exit 0'; row Bash ok
     run bash "$D" < /dev/null; [ "$status" -eq 2 ]
+    [[ "$output" == *"malformada o sin nombre"* ]]
 }
 @test "AC-5: JSON válido sin nombre de herramienta -> 2" {
     mkhook ok 'exit 0'; row Bash ok
@@ -166,6 +170,7 @@ P
 @test "P2: la última fila sin salto de línea también se ejecuta" {
     mkhook no 'exit 2'; printf '# filas=1\nBash\th/no.sh\tspawn\tyes\tprueba' > "$T/hooks/routing-pretooluse.tsv"
     run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]
+    [[ "$output" == *"bloqueado por h/no.sh"* ]]
 }
 @test "P2: los argumentos de la tabla llegan literales (sin expansión de globs)" {
     mkhook args "printf '%s\n' \"\$@\" > $T/args"; touch "$T/glob-a" "$T/glob-b"
@@ -216,7 +221,7 @@ spy_tree() {
     run grep -cx mcp-effect-guard.sh "$T/log"; [ "$output" = "0" ]
 }
 @test "tabla real: los hooks async de settings.json son bloqueante=no y el resto yes" {
-    run python3 "$BATS_TEST_DIRNAME/fixtures/se510-async-vs-table.py" "$REPO/.claude/settings.json" "$REPO/hooks/routing-pretooluse.tsv"
+    run python3 "$REPO/tests/fixtures/se510-async-vs-table.py" "$REPO/.claude/settings.json" "$REPO/hooks/routing-pretooluse.tsv"
     [ "$status" -eq 0 ]
 }
 @test "AC-6: async:true en settings.json genera bloqueante=no (y sin async, yes)" {
@@ -425,4 +430,37 @@ assert h["additionalContext"] == "uno\ndos", h
     run python3 "$REPO/scripts/dispatch-table.py" generate; [ "$status" -eq 0 ]
     last="${lines[-1]}"; n=$(printf '%s\n' "$output" | grep -vc '^#')
     [ "$last" = "# filas=$n" ]
+}
+@test "P2: control '# filas=08' (no canónico) -> 2 por control inválido" {
+    mkhook ok 'exit 0'; row Bash ok; sed -i 's/^# filas=1$/# filas=08/' "$T/hooks/routing-pretooluse.tsv"
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [[ "$output" == *"línea de control inválida"* ]]
+}
+@test "P2: control enorme que desborda hasta igualar las filas (2^64+1) -> 2" {
+    mkhook ok 'exit 0'; row Bash ok
+    sed -i 's/^# filas=1$/# filas=18446744073709551617/' "$T/hooks/routing-pretooluse.tsv"
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [[ "$output" == *"línea de control inválida"* ]]
+}
+@test "límite: control con 6 cifras es válido en forma (bloquea solo por no cuadrar)" {
+    mkhook ok 'exit 0'; row Bash ok; sed -i 's/^# filas=1$/# filas=999999/' "$T/hooks/routing-pretooluse.tsv"
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [[ "$output" == *"control dice 999999"* ]]
+}
+@test "límite: líneas en blanco en la tabla no cuentan como filas" {
+    mkhook ok 'exit 0'; printf 'Bash\th/ok.sh\tspawn\tyes\tx\n\n# filas=1\n' > "$T/hooks/routing-pretooluse.tsv"
+    run bash "$D" <<< "$IN"; [ "$status" -eq 0 ]
+}
+@test "P2: un error interno del despachador (variable sin definir) sale 2, no 1" {
+    mkhook ok 'exit 0'; row Bash ok
+    # Mutante: inyecta un error de `set -u` justo antes del despacho.
+    sed -i 's/^declare -A DONE=()$/: "$VARIABLE_QUE_NO_EXISTE"; declare -A DONE=()/' "$D"
+    grep -q 'VARIABLE_QUE_NO_EXISTE' "$D"
+    run bash "$D" <<< "$IN"; [ "$status" -eq 2 ]; [[ "$output" == *"fallo interno del despachador (rc 1)"* ]]
+}
+@test "P2: el despachador matado por TERM sale 2, mata el hook en marcha y no deja el directorio de trabajo" {
+    mkhook slow "sleep 2; touch $T/vivo; exit 0"; row Bash slow
+    export TMPDIR="$T/tmp"; mkdir -p "$TMPDIR"
+    bash "$D" <<< "$IN" 2>/dev/null & pid=$!
+    sleep 0.5; kill -TERM "$pid"; rc=0; wait "$pid" || rc=$?
+    [ "$rc" -eq 2 ]
+    [ -z "$(ls -A "$TMPDIR")" ]
+    sleep 2.5; [ ! -e "$T/vivo" ]   # el hook en marcha muere con el despachador
 }

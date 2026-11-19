@@ -38,6 +38,7 @@ rules:
   - dir: ".opencode/hooks/"
     tests:
       - test-se253-hooks-coverage.bats
+      - test-se510-s3-dispatcher.bats
 
   - dir: "docs/"
     tests:
@@ -49,6 +50,7 @@ rules:
       - test-opencode-config-validate.bats
       - test-se253-hooks-coverage.bats
       - test-contract-pin.bats
+      - test-se510-s3-dispatcher.bats
 
   # SE-369: el catálogo pinea .claude/settings.json; cambiar uno sin el otro
   # rompe AC-6 de contract-pin (regresión de #1168, no detectada por CI).
@@ -69,3 +71,26 @@ rules:
   - dir: "contracts/capabilities/"
     tests:
       - test-se532-agent-catalog.bats
+
+  # SE-510 S3: el despachador PreToolUse y su tabla generada (revisión #1616, P1-1). Sin estas
+  # reglas el control de deriva de AC-6 y los casos de fallo cerrado no llegaban a una PR normal.
+  - dir: "hooks/dispatchers/"
+    tests:
+      - test-se253-dispatcher.bats
+      - test-se510-s3-dispatcher.bats
+  - file: "hooks/routing-pretooluse.tsv"
+    tests:
+      - test-se253-dispatcher.bats
+      - test-se510-s3-dispatcher.bats
+  - file: "scripts/dispatch-table.py"
+    tests:
+      - test-se510-s3-dispatcher.bats
+  - file: "tests/fixtures/se510-async-vs-table.py"
+    tests:
+      - test-se510-s3-dispatcher.bats
+  - file: "tests/bats/test-se510-s3-dispatcher.bats"
+    tests:
+      - test-se510-s3-dispatcher.bats
+  - file: "tests/bats/test-se253-dispatcher.bats"
+    tests:
+      - test-se253-dispatcher.bats
