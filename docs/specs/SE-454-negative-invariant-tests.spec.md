@@ -1,7 +1,7 @@
 ---
 status: DEFERRED
 deferred_at: 2026-11-18
-deferred_reason: "2026-11-18 (propuesta de la orquestadora, pendiente de confirmar por la operadora): aparcada. P2: los invariantes que fijaría ya se cumplen hoy (medido en la spec) y no hay incidente propio; el valor es solo de regresión. Nada construido. Retoma tras la primera regresión de un invariante o cuando entre código sensible nuevo (broker, lectura de cúpulas N3+)."
+deferred_reason: "2026-11-18 (propuesta de la orquestadora, pendiente de confirmar por la operadora): aparcada. P2: los invariantes que fijaría ya se cumplen hoy (lo constata la propia spec, sin comprobación nueva en esta propuesta) y no hay incidente propio; el valor es solo de regresión. Nada construido. Retoma tras la primera regresión de un invariante o cuando entre código sensible nuevo (broker, lectura de cúpulas N3+)."
 approved_at: 2026-10-27
 approved_by: "operadora, AskUserQuestion 2026-10-27"
 priority: P2

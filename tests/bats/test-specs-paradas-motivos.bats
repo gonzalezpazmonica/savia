@@ -43,12 +43,15 @@ ficheros_de() {
   [ "${#FILES[@]}" -eq 3 ]
 }
 
+# Solo el frontmatter de las specs (el cuerpo puede decir otras cosas); los demás ficheros enteros.
+fm() { case "$1" in *.spec.md) awk 'c<2{ if($0=="---")c++; else print }' "$1" ;; *) cat "$1" ;; esac; }
+
 @test "ningún motivo atribuye la decisión a la operadora fuera de la frase de atribución" {
   for i in $IDS; do
     ficheros_de "$i" || { echo "faltan ficheros de SE-$i"; return 1; }
     for f in "${FILES[@]}"; do
       # Se quita la frase de atribución completa; si queda una fórmula que da la decisión por tomada por la operadora, falla.
-      resto="$(grep -iE 'deferral|deferred_reason|aparcad' "$f" | sed 's/propuesta de la orquestadora, pendiente de confirmar por la operadora//g' | grep -iE '\(operadora\)|operadora (decid|aprob|acord|pid|quis|prefier)|(decidid|aprobad|acordad|aparcad|pedid)[oa]s? por (la )?operadora|operadora,? 20[0-9]{2}-' || true)"
+      resto="$(fm "$f" | grep -iE 'deferral|deferred_reason|aparcad' | sed 's/propuesta de la orquestadora, pendiente de confirmar por la operadora//g' | grep -iE '\(operadora\)|operadora (decid|aprob|acord|pid|quis|prefier)|(decidid|aprobad|acordad|aparcad|pedid)[oa]s? por (la )?operadora|operadora,? 20[0-9]{2}-' || true)"
       [ -z "$resto" ] || { echo "atribución a la operadora en $f: $resto"; return 1; }
     done
   done
@@ -61,16 +64,43 @@ ficheros_de() {
   done
 }
 
-@test "SE-458 no afirma un límite de PRs activas que el repo no define" {
-  ficheros_de 458 || return 1
-  run grep -l "ya limita las PRs activas" "${FILES[@]}"
-  [ "$status" -eq 1 ]
+# Premisas comprobables de un motivo: sin número de PR (#N) y cada SE-N citada existe como spec.
+checkmotivo() {
+  python3 -I - "$1" "$2" <<'PY'
+import re, sys, glob, os
+texto, specs = sys.argv[1], sys.argv[2]
+bad = []
+for m in re.findall(r"#\d+", texto):
+    bad.append(f"cita {m} sin comprobar")
+for n in sorted(set(re.findall(r"SE-(\d+)", texto))):
+    if not glob.glob(os.path.join(specs, f"SE-{n}-*.spec.md")):
+        bad.append(f"SE-{n} no existe")
+if bad:
+    print("; ".join(bad)); sys.exit(1)
+PY
 }
 
-@test "SE-450 no afirma trabajo de rutas Windows sin PR citado" {
-  ficheros_de 450 || return 1
-  run grep -l "rutas Windows ya entró" "${FILES[@]}"
+@test "los motivos no citan PRs ni specs que no existen" {
+  for i in $IDS; do
+    ficheros_de "$i" || { echo "faltan ficheros de SE-$i"; return 1; }
+    for f in "${FILES[@]}"; do
+      texto="$(grep -E 'deferral|deferred_reason|aparcad' "$f")"
+      [ -n "$texto" ] || { echo "sin motivo en $f"; return 1; }
+      run checkmotivo "$texto" "$ROOT/docs/specs"
+      [ "$status" -eq 0 ] || { echo "$f: $output"; return 1; }
+    done
+  done
+}
+
+@test "checkmotivo falla con un PR sin comprobar y con una spec inexistente" {
+  run checkmotivo "aparcada: el trabajo ya entró en #1234" "$ROOT/docs/specs"
   [ "$status" -eq 1 ]
+  [[ "$output" == *"#1234"* ]]
+  run checkmotivo "aparcada: depende de SE-99999" "$ROOT/docs/specs"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SE-99999 no existe"* ]]
+  run checkmotivo "aparcada: depende de SE-469" "$ROOT/docs/specs"
+  [ "$status" -eq 0 ]
 }
 
 @test "ninguna referencia activa dice que SE-469 está APPROVED" {
@@ -109,8 +139,11 @@ for s in json.load(open(state, encoding="utf-8"))["route"]["session_plan"]:
     for i in deferred:
         if not (f"SE-{i}" in s.get("initiatives", []) or re.search(rf"SE-{i}\b", texto)):
             continue
-        if not re.search(rf"SE-{i}\b[^.]*aparcad", s.get("action", "") + " " + texto):
-            bad.append(f"{s['id']}: SE-{i}")
+        # cada mención de SE-i, en cada campo, debe estar en una frase que diga aparcad*
+        for campo in ("action", "effort", "dependency_value", "prerequisites"):
+            for frase in re.split(r"(?<=[.;])\s+", str(s.get(campo, ""))):
+                if re.search(rf"SE-{i}\b", frase) and "aparcad" not in frase:
+                    bad.append(f"{s['id']}: SE-{i} ({campo}) sin marca aparcada")
         # en acción y esfuerzo no puede figurar como trabajo a ejecutar
         if re.search(rf"SE-{i} (medio|pequeño|grande)\b|SE-{i}: \d", s.get("action", "") + " " + s.get("effort", "")):
             bad.append(f"{s['id']}: SE-{i} con trabajo asignado")
@@ -136,4 +169,14 @@ PY
 @test "ROADMAP-CURRENT.md no tiene residuo de SE-469 con esfuerzo ni acción vigente" {
   run grep -cE "SE-469 medio|SE-469: 30 casos" "$ROOT/docs/propuestas/ROADMAP-CURRENT.md"
   [ "$status" -eq 1 ]
+}
+
+@test "la comprobación estructural falla con una mención vigente junto a otra marcada aparcada" {
+  mkdir -p "$BATS_TEST_TMPDIR/docs/propuestas"
+  cp -r "$ROOT/docs/propuestas/planning.d" "$BATS_TEST_TMPDIR/docs/propuestas/"
+  sed 's/SE-448 S0 y canario;/SE-448 S0 y canario; SE-449 se implementa esta sesión./' "$ROOT/docs/propuestas/planning-state.json" > "$BATS_TEST_TMPDIR/docs/propuestas/planning-state.json"
+  ! cmp -s "$ROOT/docs/propuestas/planning-state.json" "$BATS_TEST_TMPDIR/docs/propuestas/planning-state.json" || { echo "la mutación no se aplicó"; return 1; }
+  run checkcola "$BATS_TEST_TMPDIR/docs/propuestas/planning-state.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"S14: SE-449"* ]]
 }
