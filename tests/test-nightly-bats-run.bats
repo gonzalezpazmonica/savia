@@ -101,6 +101,29 @@ suite() {  # suite <nombre> <rc> [serial|kill]
   [[ "$output" != *total=* ]]
 }
 
+# Una suite que crea su temporal dentro del repo (mktemp -d "$ROOT/.tmp-x.XXXX") lo deja a la vista de las
+# que recorren el árbol real en el mismo lote: check-pinned-installs lo lista con git ls-files --others,
+# desaparece antes de leerlo y sale 2 («fichero ilegible»).
+in_repo_mktemp() {  # in_repo_mktemp <fichero...>: imprime fichero:línea de cada mktemp con plantilla bajo el repo
+  grep -nE 'mktemp[^)]*"\$\{?(ROOT|REPO_ROOT|REPO|PROJECT_ROOT|SCRIPT_DIR|BATS_TEST_DIRNAME)\}?/' "$@" \
+    | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true
+}
+
+@test "ninguna suite crea su directorio temporal dentro del repo" {
+  # Esta suite contiene la forma mala como fixture del caso siguiente: se excluye a sí misma.
+  run in_repo_mktemp $(ls tests/*.bats tests/bats/*.bats | grep -vxF tests/test-nightly-bats-run.bats)
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "el detector de temporales dentro del repo encuentra la forma mala y respeta la buena" {
+  printf 'setup() { TMP="$(mktemp -d "$ROOT/.tmp-x.XXXXXX")"; }\n' > "$T/mala.bats"
+  printf 'setup() { TMP="$(mktemp -d "$BATS_TEST_TMPDIR/x.XXXXXX")"; }\n' > "$T/buena.bats"
+  run in_repo_mktemp "$T/mala.bats" "$T/buena.bats"
+  [[ "$output" == *"mala.bats:1:"* ]]
+  [[ "$output" != *"buena.bats"* ]]
+}
+
 @test "el workflow nocturno usa el script y no persiste credenciales" {
   grep -q 'bash scripts/nightly-bats-run.sh /tmp/nightly >> "\$GITHUB_OUTPUT"' .github/workflows/nightly-full-bats.yml
   grep -q 'persist-credentials: false' .github/workflows/nightly-full-bats.yml
