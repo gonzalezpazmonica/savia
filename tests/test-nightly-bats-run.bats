@@ -133,9 +133,18 @@ suite() {  # suite <nombre> <rc> [serial|kill]
 # Una suite que crea su temporal dentro del repo (mktemp -d "$ROOT/.tmp-x.XXXX") lo deja a la vista de las
 # que recorren el árbol real en el mismo lote: check-pinned-installs lo lista con git ls-files --others,
 # desaparece antes de leerlo y sale 2 («fichero ilegible»).
+# Formas que detecta (en una línea, antes de cerrar la sustitución): plantilla con la variable dentro o fuera
+# de las comillas ("$ROOT/x.XXXX", "$ROOT"/x.XXXX) y directorio base por -p/--tmpdir ("$ROOT"). Es una guarda
+# contra regresión, no una garantía: no ve un temporal montado en dos pasos (D="$ROOT/.tmp"; mkdir "$D").
+# Sale 0 con o sin coincidencias y 2 si no puede leer algún fichero: «sin hallazgos» no tapa un error.
+IN_REPO_VARS='(ROOT|REPO_ROOT|REPO|PROJECT_ROOT|SCRIPT_DIR|BATS_TEST_DIRNAME)'
 in_repo_mktemp() {  # in_repo_mktemp <fichero...>: imprime fichero:línea de cada mktemp con plantilla bajo el repo
-  grep -nE 'mktemp[^)]*"\$\{?(ROOT|REPO_ROOT|REPO|PROJECT_ROOT|SCRIPT_DIR|BATS_TEST_DIRNAME)\}?/' "$@" \
-    | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true
+  local re hits rc
+  re="mktemp[^)]*(\\\$\\{?${IN_REPO_VARS}\\}?\"?/|(-p|--tmpdir)[[:space:]=]*\"?\\\$\\{?${IN_REPO_VARS}\\}?([\"}[:space:])]|$))"
+  hits=$(grep -HnE "$re" "$@"); rc=$?
+  (( rc <= 1 )) || return 2
+  [[ -z "$hits" ]] || printf '%s\n' "$hits" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#'
+  return 0
 }
 
 @test "ninguna suite crea su directorio temporal dentro del repo" {
@@ -147,10 +156,26 @@ in_repo_mktemp() {  # in_repo_mktemp <fichero...>: imprime fichero:línea de cad
 
 @test "el detector de temporales dentro del repo encuentra la forma mala y respeta la buena" {
   printf 'setup() { TMP="$(mktemp -d "$ROOT/.tmp-x.XXXXXX")"; }\n' > "$T/mala.bats"
+  printf 'setup() { TMP="$(mktemp -d "$ROOT"/.tmp-x.XXXXXX)"; }\n' > "$T/mala-fuera.bats"
+  printf 'setup() { TMP="$(mktemp -d -p "$ROOT")"; }\n' > "$T/mala-p.bats"
+  printf 'setup() { TMP="$(mktemp -d --tmpdir="${REPO_ROOT}" x.XXXX)"; }\n' > "$T/mala-tmpdir.bats"
   printf 'setup() { TMP="$(mktemp -d "$BATS_TEST_TMPDIR/x.XXXXXX")"; }\n' > "$T/buena.bats"
-  run in_repo_mktemp "$T/mala.bats" "$T/buena.bats"
-  [[ "$output" == *"mala.bats:1:"* ]]
-  [[ "$output" != *"buena.bats"* ]]
+  printf 'setup() { TMP="$(mktemp -d -p "$BATS_TEST_TMPDIR")"; R="$ROOT/x"; }\n' > "$T/buena-p.bats"
+  printf '  # mktemp -d "$ROOT/.tmp-x.XXXXXX" en un comentario\n' > "$T/comentario.bats"
+  run in_repo_mktemp "$T"/mala*.bats "$T"/buena*.bats "$T/comentario.bats"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"/mala.bats:1:"* ]]
+  [[ "$output" == *"/mala-fuera.bats:1:"* ]]
+  [[ "$output" == *"/mala-p.bats:1:"* ]]
+  [[ "$output" == *"/mala-tmpdir.bats:1:"* ]]
+  [[ "$output" != *"buena"* ]]
+  [[ "$output" != *"comentario"* ]]
+}
+
+@test "el detector de temporales falla si no puede leer un fichero (no lo confunde con «sin hallazgos»)" {
+  printf 'setup() { :; }\n' > "$T/buena.bats"
+  run in_repo_mktemp "$T/buena.bats" "$T/no-existe.bats"
+  [ "$status" -eq 2 ]
 }
 
 @test "el workflow nocturno usa el script y no persiste credenciales" {
