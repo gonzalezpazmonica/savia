@@ -147,3 +147,47 @@ Savia Viva R6 añade un cuarto caso: cuando una lección obliga a revisar algo a
 ## Aprobación
 
 APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva + tokens y efectos»), tras confirmar las escenas cuando la spec las exige. Se formaliza al fusionar la PR (SE-488). 
+
+## Rediseño 2026-11-20 (propuesto, pendiente de la operadora)
+
+> Estado: **propuesto**. No cambia el `status` de la spec ni desaparca nada: lo aprueba o lo rechaza la operadora. Hasta entonces S2 sigue aparcada en la cola (`parked` de S30 en `planning-state.json`). Leído en origin/main 6d42ab1bc.
+
+### Qué dependía de SE-513
+
+S2 tenía como entrada «S1; SE-513 S1». SE-513 S1 aportaba la admisión duradera: una entrada persistida con dueño, deduplicada, que sobrevivía a un reinicio, en una transacción SQLite de la cola de SE-075. SE-513 se retiró el 2026-11-14 con su código (`docs/propuestas/LOG.d/SE-513-RETIRED.md`, #1582). Sin ella, S2 no tiene dónde guardar una pregunta de un agente con su identificador, su caducidad y su respuesta.
+
+### Fuente de verdad que la sustituye: el registro de runs
+
+| Fuente | Dónde | Qué tiene hoy | Qué le falta para S2 |
+|---|---|---|---|
+| Registro de runs (SE-349) | `scripts/savia-runs.sh:25` (`data/agent-runs-ledger.jsonl`, fuera de git) | Un registro por run: `run_id`, `mode`, `agent`, `task`, `activity_state` (`spawning`, `active`, `waiting_input`, `blocked`, `exited`; `:217`), `is_terminated`, `pr`. Escritura con cerrojo (`:766-818`, aplicado a `start`, `state`, `pr`, `finish`, `cost` en `:819-821`) y reescritura atómica por renombrado (`:72-106`). El estado visible se **deriva al leer**, nunca se guarda (`:108-133`): `waiting_input` y `blocked` dan la columna `needs_input` | La pregunta en sí: identificador, qué se pide, caducidad, versión de lo enseñado, permiso, respuesta |
+| Bus de mensajes (SE-347) | `scripts/agent-messaging.sh` (`~/.savia/msg/ledger.jsonl` e inboxes) | `id`, `ts`, `from`, `to`, `role`, `message`, `status`, `ack_at` | Escribe dos ficheros sin cerrojo ni transacción (es el punto 1 del Problema de SE-513). No sirve como fuente de verdad de una pregunta que bloquea |
+| Peticiones de Pulse (SE-518 S1) | Contrato `peticiones.json` en SE-518 «Contratos Pulse ↔ Soul» | Ya define las cinco cosas de esta spec por petición | Sin implementar: ningún script del repo lo escribe hoy. Es fuente de S1, no de S2 |
+
+Se elige el registro de runs: ya es duradero, ya tiene cerrojo, ya modela «este trabajo espera a la persona» (`needs_input`) y su regla «derivar al leer» encaja con «el silencio no aprueba nada». No se crea almacén nuevo.
+
+### S2 rediseñado — preguntas de agentes en el registro de runs
+
+- **Preguntar.** Un subcomando nuevo de `savia-runs.sh`, bajo el mismo cerrojo, añade al registro del run una pregunta: `id` estable, `asked_at`, `expires_at`, `version` (hash de lo que se enseña), `permission` (qué autoriza la respuesta, o `none`), y las cinco cosas (qué, por qué ahora, alternativa, coste de aplazar, caducidad). Pone `activity_state` en `waiting_input`. Una segunda pregunta con el mismo `id` no crea otra: se informa como repetida.
+- **Contestar.** Otro subcomando registra la respuesta con `id`, `version` y canal. Si el `id` no existe, la pregunta caducó o la `version` no coincide, se rechaza y se vuelve a enseñar la actual (AC-5).
+- **Silencio.** `DEFER` no se escribe: se deriva al leer, como el resto de estados, cuando `now > expires_at` sin respuesta. El agente que pregunta recibe `DEFER` como salida distinta y sigue con otra tarea; ningún camino toma una opción por defecto con efectos (AC-3).
+- **Agrupar.** La vista agrupa preguntas del mismo asunto; dos con `permission` distinto nunca comparten respuesta (AC-4).
+- **Quién pregunta fuera de un run.** Las preguntas interactivas de la sesión principal no pasan por aquí salvo que la orquestadora registre un run. Se dice en la vista («preguntas de sesión no incluidas»).
+
+**Entrada corregida.** S1. Sin SE-513.
+
+**Criterios de aceptación añadidos (AC-3 a AC-8 sin cambios).**
+
+- **AC-12 — Durabilidad sin almacén nuevo.** Una pregunta registrada sigue ahí tras matar el proceso que preguntó y reabrir la vista; un corte durante la escritura (proceso muerto antes del renombrado) deja el registro anterior íntegro, nunca uno a medias. Dos agentes que preguntan a la vez dejan las dos preguntas (con cerrojo; mutación: sin cerrojo, el test con escritores concurrentes pierde una y falla). El listado de ficheros de estado antes y después de S2 solo difiere en `data/agent-runs-ledger.jsonl`.
+- **AC-13 — Caducidad derivada.** Con el reloj del test pasado `expires_at`, la vista da `DEFER` sin que nadie lo haya escrito; con el reloj antes, `needs_input`. Una respuesta con `version` vieja sale rechazada y el registro no cambia.
+
+### Qué se pierde respecto al diseño anterior
+
+1. **Transacción admisión–salida.** SE-513 guardaba entrada y salida en una transacción SQLite. El registro de runs reescribe el fichero entero bajo cerrojo: es atómico por escritura, no por pareja pregunta–despacho. Si el agente muere entre registrar la respuesta y actuar, la respuesta queda registrada y la acción no; la vista lo muestra como respondida y el run como no terminado.
+2. **Estados de incorporación.** `APPLIED_TO_PLAN` y `UNKNOWN` de SE-513 no existen aquí: la vista dice «respondida», no «aplicada».
+3. **Cobertura.** Solo preguntas de trabajos registrados como run. Las de la sesión principal y los diálogos de permiso del frontend quedan fuera hasta que pasen por un run.
+4. **Escala.** El registro reescribe el fichero completo en cada cambio. Con muchos runs y preguntas, el coste crece; S2 lo mide y, si pasa de un umbral que fija S0, se reabre la decisión.
+
+### Decisión para la operadora
+
+- **D5 — S2.** (a) Aprobar el rediseño sobre el registro de runs, con las pérdidas declaradas (recomendada: ya es duradero, tiene cerrojo y modela la espera). (b) Esperar a que SE-518 S1 implemente `peticiones.json` y usarlo como fuente de S2 (más coherente con Pulse; hoy no existe). (c) Retirar S2 y quedarse con la vista de solo lectura de S1 más `needs_input` del registro de runs, sin identificador ni caducidad por pregunta.
