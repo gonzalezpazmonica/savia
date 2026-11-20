@@ -1,0 +1,149 @@
+{
+ "seed": 20261110,
+ "iters": 10000,
+ "models": {
+  "haiku": {
+   "cumplimiento": {
+    "A": 0.75,
+    "B": 1.0,
+    "diff": 0.25,
+    "ci95": [
+     0.0,
+     0.75
+    ],
+    "casos": 4
+   },
+   "sobreactuacion": {
+    "A": 0.0,
+    "B": 0.0,
+    "diff": 0.0,
+    "ci95": [
+     0.0,
+     0.0
+    ],
+    "casos": 4
+   },
+   "tokens_entrada": {
+    "A": 1844,
+    "B": 16959,
+    "delta_pct": 819.6
+   },
+   "tokens_salida": {
+    "A": 423,
+    "B": 86,
+    "delta_pct": -79.7
+   },
+   "n_respuestas": {
+    "A": 24,
+    "B": 24
+   },
+   "por_caso": {
+    "G1-python": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G2-memoria": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G3-arquitectura": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G4-seguridad": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "T1-cupula": {
+     "A": 0.0,
+     "B": 1.0
+    },
+    "T2-sin-autonomo": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T3-tribunal": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T4-desconocido": {
+     "A": 1.0,
+     "B": 1.0
+    }
+   },
+   "veredicto": "GO"
+  },
+  "sonnet": {
+   "cumplimiento": {
+    "A": 0.75,
+    "B": 1.0,
+    "diff": 0.25,
+    "ci95": [
+     0.0,
+     0.75
+    ],
+    "casos": 4
+   },
+   "sobreactuacion": {
+    "A": 0.0,
+    "B": 0.0,
+    "diff": 0.0,
+    "ci95": [
+     0.0,
+     0.0
+    ],
+    "casos": 4
+   },
+   "tokens_entrada": {
+    "A": 1823,
+    "B": 16938,
+    "delta_pct": 829.0
+   },
+   "tokens_salida": {
+    "A": 294,
+    "B": 120,
+    "delta_pct": -59.2
+   },
+   "n_respuestas": {
+    "A": 24,
+    "B": 24
+   },
+   "por_caso": {
+    "G1-python": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G2-memoria": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G3-arquitectura": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G4-seguridad": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "T1-cupula": {
+     "A": 0.0,
+     "B": 1.0
+    },
+    "T2-sin-autonomo": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T3-tribunal": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T4-desconocido": {
+     "A": 1.0,
+     "B": 1.0
+    }
+   },
+   "veredicto": "GO"
+  }
+ },
+ "global": "GO"
+}

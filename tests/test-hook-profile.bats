@@ -21,19 +21,34 @@ teardown() {
   [[ "$output" == *"default"* ]]
 }
 
-@test "set minimal creates profile file" {
+@test "set minimal writes no file and says how to export" {
   run bash "$SCRIPT" set minimal
   [[ "$status" -eq 0 ]]
-  [[ -f "$TMPDIR_HP/.savia/hook-profile" ]]
-  [[ "$(cat "$TMPDIR_HP/.savia/hook-profile")" == "minimal" ]]
+  [[ "$output" == *"export SAVIA_HOOK_PROFILE=minimal"* ]]
+  [[ ! -e "$TMPDIR_HP/.savia/hook-profile" ]]
+  [[ -z "$(find "$TMPDIR_HP" -type f)" ]]
 }
 
-@test "set strict persists and reports" {
-  run bash "$SCRIPT" set strict
-  [[ "$status" -eq 0 ]]
-  [[ "$output" == *"strict"* ]]
+@test "set does not change what get reports" {
+  bash "$SCRIPT" set strict
   run bash "$SCRIPT" get
-  [[ "$output" == *"strict"* ]]
+  [[ "$output" == *"standard"* ]]
+  [[ "$output" != *"strict"* ]]
+}
+
+@test "legacy profile file is ignored and flagged" {
+  mkdir -p "$TMPDIR_HP/.savia"
+  echo minimal > "$TMPDIR_HP/.savia/hook-profile"
+  run bash "$SCRIPT" get
+  [[ "$output" == *"standard (default)"* ]]
+  [[ "$output" == *"is ignored"* ]]
+}
+
+@test "legacy file does not lower the real gate" {
+  mkdir -p "$TMPDIR_HP/.savia"
+  echo minimal > "$TMPDIR_HP/.savia/hook-profile"
+  run bash -c 'source "'"$BATS_TEST_DIRNAME"'/../.claude/hooks/lib/profile-gate.sh"; echo "$SAVIA_HOOK_PROFILE"'
+  [[ "$output" == "standard" ]]
 }
 
 @test "set invalid profile fails" {
@@ -48,12 +63,10 @@ teardown() {
   [[ "$output" == *"profile name required"* ]]
 }
 
-@test "env var overrides file" {
-  bash "$SCRIPT" set minimal
+@test "env var is reported as the source" {
   export SAVIA_HOOK_PROFILE=ci
   run bash "$SCRIPT" get
-  [[ "$output" == *"ci"* ]]
-  [[ "$output" == *"env var"* ]]
+  [[ "$output" == *"ci (env var)"* ]]
 }
 
 @test "list shows all 4 profiles" {
