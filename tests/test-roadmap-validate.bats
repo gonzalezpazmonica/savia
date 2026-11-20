@@ -315,6 +315,7 @@ set_route() { # <wip> <phase-of-SE-375>
   jq '.initiatives[0].status="IMPLEMENTING"' "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
   mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
   printf '## 2026-09-26 SE-375 IMPLEMENTING\n' >> "$FIXTURE/docs/propuestas/LOG.md"
+  printf '%s\n' 'status: IMPLEMENTING' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
 
   run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
 
@@ -576,4 +577,60 @@ park_entry() { # <blocked_by> [reason] : añade un aparcado a S01
   park_entry SE-376
   run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" current
   [[ "$output" == *"Aparcado: SE-375 F3 — bloqueada por spec retirada (SE-376); rediseñar a partir del 26-11"* ]]
+}
+
+# Deriva frontmatter vs vista: igualdad estricta con baseline que solo puede menguar.
+
+@test "drift: spec y vista iguales pasan sin baseline" {
+  printf '%s\n' 'status: APPROVED' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"spec="* ]]
+}
+
+@test "drift: spec APPROVED con vista IMPLEMENTED falla si no está en la baseline" {
+  jq '.initiatives[0].status="IMPLEMENTED" | .initiatives[0].evidence="docs/specs/SE-375-example.spec.md"' \
+    "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  printf '## 2026-09-05 SE-375 IMPLEMENTED\n' >> "$FIXTURE/docs/propuestas/LOG.md"
+  printf '%s\n' 'status: APPROVED' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FAIL: SE-375 spec=APPROVED vs state=IMPLEMENTED"* ]]
+}
+
+@test "drift: la misma deriva declarada en la baseline pasa" {
+  jq '.initiatives[0].status="IMPLEMENTED" | .initiatives[0].evidence="docs/specs/SE-375-example.spec.md"' \
+    "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  printf '## 2026-09-05 SE-375 IMPLEMENTED\n' >> "$FIXTURE/docs/propuestas/LOG.md"
+  printf '%s\n' 'status: APPROVED' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
+  printf '%s\n' 'SE-375 APPROVED IMPLEMENTED' > "$FIXTURE/docs/propuestas/status-drift-baseline.txt"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [[ "$output" != *"spec="* ]]
+  [[ "$output" != *"baseline de deriva obsoleta"* ]]
+}
+
+@test "drift: mutación, una línea de baseline que ya no discrepa falla" {
+  printf '%s\n' 'status: APPROVED' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
+  printf '%s\n' 'SE-375 APPROVED IMPLEMENTED' > "$FIXTURE/docs/propuestas/status-drift-baseline.txt"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"baseline de deriva obsoleta"*"SE-375 APPROVED IMPLEMENTED"* ]]
+}
+
+@test "drift: una baseline con otro par de estados no cubre la deriva" {
+  jq '.initiatives[0].status="IMPLEMENTING"' "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  printf '## 2026-09-05 SE-375 IMPLEMENTING\n' >> "$FIXTURE/docs/propuestas/LOG.md"
+  printf '%s\n' 'status: APPROVED' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
+  printf '%s\n' 'SE-375 APPROVED IMPLEMENTED' > "$FIXTURE/docs/propuestas/status-drift-baseline.txt"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FAIL: SE-375 spec=APPROVED vs state=IMPLEMENTING"* ]]
+}
+
+@test "drift: la baseline real del repo no incluye SE-424, SE-488 ni SE-496" {
+  run grep -E '^SE-(424|488|496) ' docs/propuestas/status-drift-baseline.txt
+  [ "$status" -ne 0 ]
 }
