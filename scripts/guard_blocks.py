@@ -67,7 +67,8 @@ def key_path() -> Path:
 
 
 def load_key() -> bytes | None:
-    """Clave local; se crea (0600) si no existe. Ilegible, vacía o con permisos abiertos → None."""
+    """Clave local; se crea (0600) si no existe. Ilegible, vacía, con permisos abiertos, enlace
+    simbólico o de otra dueña → None."""
     path = key_path()
     try:
         if not path.exists():
@@ -78,15 +79,22 @@ def load_key() -> bytes | None:
                     fh.write(secrets.token_hex(32))
             except FileExistsError:
                 pass  # otro hook concurrente la está creando: se lee abajo
-        if stat.S_IMODE(path.stat().st_mode) & 0o077:
+        # Sin seguir enlaces y solo si es un fichero normal de esta usuaria (no una clave ajena).
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            st = os.fstat(fd)
+            if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid()
+                    or stat.S_IMODE(st.st_mode) & 0o077):
+                return None
+            for _ in range(10):  # la creadora puede no haber escrito aún
+                key = os.pread(fd, 4096, 0).decode("utf-8").strip()
+                if len(key) >= 32:
+                    return key.encode()
+                time.sleep(0.05)
             return None
-        for _ in range(10):  # la creadora puede no haber escrito aún
-            key = path.read_text(encoding="utf-8").strip()
-            if len(key) >= 32:
-                return key.encode()
-            time.sleep(0.05)
-        return None
-    except OSError:
+        finally:
+            os.close(fd)
+    except (OSError, UnicodeDecodeError):
         return None
 
 

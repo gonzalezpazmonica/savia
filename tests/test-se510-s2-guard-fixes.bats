@@ -127,9 +127,19 @@ EOF
   [ "$output" = "$(git -C "$TMP/wt" rev-parse --show-toplevel)" ]
   run bash -c "printf '%s' '{\"tool_input\":{\"command\":\"cd $TMP/wt && gh pr create --draft\"},\"cwd\":\"$TMP/otro\"}' | python3 scripts/lib/pr_summary_root.py /"
   [ "$output" = "$(git -C "$TMP/wt" rev-parse --show-toplevel)" ]
-  # Sin cwd: la raíz de respaldo (comportamiento anterior).
+  # Sin cwd: la raíz de respaldo (comportamiento anterior; ha de ser un repo git).
+  git init -q "$TMP/otro"
   run bash -c "printf 'gh pr create' | python3 scripts/lib/pr_summary_root.py '$TMP/otro'"
-  [ "$output" = "$TMP/otro" ]
+  [ "$output" = "$(git -C "$TMP/otro" rev-parse --show-toplevel)" ]
+}
+
+@test "SE-510 AC-7 (Codex a67920f): el resolvedor común ve git add partido por continuaciones de línea" {
+  run bash -c "printf '%s' \"\$1\" | python3 scripts/lib/git_op_targets.py '$TMP'" _ $'gi\\\nt -C "$X" ad\\\nd -A'
+  [ "$status" -eq 0 ]
+  [ "$output" = $'add\t' ]
+  # Negativo: sin git ni add tras unir las líneas no se emite nada.
+  run bash -c "printf '%s' \"\$1\" | python3 scripts/lib/git_op_targets.py '$TMP'" _ $'ec\\\nho hola'
+  [ -z "$output" ]
 }
 
 @test "SE-510 F3 negativo: varios cd, cd en subshell cerrado, pushd o env -C → exit 2" {
@@ -179,6 +189,47 @@ EOF
     run bash -c "jq -nc --arg c \"\$1\" --arg d '$TMP' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /" _ "$cmd"
     [ "$status" -eq 2 ] || { echo "no bloqueó: $cmd"; false; }
   done
+}
+
+@test "SE-510 F3 negativo (Codex a67920f): cd escapado o entrecomillado y cd en segundo plano → exit 2" {
+  git init -q "$TMP/a" && git init -q "$TMP/b"
+  # c\d y c''d son `cd` para bash; `cd X && true & gh` deja el cd en un subshell de fondo.
+  cmds=("c\\d $TMP/b && gh pr create" "c''d $TMP/b && gh pr create" "\"cd\" $TMP/b && gh pr create"
+        "cd $TMP/b && true & gh pr create" "cd $TMP/b & gh pr create")
+  for cmd in "${cmds[@]}"; do
+    run bash -c "jq -nc --arg c \"\$1\" --arg d '$TMP/a' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /" _ "$cmd"
+    [ "$status" -eq 2 ] || { echo "no bloqueó: $cmd → $output"; false; }
+  done
+  # Negativo: && y una redirección 2>&1 antes de gh no son segundo plano.
+  top=$(git -C "$TMP/b" rev-parse --show-toplevel)
+  run bash -c "jq -nc --arg c \"\$1\" --arg d '$TMP/a' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /" _ "cd $TMP/b && git status 2>&1 && gh pr create"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$top" ]
+}
+
+@test "SE-510 F3: continuación de línea en el cd inicial se resuelve como bash" {
+  git init -q "$TMP/a" && git init -q "$TMP/b"
+  top=$(git -C "$TMP/b" rev-parse --show-toplevel)
+  run bash -c "jq -nc --arg c \"\$1\" --arg d '$TMP/a' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /" _ $'c\\\nd '"$TMP/b"$' && \\\ngh pr create'
+  [ "$status" -eq 0 ]
+  [ "$output" = "$top" ]
+}
+
+@test "SE-510 F3 negativo (seguridad P2): directorio que no es un repo git → exit 2" {
+  mkdir -p "$TMP/suelto"
+  run bash -c "jq -nc --arg d '$TMP/suelto' '{tool_input:{command:\"gh pr create\"},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no es un repositorio git"* ]]
+}
+
+@test "SE-510 F3: la entrada de respaldo (CLAUDE_TOOL_INPUT) conserva su cwd en el gate" {
+  git init -q "$TMP/wt" && git init -q "$TMP/proj"
+  summary "$TMP/wt" 97 && summary "$TMP/proj" 0
+  in=$(jq -nc --arg d "$TMP/wt" '{tool_input:{command:"gh pr create --draft --title t --body-file b.md"},cwd:$d}')
+  # Resumen viejo en el worktree del cwd: tiene que bloquear aunque el del proyecto sea fresco.
+  run bash -c "CLAUDE_TOOL_INPUT='$in' CLAUDE_PROJECT_DIR='$TMP/proj' ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_API_KEY=probe bash '$FIXED_GATE' </dev/null"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"97h"* ]]
 }
 
 @test "SE-510 F3: un cd inicial literal con gh mencionado antes en texto sigue resolviendo el árbol del cd" {
@@ -310,6 +361,20 @@ print(r["guard"], r["reason"], r["hmac"], len(r["cmd_hmac"]), "input" in r)'
   [ "$status" -eq 0 ]
   run python3 -c 'import json,os; r=json.loads(open(os.environ["SAVIA_GUARD_BLOCKS_LOG"]).read()); print(repr(r["cmd_hmac"]), r["hmac"])'
   [ "$output" = "'' no-key" ]
+}
+
+@test "SE-510 AC-4 negativo (seguridad P2): clave que es un enlace simbólico → cmd_hmac vacío" {
+  printf '%064d' 0 >"$TMP/clave-real" && chmod 600 "$TMP/clave-real"
+  ln -s "$TMP/clave-real" "$SAVIA_GUARD_BLOCKS_KEY"
+  run bash -c "echo 'git push --force' | bash scripts/guard-blocks.sh record --guard p --reason r"
+  [ "$status" -eq 0 ]
+  run python3 -c 'import json,os; r=json.loads(open(os.environ["SAVIA_GUARD_BLOCKS_LOG"]).read()); print(repr(r["cmd_hmac"]), r["hmac"])'
+  [ "$output" = "'' no-key" ]
+  # Negativo: la misma clave como fichero normal 0600 sí firma.
+  rm "$SAVIA_GUARD_BLOCKS_KEY" "$SAVIA_GUARD_BLOCKS_LOG" && cp -p "$TMP/clave-real" "$SAVIA_GUARD_BLOCKS_KEY"
+  echo 'git push --force' | bash scripts/guard-blocks.sh record --guard p --reason r >/dev/null
+  run python3 -c 'import json,os; r=json.loads(open(os.environ["SAVIA_GUARD_BLOCKS_LOG"]).read()); print(len(r["cmd_hmac"]), r["hmac"])'
+  [ "${output%% *}" = "64" ]
 }
 
 @test "SE-510 AC-4: report sin etiquetas da UNKNOWN; con una FP y una TP da 50.0%" {

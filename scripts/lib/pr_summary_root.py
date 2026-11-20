@@ -12,10 +12,13 @@ Orden de resolución del directorio base:
   1. `cwd` de la entrada; sin él, la raíz de respaldo (el comportamiento anterior).
   2. Un único `cd <ruta>` que sea lo primero de la orden (`cd X && gh …`, `(cd X; gh …)`),
      relativo a la base. Cualquier otro `cd` antes del último `gh pr create` bloquea.
-  3. `git -C <dir> rev-parse --show-toplevel`; si no es un repo, el directorio mismo.
+  3. `git -C <dir> rev-parse --show-toplevel`; si no es un repo, fallo cerrado.
+Antes de nada se borran las continuaciones de línea (`\\` + salto), como hace bash, y la
+búsqueda de otros `cd` mira el texto sin comillas ni barras (`c\\d`, `c''d`).
 
 Salida: la raíz en stdout, exit 0. Fallo cerrado (exit 2 con motivo en stderr):
-JSON malformado, `cd` cuyo destino no se puede saber sin ejecutar nada (`$VAR`,
+JSON malformado, directorio que no es un repo git, `&` entre el `cd` y gh (el `cd`
+queda en segundo plano), `cd` cuyo destino no se puede saber sin ejecutar nada (`$VAR`,
 `$(…)`, `` ` ``, `~usuario`, `cd -`, `cd` a secas), más de un `cd` (habría que
 encadenarlos), un `cd` dentro de un subshell que se cierra antes de gh (`(cd X); gh …`),
 `pushd`/`popd` o `env -C`/`--chdir`, o un directorio que no existe.
@@ -43,6 +46,15 @@ UNSAFE = re.compile(r"[$`]|^~[^/]|^-$")
 # Otras formas de cambiar de directorio que no se siguen: fallo cerrado.
 OTHER_CHDIR = re.compile(r"(?:(?:^|[;&|(]|\$\()\s*(?:pushd|popd)(?=\s|$|[;&|)]))"
                          r"|(?:\benv\b[^;&|()]*\s(?:-C|--chdir)(?:=|\s|$))")
+# `&` suelto (no `&&`, `>&`, `&>`, `<&`, `|&`): la lista anterior va a un subshell de fondo y su
+# `cd` no llega a gh (`cd X && true & gh pr create`).
+BACKGROUND = re.compile(r"(?<![&>|<])&(?![&>])")
+CONTINUATION = re.compile(r"\\\r?\n")
+
+
+def plain(text: str) -> str:
+    """Texto sin comillas ni barras: `c\\d`, `c''d` y `"cd"` son `cd` para bash."""
+    return re.sub(r"[\"'\\]", "", text)
 
 
 class Unresolved(Exception):
@@ -72,21 +84,24 @@ def cd_target(command: str) -> str | None:
     Solo se sigue un `cd <literal>` al principio de la orden. Cualquier otra palabra `cd`
     (o pushd/popd/env -C) antes de la ÚLTIMA mención de `gh pr create` bloquea: la última,
     porque `echo gh pr create; cd X && gh pr create` menciona gh dos veces."""
+    command = CONTINUATION.sub("", command)  # bash borra `\\` + salto antes de partir palabras
     gh = None
     for gh in GH_RE.finditer(command):
         pass
     if gh is None:
         return None
     head = command[: gh.start() + 1]
-    if OTHER_CHDIR.search(head):
+    if OTHER_CHDIR.search(head) or OTHER_CHDIR.search(plain(head)):
         raise Unresolved("pushd/popd o env -C antes de gh pr create: no se siguen")
     pre = CD_PREFIX.match(head)
     rest = head[pre.end():] if pre else head
-    if CD_WORD.search(rest):
+    if CD_WORD.search(plain(rest)):
         raise Unresolved("un `cd` que no es el primero de la orden (o está en otra posición: "
                          "`||`, pipe, comillas, `bash -c`, subshell…) antes de gh pr create")
     if pre is None:
         return None
+    if BACKGROUND.search(rest):
+        raise Unresolved("`&` entre el `cd` y gh pr create: el `cd` queda en segundo plano")
     if pre.group(1) and ")" in rest:
         raise Unresolved("`cd` dentro de un subshell que se cierra antes de gh pr create")
     arg = pre.group(2)
@@ -111,7 +126,7 @@ def resolve(raw: str, fallback: str) -> str:
                          capture_output=True, text=True, timeout=5)
     if res.returncode == 0 and res.stdout.strip():
         return res.stdout.strip()
-    return base
+    raise Unresolved(f"{base} no es un repositorio git: no hay resumen de PR que valga")
 
 
 def main(argv: list[str]) -> int:

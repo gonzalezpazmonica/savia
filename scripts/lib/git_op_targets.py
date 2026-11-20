@@ -464,7 +464,9 @@ SUBCMD_ADD = re.compile(r"((?<![\w./-])git(?:\s+%s)*\s+(?:worktree|remote)\s+)ad
 
 
 def plain(text):
-    """Texto sin el `add` de `git worktree|remote add` y después sin comillas ni barras."""
+    """Texto sin continuaciones de línea (`\\` + salto: bash las borra, `gi\\<nl>t` es `git`),
+    sin el `add` de `git worktree|remote add` y después sin comillas ni barras."""
+    text = re.sub(r"\\\r?\n", "", text)
     return re.sub(r"[\"'\\]", "", SUBCMD_ADD.sub(r"\1-", text))
 
 

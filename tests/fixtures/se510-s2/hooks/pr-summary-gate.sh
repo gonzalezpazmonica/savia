@@ -32,6 +32,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"
 # SE-510 F3: la entrada cruda hace falta dos veces (orden y `cwd`), así que se lee una vez.
 RAW_INPUT=""
 if [[ ! -t 0 ]]; then RAW_INPUT=$(timeout 3 cat 2>/dev/null || true); fi
+# Respaldo de hook-input.sh (stdin vacío): la misma variable, para no perder su `cwd` en 0b.
+[[ -z "$RAW_INPUT" ]] && RAW_INPUT="${CLAUDE_TOOL_INPUT:-}"
 hook_read_command pr-summary-gate <<<"$RAW_INPUT"; _rc=$?
 [[ $_rc -eq 2 ]] && exit 2
 [[ $_rc -eq 3 ]] && exit 0

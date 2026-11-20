@@ -59,7 +59,8 @@ const OP_RX = /(^|[^\w-])(commit(-tree)?|add|stage)([^\w-]|$)/i;
  * (ver cabecera). Devuelve el motivo del bloqueo o null.
  */
 export function unresolvedGitOp(command: string, base: string, resolver = RESOLVER): string | null {
-  const plain = command.replace(/["'\\]/g, ""); // `gi''t ad\d` también cuenta
+  // `gi''t ad\d` también cuenta; y `gi\<salto>t`: bash borra la continuación de línea.
+  const plain = command.replace(/\\\r?\n/g, "").replace(/["'\\]/g, "");
   const hasGit = GIT_RX.test(plain);
   if (!hasGit && !COMMIT_RX.test(plain)) return null;
   const res = spawnSync("python3", [resolver, base], { encoding: "utf8", timeout: 5000, input: command });

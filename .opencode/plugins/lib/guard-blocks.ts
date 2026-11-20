@@ -4,7 +4,7 @@
 // hooks bash): un solo formato para output/guard-blocks.jsonl. Solo se llama cuando
 // un guard ya ha bloqueado, así que no añade coste al camino que pasa. Nunca lanza:
 // un fallo al registrar no puede convertir un bloqueo en un permiso ni al revés.
-// Solo cuenta como bloqueo un error con la marca BLOCKED/BLOQUEADO: un TypeError o un
+// Solo cuenta como bloqueo un error que EMPIEZA por la marca BLOCKED/BLOQUEADO: un TypeError o un
 // fallo interno de un guard no es un bloqueo e inflaría la tasa de falsos positivos.
 
 import { spawnSync } from "node:child_process";
@@ -22,7 +22,7 @@ export function guardNameOf(message: string): string {
 export function recordGuardBlock(err: unknown, input: any, output: any): boolean {
   try {
     const message = err instanceof Error ? err.message : String(err);
-    if (!/\b(?:BLOCKED|BLOQUEADO)\b/.test(message)) return false;
+    if (!/^\s*(?:BLOCKED|BLOQUEADO)\b/.test(message)) return false; // la marca abre el mensaje
     const command = extractCommand(input, output) ?? "";
     const tool = extractToolName(input) || "unknown";
     const res = spawnSync("python3", [RECORDER, "record", "--engine", "ts", "--event", "PreToolUse",
