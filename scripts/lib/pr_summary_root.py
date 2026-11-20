@@ -21,9 +21,15 @@ JSON malformado, directorio que no es un repo git, `&` entre el `cd` y gh (el `c
 queda en segundo plano), `cd` cuyo destino no se puede saber sin ejecutar nada (`$VAR`,
 `$(…)`, `` ` ``, `~usuario`, `cd -`, `cd` a secas), más de un `cd` (habría que
 encadenarlos), un `cd` dentro de un subshell que se cierra antes de gh (`(cd X); gh …`),
-`pushd`/`popd` o `env -C`/`--chdir`, o un directorio que no existe.
-No hay `-C` en gh: el `-C` de la spec es el de `git -C` y el de `cd`; `gh -R`
-apunta al remoto, no al árbol, y no cambia nada aquí.
+`pushd`/`popd` en cualquier posición (`builtin pushd`) o `env -C` en cualquier grafía
+(`-C<ruta>`, `-iC`, `--chdir`), un `gh pr create` disfrazado (`\\gh`, `"gh"`) que no se
+puede situar en la orden, o un directorio que no existe.
+Un `&` o un `cd` dentro de una cadena: `&` entre comillas es texto y no se toma por
+segundo plano; `cd` entre comillas sí bloquea (`"cd" X` es un `cd` real y sin un
+analizador de shell no se distingue de `printf 'cd'`): bloqueo falso, nunca permiso falso.
+No hay `-C` en gh: el `-C` de la spec es el de `git -C` y el de `cd`.
+Límite conocido: `gh -R <repo> --head <rama>` abre la PR en otro remoto u otra rama;
+el resumen que se evalúa sigue siendo el del árbol donde corre gh, no el de esa rama.
 """
 from __future__ import annotations
 
@@ -44,12 +50,47 @@ CD_PREFIX = re.compile(r"^\s*(\(\s*)?cd\s+(\"[^\"]*\"|'[^']*'|[^\s;&|()]+)\s*(?:
 CD_WORD = re.compile(r"(?<![\w./-])(?:cd|chdir)(?![\w./-])")
 UNSAFE = re.compile(r"[$`]|^~[^/]|^-$")
 # Otras formas de cambiar de directorio que no se siguen: fallo cerrado.
-OTHER_CHDIR = re.compile(r"(?:(?:^|[;&|(]|\$\()\s*(?:pushd|popd)(?=\s|$|[;&|)]))"
-                         r"|(?:\benv\b[^;&|()]*\s(?:-C|--chdir)(?:=|\s|$))")
+# Se busca en el texto sin comillas ni barras y en cualquier posición (`builtin pushd`,
+# `env -C/ruta`, `env -iC ruta`): ante la duda, se bloquea.
+OTHER_CHDIR = re.compile(r"(?<![\w./-])(?:pushd|popd)(?![\w./-])"
+                         r"|\benv\b[^;&|()]*\s(?:-[A-Za-z]*C|--chdir)")
 # `&` suelto (no `&&`, `>&`, `&>`, `<&`, `|&`): la lista anterior va a un subshell de fondo y su
 # `cd` no llega a gh (`cd X && true & gh pr create`).
 BACKGROUND = re.compile(r"(?<![&>|<])&(?![&>])")
 CONTINUATION = re.compile(r"\\\r?\n")
+# Palabra que precede a `pr create`: si es `gh` escrito con barras o comillas cerradas
+# (`\\gh`, `"gh"`, `g''h`), es gh para bash pero GH_RE no la ve.
+GH_WORD = re.compile(r"(?:^|(?<=[;&|(`\s]))([^\s;&|()]+)(?=\s+pr\s+create(?:[\s;&|)]|$))")
+
+
+def disguised_gh(word: str) -> bool:
+    """`\\gh`, `"gh"`, `/usr/bin/"gh"`; no `'gh` (comilla abierta: es texto de un argumento)."""
+    if word == plain(word) or word.count("'") % 2 or word.count('"') % 2:
+        return False
+    return re.fullmatch(r"(?:\S*/)?gh", plain(word)) is not None
+
+
+def outside_quotes(text: str) -> str:
+    """El texto que bash ve fuera de comillas; lo escapado (`\\&`) es literal y se quita.
+    Una comilla sin cerrar deja el resto tal cual (conservador)."""
+    out, i, n = [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c in "'\"":
+            j = i + 1
+            while j < n and text[j] != c:
+                j += 2 if (c == '"' and text[j] == "\\") else 1
+            if j >= n:
+                out.append(text[i:])
+                break
+            i = j + 1
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
 
 
 def plain(text: str) -> str:
@@ -88,10 +129,12 @@ def cd_target(command: str) -> str | None:
     gh = None
     for gh in GH_RE.finditer(command):
         pass
+    if any(disguised_gh(m.group(1)) for m in GH_WORD.finditer(command)):
+        raise Unresolved("`gh pr create` con comillas o barras (`\\gh`, `\"gh\"`): no se sabe dónde corre")
     if gh is None:
         return None
     head = command[: gh.start() + 1]
-    if OTHER_CHDIR.search(head) or OTHER_CHDIR.search(plain(head)):
+    if OTHER_CHDIR.search(plain(head)):
         raise Unresolved("pushd/popd o env -C antes de gh pr create: no se siguen")
     pre = CD_PREFIX.match(head)
     rest = head[pre.end():] if pre else head
@@ -100,7 +143,7 @@ def cd_target(command: str) -> str | None:
                          "`||`, pipe, comillas, `bash -c`, subshell…) antes de gh pr create")
     if pre is None:
         return None
-    if BACKGROUND.search(rest):
+    if BACKGROUND.search(outside_quotes(rest)):
         raise Unresolved("`&` entre el `cd` y gh pr create: el `cd` queda en segundo plano")
     if pre.group(1) and ")" in rest:
         raise Unresolved("`cd` dentro de un subshell que se cierra antes de gh pr create")

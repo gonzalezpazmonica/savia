@@ -457,6 +457,15 @@ EOF
   [ "$status" -eq 0 ]
 }
 
+@test "vbg: continuación con CRLF (gi\\<CR><LF>t ... ad\\<CR><LF>d) tampoco esquiva el prefiltro" {
+  # Revisión de corrección a15100d (P2): la rama `\`+CRLF del prefiltro no tenía test.
+  run vbg $'gi\\\r\nt -C "$X" ad\\\r\nd -A' "$WT"
+  blocked_unsure_vbg
+  # negativo: con destino literal en un worktree agent/* pasa
+  run vbg $'gi\\\r\nt -C '"$WT"$' ad\\\r\nd -A' "$WT"
+  [ "$status" -eq 0 ]
+}
+
 @test "vbg sin python3: git stage cuenta como add (fail-closed); git status pasa" {
   P=$(no_python_path)
   run env PATH="$P" bash -c "jq -n --arg c 'git -C $WT stage -A' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"

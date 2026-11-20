@@ -39,8 +39,9 @@ rc=$?
 cat "$err" >&2
 if [[ $rc -eq 2 ]]; then
   reason=$(grep -m1 -v '^[[:space:]]*$' "$err" || true)
-  python3 "$DIR/guard_blocks.py" record --guard "$guard" --event "$event" <"$inp" \
-    --tool "$tool" --engine bash --reason="$reason" >/dev/null 2>&1 \
+  # El motivo puede citar lo detectado: por el entorno (solo la dueña), no por argv (/proc).
+  SAVIA_GUARD_BLOCK_REASON="$reason" python3 "$DIR/guard_blocks.py" record --guard "$guard" \
+    --event "$event" --tool "$tool" --engine bash <"$inp" >/dev/null 2>&1 \
     || echo "AVISO: bloqueo de $guard no registrado en output/guard-blocks.jsonl" >&2
 fi
 exit "$rc"

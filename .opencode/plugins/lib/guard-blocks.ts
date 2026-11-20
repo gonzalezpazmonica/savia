@@ -26,8 +26,10 @@ export function recordGuardBlock(err: unknown, input: any, output: any): boolean
     const command = extractCommand(input, output) ?? "";
     const tool = extractToolName(input) || "unknown";
     const res = spawnSync("python3", [RECORDER, "record", "--engine", "ts", "--event", "PreToolUse",
-      "--tool", tool, "--guard", guardNameOf(message), "--reason", message.split("\n")[0]], {
+      "--tool", tool, "--guard", guardNameOf(message)], {
       input: JSON.stringify({ tool_input: { command } }), encoding: "utf8", timeout: 3000,
+      // El motivo puede citar lo detectado: por el entorno (solo la dueña), no por argv (/proc).
+      env: { ...process.env, SAVIA_GUARD_BLOCK_REASON: message.split("\n")[0] },
     });
     return res.status === 0 && !res.error;
   } catch {

@@ -47,6 +47,15 @@ test("sin resolvedor, el alias stage (sinónimo de add) bloquea igual que add", 
   expect(unresolvedGitOp("git stash list", d, "/no/existe.py")).toBeNull();
 });
 
+test("sin resolvedor, un ejecutable variable seguido de commit bloquea (Codex a15100d P1-2)", () => {
+  const d = tmp();
+  const c = '"$x" -C "$WT" commit -m x'; // x=/usr/bin/git: es un git commit de destino incierto
+  expect(unresolvedGitOp(c, d)).toMatch(/destino de git commit no reconocido/);
+  expect(unresolvedGitOp(c, d, "/no/existe.py")).toMatch(/resolvedor de destino no disponible/);
+  // Negativo: sin git ni commit en el texto, ni con el resolvedor caído se bloquea.
+  expect(unresolvedGitOp('"$x" -C "$WT" status', d, "/no/existe.py")).toBeNull();
+});
+
 test("continuaciones de línea (barra + salto) no ocultan git add, con y sin resolvedor", async () => {
   const d = tmp();
   const cont = 'gi\\\nt -C "$WT" ad\\\nd -A'; // bash ejecuta: git -C "$WT" add -A

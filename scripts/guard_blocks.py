@@ -49,6 +49,16 @@ SECRET_RES = [
     # Opciones de línea de órdenes: `--password x`, `--token=x`, `-p x` (valor con o sin comillas).
     re.compile(r"(?i)(\s--?(?:password|passwd|pwd|token|secret|api[_-]?key|pat|p)(?:=|\s+))(?:\"[^\"]*\"|'[^']*'|[^\s'\";&|]+)"),
     re.compile(r"(?i)(://[^/\s:@]+:)[^@\s]+(?=@)"),
+    # Lo que reconoce el guard de credenciales (.opencode/plugins/lib/credential-patterns.ts)
+    # y el genérico de abajo no tapa porque un punto o un `;` parte el token.
+    re.compile(r"(?:hvs\.[A-Za-z0-9_-]{24,}|\bs\.[A-Za-z0-9]{24,})"),  # HashiCorp Vault
+    re.compile(r"AIza[0-9A-Za-z_-]{35}"),  # Google API
+    re.compile(r"(?i)((?:AccountKey|SharedAccessKey|sig)=)[^;&\s'\"]+"),  # Azure y SAS
+    re.compile(r"eyJ[A-Za-z0-9_-]{10,}(?:\.[A-Za-z0-9_-]+){0,2}"),  # JWT / token de k8s
+    # Bloque de clave privada PEM (la clase [E] evita que los escáneres tomen la regex por una clave).
+    re.compile(r"-----BEGIN[^-\n]*PRIVAT[E] KEY-----[\s\S]*?(?:-----END[^-\n]*PRIVAT[E] KEY-----|$)"),
+    re.compile(r"(?i)((?:bearer|auth[_-]?token|privat[e][_-]?key|connection[_-]?string|client[_-]?secret)"
+               r"\s*[=:]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s'\";&|]+)"),
     re.compile(r"[A-Za-z0-9+/_=-]{32,}"),  # tokens largos (también los PAT de grano fino)
 ]
 
@@ -236,7 +246,10 @@ def main(argv: list[str]) -> int:
     args = ap.parse_args(argv)
     if args.cmd == "record":
         raw = "" if sys.stdin.isatty() else sys.stdin.read()
-        print(record(args.guard, args.reason, raw, args.event, args.tool, args.engine)["id"])
+        # El motivo puede citar el fragmento detectado: los llamadores lo pasan por el entorno
+        # (SAVIA_GUARD_BLOCK_REASON), que solo lee la dueña del proceso, y no por argv (/proc).
+        reason = args.reason or os.environ.get("SAVIA_GUARD_BLOCK_REASON", "")
+        print(record(args.guard, reason, raw, args.event, args.tool, args.engine)["id"])
         return 0
     if args.cmd == "mark":
         return mark(args.id, args.label)

@@ -222,6 +222,46 @@ EOF
   [[ "$output" == *"no es un repositorio git"* ]]
 }
 
+@test "SE-510 F3 negativo (Codex a15100d P1-1): env -C pegado, env -iC y builtin pushd → exit 2" {
+  git init -q "$TMP/a" && git init -q "$TMP/b"
+  cmds=("env -C$TMP/b gh pr create" "env -iC $TMP/b gh pr create"
+        "builtin pushd $TMP/b >/dev/null && gh pr create" "true; command popd; gh pr create")
+  for cmd in "${cmds[@]}"; do
+    run bash -c "jq -nc --arg c \"\$1\" --arg d '$TMP/a' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /" _ "$cmd"
+    [ "$status" -eq 2 ] || { echo "no bloqueó: $cmd → $output"; false; }
+  done
+  # Negativo: env con variables y una opción que no es -C sigue resolviendo el cwd.
+  run bash -c "jq -nc --arg c 'env -u GH_HOST GH_PAGER=cat gh pr create' --arg d '$TMP/a' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(git -C "$TMP/a" rev-parse --show-toplevel)" ]
+}
+
+@test "SE-510 F3 negativo (seguridad a15100d P2-1): gh disfrazado (\\gh, \"gh\", g''h) → exit 2" {
+  git init -q "$TMP/a" && git init -q "$TMP/b"
+  cmds=("cd $TMP/b && \\gh pr create" "cd $TMP/b && \"gh\" pr create" "cd $TMP/b && g''h pr create")
+  for cmd in "${cmds[@]}"; do
+    run bash -c "jq -nc --arg c \"\$1\" --arg d '$TMP/a' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /" _ "$cmd"
+    [ "$status" -eq 2 ] || { echo "no bloqueó: $cmd → $output"; false; }
+  done
+  # Negativo: «gh pr create» dentro de un argumento entrecomillado es texto, no otra orden.
+  run bash -c "jq -nc --arg c \"\$1\" --arg d '$TMP/a' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /" _ "gh pr create --title 'gh pr create'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(git -C "$TMP/a" rev-parse --show-toplevel)" ]
+}
+
+@test "SE-510 F3 (Codex a15100d P2-4): & entre comillas no es segundo plano; & escapado tampoco" {
+  git init -q "$TMP/a" && git init -q "$TMP/b"
+  top=$(git -C "$TMP/b" rev-parse --show-toplevel)
+  for cmd in "cd $TMP/b && printf '%s' 'A&B'; gh pr create" "cd $TMP/b && echo \"x & y\" && gh pr create" \
+             "cd $TMP/b && echo A\\&B; gh pr create"; do
+    run bash -c "jq -nc --arg c \"\$1\" --arg d '$TMP/a' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /" _ "$cmd"
+    [ "$status" -eq 0 ] && [ "$output" = "$top" ] || { echo "falso bloqueo: $cmd → $output"; false; }
+  done
+  # Negativo: una comilla escapada no abre cadena; el & que sigue es real y bloquea.
+  run bash -c "jq -nc --arg c \"\$1\" --arg d '$TMP/a' '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /" _ "cd $TMP/b && echo it\\'s & echo 'x'; gh pr create"
+  [ "$status" -eq 2 ]
+}
+
 @test "SE-510 F3: la entrada de respaldo (CLAUDE_TOOL_INPUT) conserva su cwd en el gate" {
   git init -q "$TMP/wt" && git init -q "$TMP/proj"
   summary "$TMP/wt" 97 && summary "$TMP/proj" 0
@@ -340,6 +380,20 @@ print(r["guard"], r["reason"], r["hmac"], len(r["cmd_hmac"]), "input" in r)'
   absent 'ghp_abcdef' "$SAVIA_GUARD_BLOCKS_LOG"
   grep -q 'REDACTED' "$SAVIA_GUARD_BLOCKS_LOG"
   [ "$(stat -c %a "$SAVIA_GUARD_BLOCKS_LOG")" = "600" ]
+}
+
+@test "SE-510 AC-4 (seguridad a15100d P2-3): wrap pasa el motivo por el entorno, no por argv" {
+  printf '#!/usr/bin/env bash\ncat >/dev/null\necho "BLOQUEADO: fragmento MOTIVOSECRETO" >&2\nexit 2\n' >"$TMP/hm.sh"
+  mkdir -p "$TMP/bin"
+  printf '#!/bin/sh\nprintf "%%s\\n" "$@" >"%s/argv"\nprintf "%%s" "$SAVIA_GUARD_BLOCK_REASON" >"%s/env"\n' "$TMP" "$TMP" >"$TMP/bin/python3"
+  chmod +x "$TMP/bin/python3"
+  run bash -c "echo '{}' | PATH='$TMP/bin':\"\$PATH\" bash scripts/guard-blocks.sh wrap --guard p -- bash '$TMP/hm.sh'"
+  [ "$status" -eq 2 ]
+  absent 'MOTIVOSECRETO' "$TMP/argv"
+  grep -q 'MOTIVOSECRETO' "$TMP/env"
+  # Y el registrador real toma el motivo del entorno (redactado igual que antes).
+  run bash -c "echo '{}' | bash scripts/guard-blocks.sh wrap --guard p -- bash '$TMP/hm.sh'"
+  grep -q 'MOTIVOSECRETO' "$SAVIA_GUARD_BLOCKS_LOG"
 }
 
 @test "SE-510 AC-4: wrap entrega al hook los mismos bytes y no cambia su código con entradas grandes" {

@@ -54,8 +54,8 @@ const OP_RX = /(^|[^\w-])(commit(-tree)?|add|stage)([^\w-]|$)/i;
  * SE-510 AC-7: paridad con validate-bash-global.sh. Cada `git commit|add` real
  * cuyo destino no se reconoce con certeza (línea `<op>\t` con destino vacío del
  * resolvedor común scripts/lib/git_op_targets.py) se bloquea. Sin resolvedor
- * (sin Python, timeout o fallo) y con `git` y `commit|add` en el texto: también
- * (fail-closed). El chequeo de rama main del repo destino sigue omitido aquí
+ * (sin Python, timeout o fallo) y con `git` y `commit|add|stage`, o `commit` solo
+ * (`"$x" commit`), en el texto: también (fail-closed). El chequeo de rama main del repo destino sigue omitido aquí
  * (ver cabecera). Devuelve el motivo del bloqueo o null.
  */
 export function unresolvedGitOp(command: string, base: string, resolver = RESOLVER): string | null {
@@ -65,7 +65,9 @@ export function unresolvedGitOp(command: string, base: string, resolver = RESOLV
   if (!hasGit && !COMMIT_RX.test(plain)) return null;
   const res = spawnSync("python3", [resolver, base], { encoding: "utf8", timeout: 5000, input: command });
   if (res.status !== 0 || res.error || typeof res.stdout !== "string") {
-    return hasGit && OP_RX.test(plain)
+    // `"$x" -C … commit` (x=git) también: el camino normal lo bloquea por destino incierto, y
+    // perder el resolvedor no puede convertir esa duda en un permiso.
+    return (hasGit && OP_RX.test(plain)) || COMMIT_RX.test(plain)
       ? "resolvedor de destino no disponible para git commit/add (fail-closed). Forma admitida: git -C <ruta> commit …"
       : null;
   }
