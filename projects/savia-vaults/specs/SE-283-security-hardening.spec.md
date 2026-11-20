@@ -152,13 +152,15 @@ function verifyContentHash(result: FederatedSearchResult): boolean {
 |---|---|
 | CREATE | `projects/savia-vaults/src/federation/circuit-breaker.ts` |
 | CREATE | `projects/savia-vaults/src/federation/audit-logger.ts` |
-| CREATE | `projects/savia-vaults/src/federation/hash-verify.ts` |
+| CREATE | `projects/savia-vaults/src/federation/hash-verify.ts` (retirado 2026-11-20, ver nota) |
 | MODIFY | `projects/savia-vaults/src/federation/a2a-client.ts` (TLS + rate limit + hash verify) |
 | MODIFY | `projects/savia-vaults/src/server/a2a.ts` (TLS support) |
 | MODIFY | `projects/savia-vaults/src/cli/index.ts` (--tls, rotate-token) |
 | MODIFY | `projects/savia-vaults/src/config/schema.json` (tls, clientRateLimit) |
 | CREATE | `projects/savia-vaults/tests/unit/federation/circuit-breaker.test.ts` |
 | CREATE | `projects/savia-vaults/tests/unit/federation/audit-logger.test.ts` |
-| CREATE | `projects/savia-vaults/tests/unit/federation/hash-verify.test.ts` |
+| CREATE | `projects/savia-vaults/tests/unit/federation/hash-verify.test.ts` (retirado 2026-11-20) |
 | MODIFY | `projects/savia-vaults/docs/FEDERATION.md` (security hardening section) |
 | MODIFY | `projects/savia-vaults/docs/FEDERATION.es.md` (seccion hardening) |
+
+**Retirada/enmienda 2026-11-20 por decisión de la operadora (pregunta interactiva):** `hash-verify.ts` y su test se retiran (hash de 32 bits calculado por el propio remoto; no protegía nada y no tenía consumidor). Ver SE-287 AC-4.5.

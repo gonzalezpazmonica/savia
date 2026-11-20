@@ -142,7 +142,7 @@ AC-3.6. Backup corrupto → restore falla con mensaje claro.
 - `VaultStorage.write()` usa `signContent()` en lugar del placeholder
 - `FederatedSearchEngine` integra `CircuitBreaker` (reemplaza health tracking manual)
 - `FederatedSearchEngine` integra `FederationAuditLogger` (registra cada query federada)
-- `FederatedSearchEngine` integra `verifyContentHash()` al recibir resultados remotos
+- ~~`FederatedSearchEngine` integra `verifyContentHash()` al recibir resultados remotos~~ (retirado, ver nota bajo los AC)
 - Key pair generado en `~/.savia-vaults/keys/` al primer uso
 - `savia-vaults verify` verifica firma de todos los documentos del vault
 
@@ -152,8 +152,10 @@ AC-4.1. `write()` produce firma Ed25519 real verificable.
 AC-4.2. Documento alterado tras firmar → verificación falla.
 AC-4.3. CircuitBreaker se activa tras 5 fallos consecutivos de un dome.
 AC-4.4. Auditoría registra cada query federada en JSONL.
-AC-4.5. Resultados remotos con hash incorrecto se descartan.
+AC-4.5. ~~Resultados remotos con hash incorrecto se descartan.~~ RETIRADO (ver nota). La integridad de resultados remotos queda cubierta por la firma Ed25519 (AC-4.1, AC-4.2); descartar resultados remotos por firma inválida es trabajo nuevo, fuera de esta retirada.
 AC-4.6. `savia-vaults verify` verifica todos los documentos y reporta.
+
+**Retirada/enmienda 2026-11-20 por decisión de la operadora (pregunta interactiva):** se retira AC-4.5 y se elimina `src/federation/hash-verify.ts` con su test. Era un hash de 32 bits no criptográfico que calcula el propio dome remoto que envía el resultado: un remoto malicioso lo recalcula y uno honesto no lo necesita. No protegía nada y nadie lo importaba. `contentHash` sigue existiendo como clave de deduplicación en la búsqueda federada, sin función de integridad.
 
 **Esfuerzo:** 5h
 

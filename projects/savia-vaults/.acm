@@ -22,7 +22,7 @@ modules:
   - core: [types, security, storage, search]
   - server: [mcp, a2a, ratelimit]
   - federation: [types, registry, cache, a2a-client, search]
-  - hardening: [circuit-breaker, audit-logger, hash-verify]
+  - hardening: [circuit-breaker, audit-logger]
   - cli: [index]
   - config: [schema]
 
