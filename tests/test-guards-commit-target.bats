@@ -447,3 +447,20 @@ EOF
   run env PATH="$P" bash -c "jq -n --arg c 'git -C $WT commit -m x' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
   blocked_unsure_vbg
 }
+
+@test "vbg: continuación de línea dentro de git y add (gi\\<salto>t ... ad\\<salto>d) no esquiva el prefiltro" {
+  # Revisión de Codex en #1596: el prefiltro bash no borraba `\`+salto y la orden pasaba sin resolvedor.
+  run vbg $'gi\\\nt -C "$X" ad\\\nd -A' "$WT"
+  blocked_unsure_vbg
+  # negativo: con destino literal en un worktree agent/* pasa
+  run vbg $'gi\\\nt -C '"$WT"$' ad\\\nd -A' "$WT"
+  [ "$status" -eq 0 ]
+}
+
+@test "vbg sin python3: git stage cuenta como add (fail-closed); git status pasa" {
+  P=$(no_python_path)
+  run env PATH="$P" bash -c "jq -n --arg c 'git -C $WT stage -A' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
+  blocked_unsure_vbg
+  run env PATH="$P" bash -c "jq -n --arg c 'git -C $WT status' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
+  [ "$status" -eq 0 ]
+}
