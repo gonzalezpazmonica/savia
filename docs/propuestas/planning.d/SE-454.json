@@ -1,0 +1,11 @@
+{
+  "id": "SE-454",
+  "status": "DEFERRED",
+  "priority": "P2",
+  "title": "Invariantes negativos como tests sobre fuentes sensibles y aserción de red en analizadores",
+  "note": "Los invariantes se cumplen hoy (medido); el test los fija. La guardia de red es aserción de pruebas, no control.",
+  "evidence": "docs/specs/SE-454-negative-invariant-tests.spec.md",
+  "phase": "aparcado",
+  "approval": "Operadora 2026-10-27: AskUserQuestion",
+  "deferral": "2026-11-18 (propuesta de la orquestadora, pendiente de confirmar por la operadora): aparcada. P2: los invariantes que fijaría ya se cumplen hoy (lo constata la propia spec, sin comprobación nueva en esta propuesta) y no hay incidente propio; el valor es solo de regresión. Nada construido. Retoma tras la primera regresión de un invariante o cuando entre código sensible nuevo (broker, lectura de cúpulas N3+)."
+}

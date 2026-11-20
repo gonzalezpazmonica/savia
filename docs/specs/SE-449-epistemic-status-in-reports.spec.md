@@ -1,5 +1,7 @@
 ---
-status: APPROVED
+status: DEFERRED
+deferred_at: 2026-11-18
+deferred_reason: "2026-11-18 (propuesta de la orquestadora, pendiente de confirmar por la operadora): aparcada. P2: la etiqueta de estado epistémico es opcional y sin etiqueta el tribunal no cambia, así que hoy no la consume nadie. Nada construido. Retoma cuando un tribunal o informe real necesite distinguir observado de inferido."
 approved_at: 2026-10-27
 approved_by: "operadora, AskUserQuestion 2026-10-27"
 priority: P2

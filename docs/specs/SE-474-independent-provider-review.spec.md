@@ -155,7 +155,7 @@ S2 a S4 no empiezan sin que la operadora apruebe la implementación (aprobación
 - Fuga de contenido sensible al proveedor externo. Mitigación: confidencialidad por nivel antes de cada consulta.
 - Bloqueo operativo por una cuenta caída en modo obligatorio. Mitigación: la espera es visible en el plan y la
   operadora puede quitar `required_for` en local; `absent` nunca bloquea.
-- Dependencia de SE-469, que no consta en `main` a fecha de esta spec: debe confirmarse su alcance antes de S2.
+- Dependencia de SE-469, aparcada (DEFERRED desde 2026-11-18, sin código en `main`): debe retomarse o sustituirse antes de S2.
 
 ## Esfuerzo
 

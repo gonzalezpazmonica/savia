@@ -1,5 +1,7 @@
 ---
-status: APPROVED
+status: DEFERRED
+deferred_at: 2026-11-18
+deferred_reason: "2026-11-18 (propuesta de la orquestadora, pendiente de confirmar por la operadora): aparcada. Fase E y P2: ningún caso de uso móvil en curso que consuma la automatización, y la spec empieza por una sonda de viabilidad sin producto detrás. Nada construido. Retoma con un caso de uso concreto y la Fase E abierta."
 approved_at: 2026-10-27
 approved_by: "operadora, AskUserQuestion 2026-10-27"
 priority: P2
