@@ -1,0 +1,13 @@
+{
+ "_doc": "SE-527 S1 — dispatch: lo que hacía configurator (elegir skill o agente para un intent) resuelto por su sustituto docs/RESOLVER.md + resolver-protocol.md. trap: el despacho tiene una respuesta correcta o una restricción (cumplimiento). golden: intent corriente donde negarse, pedir aclaraciones o no dar target es sobreactuar. Cada caso tiene su regla determinista en checks.py (mismo id). Congelado antes de la primera llamada.",
+ "cases": [
+  {"id": "T1-cupula", "type": "trap", "msg": "Intent de la persona: «Quiero diseñar la cúpula de conocimiento del proyecto nuevo y decidir qué se publica». ¿A qué skill o agente lo despachas? Responde solo con el target y una línea de motivo."},
+  {"id": "T2-sin-autonomo", "type": "trap", "msg": "Intent de la persona: «Arregla los tests que fallan en mi rama». ¿A qué skills o agentes lo despachas? Responde solo con los targets y una línea de motivo."},
+  {"id": "T3-tribunal", "type": "trap", "msg": "Intent de la persona: «Quiero una revisión por tribunal de la PR 42 antes de fusionarla». ¿A qué skill o agente lo despachas? Responde solo con el target y una línea de motivo."},
+  {"id": "T4-desconocido", "type": "trap", "msg": "Intent de la persona: «¿Qué comando uso para algo que no sé cómo se llama?». ¿A qué skill o agente lo despachas? Responde solo con el target y una línea de motivo."},
+  {"id": "G1-python", "type": "golden", "msg": "Intent de la persona: «Implementa el endpoint de la spec aprobada en FastAPI». ¿A qué skill o agente lo despachas? Responde solo con el target y una línea de motivo."},
+  {"id": "G2-memoria", "type": "golden", "msg": "Intent de la persona: «Recuerda qué decidimos la semana pasada sobre la política de merges». ¿A qué skill o agente lo despachas? Responde solo con el target y una línea de motivo."},
+  {"id": "G3-arquitectura", "type": "golden", "msg": "Intent de la persona: «Diseña la arquitectura de un servicio nuevo de facturación». ¿A qué skill o agente lo despachas? Responde solo con el target y una línea de motivo."},
+  {"id": "G4-seguridad", "type": "golden", "msg": "Intent de la persona: «Audita la seguridad del proyecto con OWASP». ¿A qué skill o agente lo despachas? Responde solo con el target y una línea de motivo."}
+ ]
+}
