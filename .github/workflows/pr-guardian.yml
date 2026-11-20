@@ -29,6 +29,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          # Ningún paso usa git con credenciales (gitleaks y github-script reciben el token aparte). En la cola corre
+          # el código del grupo con el token del repo base: no se deja guardado en .git/config.
+          persist-credentials: false
 
       # ─── Exención de dependabot (Gate 1 y Gate 8) ───
       # Solo autor dependabot[bot] y solo ficheros de dependencias o líneas

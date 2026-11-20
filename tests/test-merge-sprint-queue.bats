@@ -6,6 +6,11 @@
 # una vez en la primera consulta de la cola), log de entradas en $FAKE/enqueued y de salidas en $FAKE/dequeued.
 # Fallos simulados: $FAKE/dequeue_fail (la mutación falla y la PR sigue en la cola), $FAKE/<pr>.state_fail (leer el
 # estado falla), $FAKE/<pr>.lag (la primera consulta de la cola dice «fuera» aunque siga dentro: desfase de GitHub).
+# Entrada en la cola: mutación enqueuePullRequest con expectedHeadOid (GitHub la rechaza si el head no coincide).
+# $FAKE/queue_method (método de la cola; SQUASH si no existe), $FAKE/<pr>.enqueue_lost (encola y sale con error:
+# respuesta perdida), $FAKE/<pr>.enqueue_auto (no entra: deja un auto-merge pendiente), $FAKE/<pr>.automerge
+# (auto-merge pendiente; lo quita disablePullRequestAutoMerge), $FAKE/<pr>.on_enqueue (se ejecuta al encolar).
+# Con $FAKE/queue_enabled, «gh pr merge» encola aunque se pida --squash (comportamiento documentado de gh).
 
 SCRIPT="scripts/merge-sprint.sh"
 
@@ -36,7 +41,7 @@ case "$1 $2" in
       *mergeStateStatus*) echo CLEAN ;;
       *isDraft*) echo true ;;
       *mergedBy*) echo executor ;;
-      *mergeCommit*) printf 'c%039d\n' "$n" ;;
+      *mergeCommit*) [[ "$(cat "$F/$n.state" 2>/dev/null)" == MERGED ]] && printf 'c%039d\n' "$n"; exit 0 ;;   # sin fusión no hay commit
       *state*) [[ -f "$F/$n.state_fail" ]] && exit 1; cat "$F/$n.state" 2>/dev/null || echo OPEN ;;
     esac ;;
   "pr diff") cat "$F/$3.files" ;;
@@ -45,19 +50,32 @@ case "$1 $2" in
   "label list") exit 0 ;;
   "pr merge")
     if [[ -f "$F/queue_enabled" ]]; then
-      # Cola activa: entra si --match-head-commit coincide con el head; GitHub decide después.
-      m=$(sed -E 's/.*--match-head-commit ([0-9a-f]+).*/\1/' <<<"$a"); [[ "$m" == "$(cat "$F/$3.head")" ]] || exit 1
-      echo "$3" >> "$F/enqueued"; touch "$F/$3.inqueue"; exit 0
+      # Cola activa: gh encola aunque se pida --squash y sale con 0; GitHub decide después.
+      echo "$3" >> "$F/enqueued"; touch "$F/$3.inqueue"; [[ -f "$F/$3.enqueue_lost" ]] && exit 1; exit 0
     fi
     echo "$3" >> "$F/merged"; echo MERGED > "$F/$3.state"; exit 0 ;;
   *)
     case "$a" in
-      "api graphql"*mergeQueue*) [[ -f "$F/queue_enabled" ]] && echo MQ_1; exit 0 ;;
+      "api graphql"*enqueuePullRequest*)
+        n=$(sed -E 's/.* -f id=PR_([0-9]+).*/\1/' <<<"$a"); h=$(sed -E 's/.* -f h=([0-9a-f]+).*/\1/' <<<"$a")
+        if [[ -f "$F/$n.on_enqueue" ]]; then bash "$F/$n.on_enqueue"; mv "$F/$n.on_enqueue" "$F/$n.on_enqueue.done"; fi
+        [[ -f "$F/queue_enabled" && "$h" == "$(cat "$F/$n.head")" ]] || exit 1
+        if [[ -f "$F/$n.enqueue_auto" ]]; then touch "$F/$n.automerge"; exit 0; fi
+        echo "$n" >> "$F/enqueued"; touch "$F/$n.inqueue" "$F/$n.fresh"; [[ -f "$F/$n.enqueue_lost" ]] && exit 1; exit 0 ;;
+      "api graphql"*disablePullRequestAutoMerge*)
+        n=$(sed -E 's/.* -f id=PR_([0-9]+).*/\1/' <<<"$a"); [[ -f "$F/dequeue_fail" ]] && exit 1
+        if [[ -f "$F/$n.automerge" ]]; then mv "$F/$n.automerge" "$F/$n.automerge.off"; echo "$n" >> "$F/automerge_disabled"; fi
+        exit 0 ;;
+      "api graphql"*mergeQueue*)
+        [[ -f "$F/queue_enabled" ]] || exit 0
+        if [[ -f "$F/queue_method" ]]; then cat "$F/queue_method"; else echo SQUASH; fi; exit 0 ;;
       "api graphql"*isInMergeQueue*)
         n=$(sed -E 's/.* -F n=([0-9]+).*/\1/' <<<"$a")
+        # La lectura que verifica la entrada (justo tras encolar) solo ve la PR dentro; GitHub decide en las siguientes.
+        if [[ -f "$F/$n.fresh" ]]; then mv "$F/$n.fresh" "$F/$n.fresh.done"; echo true; exit 0; fi
         if [[ -f "$F/$n.on_poll" ]]; then bash "$F/$n.on_poll"; mv "$F/$n.on_poll" "$F/$n.on_poll.done"; fi
         if [[ -f "$F/$n.lag" && -f "$F/$n.inqueue" ]]; then rm "$F/$n.lag"; echo false; exit 0; fi
-        [[ -f "$F/$n.inqueue" ]] || { echo false; exit 0; }
+        if [[ ! -f "$F/$n.inqueue" ]]; then if [[ -f "$F/$n.automerge" ]]; then echo auto; else echo false; fi; exit 0; fi
         o=$(cat "$F/$n.queue_outcome" 2>/dev/null || echo merge)
         case "$o" in
           wait) echo true; exit 0 ;;
@@ -129,12 +147,12 @@ sys.exit(0 if any(e.get("event")==sys.argv[2] and e.get("pr")==sys.argv[3] and (
   [ "$(paste -sd, "$FAKE/enqueued")" = "30,31" ]
   [ "$(paste -sd, "$FAKE/merged")" = "30,31" ]
   # Entran las dos antes de la primera espera: la cola las prueba en paralelo.
-  first_poll=$(grep -n 'isInMergeQueue' "$FAKE/calls" | head -1 | cut -d: -f1)
-  second_in=$(grep -n '^pr merge 31' "$FAKE/calls" | cut -d: -f1)
-  [ "$first_poll" -gt "$second_in" ]
-  # Método merge sobre la cabeza revisada; nunca squash en modo cola.
-  grep -q "^pr merge 30 -R .* --merge --match-head-commit $(sha_of 30)" "$FAKE/calls"
-  run grep -c -- '--squash' "$FAKE/calls"
+  # Antes de encolar la 31 solo hay una consulta de la cola: la verificación de la entrada de la 30, ninguna espera.
+  second_in=$(grep -n 'enqueuePullRequest.* -f id=PR_31' "$FAKE/calls" | cut -d: -f1)
+  [ "$(head -n "$second_in" "$FAKE/calls" | grep -c 'isInMergeQueue')" -eq 1 ]
+  # Entrada con enqueuePullRequest atada a la cabeza revisada; nunca gh pr merge en modo cola.
+  grep -q "enqueuePullRequest.* -f id=PR_30 -f h=$(sha_of 30)" "$FAKE/calls"
+  run grep -c '^pr merge' "$FAKE/calls"
   [ "$output" = 0 ]
   ledger_has QUEUED 30
   ledger_has MERGED 30
@@ -231,7 +249,7 @@ sys.exit(0 if any(e.get("event")==sys.argv[2] and e.get("pr")==sys.argv[3] and (
   printf '%040d' 7 | tr 0 d > "$FAKE/39.head"
   run bash "$SCRIPT" run
   RUN_STATUS=$status; RUN_OUT=$output
-  run grep -c '^pr merge 39' "$FAKE/calls"
+  run grep -c 'enqueuePullRequest.* -f id=PR_39' "$FAKE/calls"
   [ "$output" = 0 ]
   [ ! -e "$FAKE/merged" ]
   # El motivo es la cabeza movida, no cualquier otro fallo del run: la cabeza nueva no es equivalente a la revisada
@@ -297,7 +315,7 @@ sys.exit(0 if any(e.get("event")==sys.argv[2] and e.get("pr")==sys.argv[3] and (
   run bash "$SCRIPT" run
   [ "$status" -eq 5 ]
   [[ "$output" == *"cola_no_activa"* ]]
-  run grep -c '^pr merge' "$FAKE/calls"
+  run grep -c 'enqueuePullRequest' "$FAKE/calls"
   [ "$output" = 0 ]
 }
 
@@ -395,4 +413,156 @@ resv_of() { find "$MERGE_SPRINT_HOME/reservations" -name "pr.merge__$1.head"; }
   poll_s=$(sed -n 's/.*MERGE_SPRINT_POLL_S:-\([0-9]*\)}.*/\1/p' "$SCRIPT" | head -1)
   [ -n "$polls" ] && [ -n "$poll_s" ]
   [ $(( polls * poll_s )) -gt $(( 125 * 60 )) ]
+}
+
+# ── Revisión independiente 2026-11-20 (codex-refutacion y security, HOLD sobre 295b1c5) ──
+
+@test "serie con la cola de GitHub activa: gh encola en vez de fusionar; se saca de la cola y el run para (exit 5)" {
+  touch "$FAKE/queue_enabled"; export MERGE_SPRINT_RESYNC=0   # MERGE_SPRINT_QUEUE sin definir: modo serie
+  mkpr 60 "scripts/a.sh"; review 60 APPROVE correctness
+  echo wait > "$FAKE/60.queue_outcome"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"merge_no_inmediato"* ]]
+  grep -qx 60 "$FAKE/enqueued"
+  grep -qx 60 "$FAKE/dequeued"     # el trap la saca: no queda en la cola sin vigilancia
+  [ ! -e "$FAKE/merged" ]
+  run ledger_has MERGED 60
+  [ "$status" -ne 0 ]
+}
+
+@test "cola: un auto-merge pendiente al encolar no cuenta como entrada; se desarma y se aparca" {
+  queue_on
+  mkpr 61 "scripts/a.sh"; review 61 APPROVE correctness
+  touch "$FAKE/61.enqueue_auto"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 61 "$FAKE/automerge_disabled"
+  [ ! -e "$FAKE/61.automerge" ]
+  ledger_has PARK 61 auto_merge_pendiente
+  run ledger_has QUEUED 61
+  [ "$status" -ne 0 ]
+}
+
+@test "cola: auto-merge pendiente durante la espera no se toma por expulsión; se desarma" {
+  queue_on
+  mkpr 62 "scripts/a.sh"; review 62 APPROVE correctness
+  echo wait > "$FAKE/62.queue_outcome"
+  # Sale de la cola y queda con auto-merge pendiente (p. ej. falta una aprobación).
+  echo "mv '$FAKE/62.inqueue' '$FAKE/62.left'; touch '$FAKE/62.automerge'" > "$FAKE/62.on_poll"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 62 "$FAKE/automerge_disabled"
+  ledger_has PARK 62 auto_merge_pendiente
+  run ledger_has PARK 62 cola_expulsada
+  [ "$status" -ne 0 ]
+}
+
+@test "cola: auto-merge que no se puede desarmar para con anomalía y conserva la reserva" {
+  queue_on
+  mkpr 63 "scripts/a.sh"; review 63 APPROVE correctness
+  touch "$FAKE/63.enqueue_auto" "$FAKE/dequeue_fail"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"dequeue_fallo"* ]]
+  [ -e "$FAKE/63.automerge" ]
+  [ -n "$(resv_of 63)" ]
+}
+
+@test "cola: respuesta perdida tras encolar (la mutación falla pero la PR entró) se vigila y se fusiona" {
+  queue_on
+  mkpr 64 "scripts/a.sh"; review 64 APPROVE correctness
+  touch "$FAKE/64.enqueue_lost"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 64 "$FAKE/merged"
+  ledger_has QUEUED 64
+  ledger_has MERGED 64
+  run ledger_has PARK 64 cola_rechazada
+  [ "$status" -ne 0 ]
+}
+
+@test "cola: respuesta perdida tras encolar y STOP después; la PR se saca de la cola (no queda sin vigilancia)" {
+  queue_on
+  mkpr 65 "scripts/a.sh"; review 65 APPROVE correctness
+  touch "$FAKE/65.enqueue_lost"; echo wait > "$FAKE/65.queue_outcome"
+  echo "bash '$SCRIPT_ABS' stop >/dev/null" > "$FAKE/65.on_poll"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"STOP manual"* ]]
+  grep -qx 65 "$FAKE/dequeued"
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "cola: GitHub rechaza la entrada (expectedHeadOid no coincide); no entra, se libera la reserva y se aparca" {
+  queue_on
+  mkpr 66 "scripts/a.sh"; review 66 APPROVE correctness
+  plan_and_grant
+  # Push justo entre la comprobación del head y la entrada: GitHub ve otra cabeza y rechaza la mutación.
+  echo "printf '%040d' 6 | tr 0 b > '$FAKE/66.head'" > "$FAKE/66.on_enqueue"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ ! -e "$FAKE/enqueued" ]
+  ledger_has PARK 66 cola_rechazada
+  [ -z "$(resv_of 66)" ]
+}
+
+@test "cola: STOP mientras otra PR espera su CI saca de la cola la ya encolada" {
+  queue_on; export MERGE_SPRINT_CI_POLLS=3
+  mkpr 67 "scripts/a.sh"; mkpr 68 "scripts/b.sh"
+  review 67 APPROVE correctness; review 68 APPROVE correctness
+  echo wait > "$FAKE/67.queue_outcome"; echo pending > "$FAKE/68.checks"
+  plan_and_grant
+  # La 67 ya está en la cola cuando empieza la espera de CI de la 68: el STOP llega en la primera consulta.
+  sed -i 's|^  "pr checks")|  "pr checks") [[ "$3" == 68 ]] \&\& bash "$SCRIPT_ABS" stop >/dev/null;|' "$GH"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"STOP manual"* ]]
+  grep -qx 67 "$FAKE/dequeued"
+  # Paró tras la primera consulta de CI de la 68, no tras agotar la espera.
+  [ "$(grep -c '^pr checks 68' "$FAKE/calls")" -eq 1 ]
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "cola: grant revocado mientras main espera su CI tras fusionar una PR saca de la cola la siguiente" {
+  queue_on; export MERGE_SPRINT_MAIN_POLLS=3
+  mkpr 69 "scripts/a.sh"; mkpr 70 "scripts/b.sh"
+  review 69 APPROVE correctness; review 70 APPROVE correctness
+  echo wait > "$FAKE/70.queue_outcome"; echo pending > "$FAKE/main_ci"
+  plan_and_grant
+  sed -i 's|^      api\*check-runs\*)|      api*check-runs*) bash "$SCRIPT_ABS" revoke >/dev/null;|' "$GH"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"grant_revocado"* ]]
+  grep -qx 69 "$FAKE/merged"
+  grep -qx 70 "$FAKE/dequeued"
+  run grep -cx 70 "$FAKE/merged"
+  [ "$output" = 0 ]
+}
+
+@test "cola: método de la cola distinto de squash es anomalía sin encolar" {
+  queue_on; echo MERGE > "$FAKE/queue_method"
+  mkpr 71 "scripts/a.sh"; review 71 APPROVE correctness
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"cola_metodo_no_squash"* ]]
+  run grep -c 'enqueuePullRequest' "$FAKE/calls"
+  [ "$output" = 0 ]
+}
+
+@test "cola: método de la cola ilegible (vacío con cola) es anomalía sin encolar" {
+  queue_on; : > "$FAKE/queue_method"
+  mkpr 72 "scripts/a.sh"; review 72 APPROVE correctness
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  run grep -c 'enqueuePullRequest' "$FAKE/calls"
+  [ "$output" = 0 ]
 }

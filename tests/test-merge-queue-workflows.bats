@@ -41,9 +41,35 @@ def pr_only_if(cond):
     return bool(pr_gate.search(t)) and "||" not in t and "merge_group" not in cond
 
 def reads_pr(body):
-    """Lecturas de datos de la PR que quedan tras quitar las expresiones que ofrecen la base de la cola."""
-    rest = expr.sub(lambda m: "" if "merge_group.base_sha" in m.group(0) else m.group(0), body)
+    """Lecturas de datos de la PR que quedan tras quitar, solo en las expresiones que ofrecen la base de la cola
+    (merge_group.base_sha), la base de la PR (pull_request.base.sha o base_ref), que es justo lo que esa
+    alternativa sustituye. Cualquier otra lectura de la PR en la misma expresión sigue contando."""
+    base = re.compile(r"github\.event\.pull_request\.base\.sha|github\.base_ref")
+    rest = expr.sub(lambda m: base.sub("", m.group(0)) if "merge_group.base_sha" in m.group(0) else m.group(0), body)
     return bool(pr_only.search(rest))
+
+def split_top(cond, op):
+    """Parte la condición por <op> solo en el nivel superior (fuera de paréntesis)."""
+    parts, depth, cur, i = [], 0, "", 0
+    while i < len(cond):
+        c = cond[i]
+        if c == "(": depth += 1
+        elif c == ")": depth -= 1
+        if depth == 0 and cond.startswith(op, i):
+            parts.append(cur); cur = ""; i += len(op); continue
+        cur += c; i += 1
+    parts.append(cur)
+    return [p.strip() for p in parts]
+
+def runs_in_queue(cond):
+    """True solo si la condición vale seguro en merge_group: sin `if`, o con un disyunto de nivel superior que
+    sea literalmente github.event_name == 'merge_group', always() o true. Cualquier otra forma (false,
+    github.event_name == 'push', una negación…) no demuestra que el job corra en la cola."""
+    if cond is None or cond == "":
+        return True
+    c = re.sub(r"^\$\{\{|\}\}$", "", str(cond).strip()).strip()
+    ok = {"github.event_name == 'merge_group'", "always()", "true"}
+    return any(re.sub(r"\s+", " ", d) in ok for d in split_top(c, "||"))
 
 names = set()
 for jid, job in d["jobs"].items():
@@ -51,7 +77,7 @@ for jid, job in d["jobs"].items():
     jif = str(job.get("if", ""))
     skipped_in_queue = "!= 'merge_group'" in jif or pr_only_if(jif)
     if name in required:
-        if skipped_in_queue:
+        if skipped_in_queue or not runs_in_queue(job.get("if")):
             errs.append(f"job obligatorio «{name}» se salta en merge_group")
     if skipped_in_queue:
         continue
@@ -86,7 +112,9 @@ import yaml
 steps=yaml.safe_load(open('$GUARD'))['jobs']['pr-guardian']['steps']
 by={s['name']:s for s in steps}
 for g in ['Gate 3: CLAUDE.md Context Guard','Gate 4: ShellCheck on changed scripts','Gate 6: Hook Safety Validator','Gate 7: Context Impact Summary']:
-    assert 'pull_request' not in str(by[g].get('if','')), g
+    assert g in by, 'falta ' + g
+    # Sin if: cualquier condición (también false o event_name == push) podría saltarlos en la cola.
+    assert 'if' not in by[g], g + ' tiene if: ' + str(by[g]['if'])
 "
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
 }
@@ -183,4 +211,59 @@ d=yaml.safe_load(open('.github/workflows/$w.yml')); on=d.get(True, d.get('on'))
 sys.exit(1 if isinstance(on, dict) and 'merge_group' in on else 0)"
     [ "$status" -eq 0 ] || { echo "$w se dispara con merge_group"; return 1; }
   done
+}
+
+@test "negativo: un job obligatorio con if: false no corre en la cola y se detecta" {
+  f="$BATS_TEST_TMPDIR/wf.yml"
+  python3 - "$CI" "$f" <<'PY'
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1]))
+d["jobs"]["lint-markdown"]["if"] = False
+yaml.safe_dump(d, open(sys.argv[2], "w"))
+PY
+  run check "$f" "Validate workspace|Lint Markdown|BATS Hook Tests"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Lint Markdown"* ]]
+}
+
+@test "negativo: un job obligatorio limitado a push no corre en la cola y se detecta" {
+  f="$BATS_TEST_TMPDIR/wf.yml"
+  python3 - "$CI" "$f" <<'PY'
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1]))
+d["jobs"]["bats-tests"]["if"] = "github.event_name == 'push'"
+yaml.safe_dump(d, open(sys.argv[2], "w"))
+PY
+  run check "$f" "Validate workspace|Lint Markdown|BATS Hook Tests"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"BATS Hook Tests"* ]]
+}
+
+@test "positivo: un job obligatorio con || github.event_name == 'merge_group' en el nivel superior corre en la cola" {
+  f="$BATS_TEST_TMPDIR/wf.yml"
+  python3 - "$CI" "$f" <<'PY'
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1]))
+d["jobs"]["bats-tests"]["if"] = "github.event_name == 'push' || github.event_name == 'merge_group'"
+yaml.safe_dump(d, open(sys.argv[2], "w"))
+PY
+  run check "$f" "Validate workspace|Lint Markdown|BATS Hook Tests"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+}
+
+@test "negativo: una lectura de la PR unida con || a merge_group.base_sha en la misma expresión se detecta" {
+  f="$BATS_TEST_TMPDIR/wf.yml"
+  mutate_step "$CI" "$f" "Derived paths absent" 's["env"]["T"] = "${{ github.event.pull_request.title || github.event.merge_group.base_sha }}"'
+  run check "$f" "Validate workspace|Lint Markdown|BATS Hook Tests"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Derived paths absent"* ]]
+}
+
+@test "pr-guardian.yml: el checkout no deja el token en .git/config (en la cola corre código del grupo)" {
+  run python3 -c "
+import yaml,sys
+steps=yaml.safe_load(open('$GUARD'))['jobs']['pr-guardian']['steps']
+co=[s for s in steps if 'actions/checkout' in str(s.get('uses',''))]
+sys.exit(0 if co and all(s.get('with',{}).get('persist-credentials') is False for s in co) else 1)"
+  [ "$status" -eq 0 ]
 }
