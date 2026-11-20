@@ -691,6 +691,9 @@ merge_at() {  # merge_at <pr> <S> → 0 mergeado; 1 con FAIL=<motivo>. Pasos 7�
   esac
   [[ "$($GH pr view "$pr" -R "$REPO" --json headRefOid --jq .headRefOid)" == "$s" ]] || { FAIL=head_movido; return 1; }
   [[ -e "$STOPF" ]] && { park "$pr" stop_antes_de_merge; ledger event=STOP reason=manual; echo "STOP manual"; exit 0; }
+  # La espera de CI puede durar más que el TTL o coincidir con un revoke, y con la cola vacía watch_gate no mira
+  # nada: grant y TTL se revalidan aquí, antes de reservar, encolar o fusionar (§2.5).
+  live_gate "$pr"
   # Entre la comprobación del bucle y aquí pasan la espera de CI y, en la cola, la del juez: base, repo de
   # head y reaperturas se revalidan contra el manifiesto (AC-18); --match-head-commit solo fija el head.
   [[ "$($GH pr view "$pr" -R "$REPO" --json state --jq .state)" == OPEN ]] || { FAIL=no_abierto; return 1; }
@@ -706,30 +709,55 @@ merge_at() {  # merge_at <pr> <S> → 0 mergeado; 1 con FAIL=<motivo>. Pasos 7�
     # Modo cola: enqueuePullRequest con expectedHeadOid, que GitHub impone (gh pr merge no garantiza pasar el head a
     # la cola). La fusión la hace GitHub tras probar el grupo (queue_drain). Manda el estado remoto, no la salida:
     # una respuesta perdida tras encolar deja la PR dentro, y un auto-merge pendiente no es una entrada en la cola.
-    local id rc=1 q
+    local id rc=1 q st
+    # El método se comprobó al empezar, pero alguien puede cambiarlo durante el run: se relee antes de cada entrada.
+    [[ "$(queue_method)" == SQUASH ]] || { queue_release "$pr"; anomaly cola_metodo_no_squash "$pr"; }
     id=$($GH pr view "$pr" -R "$REPO" --json id --jq .id 2>/dev/null) && [[ -n "$id" ]] || { queue_release "$pr"; FAIL=pr_ilegible; return 1; }
     gql -f query='mutation($id:ID!,$h:GitObjectID!){enqueuePullRequest(input:{pullRequestId:$id,expectedHeadOid:$h}){mergeQueueEntry{id}}}' \
       -f id="$id" -f h="$s" >/dev/null 2>&1 && rc=0
+    # Primero la cola y después el estado (como queue_drain): GitHub puede haberla fusionado antes de la primera
+    # lectura. Entonces «fuera de la cola» no es rechazo: vuelve como encolada y queue_drain la registra (contador,
+    # ledger, cabeza y CI de main). Liberar aquí la reserva dejaría pasar una fusión sin contar.
     q=$(in_queue "$pr")
-    if [[ "$q" == true ]]; then
+    # Una sola lectura «fuera» justo tras encolar puede ser desfase de GitHub (como en queue_drain): se confirma.
+    [[ "$q" == false ]] && { sleep "${MERGE_SPRINT_POLL_S:-30}"; q=$(in_queue "$pr"); }
+    st=$($GH pr view "$pr" -R "$REPO" --json state --jq .state 2>/dev/null) || st=""
+    if [[ "$q" == true || "$st" == MERGED ]]; then
       if (( rc == 0 )); then ledger event=QUEUED pr="$pr" head="$s"; else ledger event=QUEUED pr="$pr" head="$s" respuesta=perdida; fi
       return 0
     fi
     # Fuera de la cola (o auto-merge pendiente, o ilegible): se desarma y se verifica antes de liberar la reserva.
     if dequeue "$pr"; then
+      # Una fusión entre la lectura anterior y la salida de la cola también es una fusión que hay que contar.
+      if [[ "$($GH pr view "$pr" -R "$REPO" --json state --jq .state 2>/dev/null)" == MERGED ]]; then
+        ledger event=QUEUED pr="$pr" head="$s" respuesta=fusionada; return 0
+      fi
       queue_release "$pr"; FAIL=cola_rechazada; [[ "$q" == auto ]] && FAIL=auto_merge_pendiente; return 1
     fi
     QUEUED="$QUEUED $pr::$s::"; anomaly dequeue_fallo "$pr"   # el trap vuelve a intentar sacarla
   fi
-  if $GH pr merge "$pr" -R "$REPO" --squash --match-head-commit "$s" >/dev/null 2>&1; then
-    # Modo serie: el éxito tiene que ser una fusión ya hecha. Con la cola de GitHub activa o un auto-merge
-    # habilitado, gh sale con 0 y la PR queda esperando sin commit de fusión: se vigila (el trap la desarma) y el
-    # run para. Basta el commit de fusión o el estado MERGED (cualquiera de los dos puede tardar en verse); el
-    # commit ilegible con MERGED lo para después record_merge (merge_commit_ilegible).
-    [[ "$($GH pr view "$pr" -R "$REPO" --json mergeCommit --jq .mergeCommit.oid 2>/dev/null)" =~ ^[0-9a-f]{40}$ ]] && return 0
+  # Modo serie: manda el estado remoto, no la salida de gh. Con la cola de GitHub activa o un auto-merge habilitado,
+  # gh encola en vez de fusionar, y puede salir con 0 o con error (respuesta perdida): en ambos casos la PR quedaría
+  # esperando sin el ejecutor. El éxito tiene que ser una fusión ya hecha: commit de fusión o estado MERGED (el
+  # commit ilegible con MERGED lo para después record_merge, merge_commit_ilegible). Ambos pueden tardar en verse:
+  # se relee una vez antes de decidir.
+  local mrc=0 i q
+  $GH pr merge "$pr" -R "$REPO" --squash --match-head-commit "$s" >/dev/null 2>&1 || mrc=1
+  # Tras un error de gh solo cuenta el estado MERGED: el commit de fusión no se consulta sin una salida 0.
+  for i in 1 2; do
+    (( mrc == 0 )) && [[ "$($GH pr view "$pr" -R "$REPO" --json mergeCommit --jq .mergeCommit.oid 2>/dev/null)" =~ ^[0-9a-f]{40}$ ]] && return 0
     [[ "$($GH pr view "$pr" -R "$REPO" --json state --jq .state 2>/dev/null)" == MERGED ]] && return 0
-    QUEUED="$QUEUED $pr::$s::"; anomaly merge_no_inmediato "$pr"
-  fi
+    (( mrc == 0 && i == 1 )) && sleep "${MERGE_SPRINT_POLL_S:-30}"
+  done
+  (( mrc == 0 )) && { QUEUED="$QUEUED $pr::$s::"; anomaly merge_no_inmediato "$pr"; }
+  # gh falló y no hay fusión: solo es un rechazo si se verifica que la PR no quedó en la cola ni con auto-merge.
+  q=$(in_queue "$pr")
+  # Dentro o ilegible: se vigila (el trap la saca y verifica) y el run para; ilegible no se da por rechazo.
+  case "$q" in
+    false) ;;
+    true|auto) QUEUED="$QUEUED $pr::$s::"; anomaly merge_no_inmediato "$pr" ;;
+    *) QUEUED="$QUEUED $pr::$s::"; anomaly merge_estado_ilegible "$pr" ;;
+  esac
   FAIL="merge_rechazado:$($GH pr view "$pr" -R "$REPO" --json mergeStateStatus --jq .mergeStateStatus 2>/dev/null)"
   # Merge rechazado: la reserva no queda submitted, o un merge ajeno posterior pasaría por propio.
   if f5 release pr.merge "$pr" >/dev/null; then rm -f "$(resv_head "$pr")"; else ledger event=F5_RELEASE_FALLO pr="$pr"; fi

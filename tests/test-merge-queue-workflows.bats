@@ -65,8 +65,10 @@ def runs_in_queue(cond):
     """True solo si la condición vale seguro en merge_group: sin `if`, o con un disyunto de nivel superior que
     sea literalmente github.event_name == 'merge_group', always() o true. Cualquier otra forma (false,
     github.event_name == 'push', una negación…) no demuestra que el job corra en la cola."""
-    if cond is None or cond == "":
+    if cond is None or cond == "" or cond is True:   # `if: true` sin ${{ }} llega de YAML como booleano
         return True
+    if cond is False:
+        return False
     c = re.sub(r"^\$\{\{|\}\}$", "", str(cond).strip()).strip()
     ok = {"github.event_name == 'merge_group'", "always()", "true"}
     return any(re.sub(r"\s+", " ", d) in ok for d in split_top(c, "||"))
@@ -266,4 +268,17 @@ steps=yaml.safe_load(open('$GUARD'))['jobs']['pr-guardian']['steps']
 co=[s for s in steps if 'actions/checkout' in str(s.get('uses',''))]
 sys.exit(0 if co and all(s.get('with',{}).get('persist-credentials') is False for s in co) else 1)"
   [ "$status" -eq 0 ]
+}
+
+@test "positivo: un job obligatorio con if: true (booleano YAML) corre en la cola y no se marca" {
+  f="$BATS_TEST_TMPDIR/wf.yml"
+  python3 - "$CI" "$f" <<'PY'
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1]))
+d["jobs"]["lint-markdown"]["if"] = True
+yaml.safe_dump(d, open(sys.argv[2], "w"))
+PY
+  grep -q "if: true" "$f"
+  run check "$f" "Validate workspace|Lint Markdown|BATS Hook Tests"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
 }

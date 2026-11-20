@@ -11,6 +11,9 @@
 # respuesta perdida), $FAKE/<pr>.enqueue_auto (no entra: deja un auto-merge pendiente), $FAKE/<pr>.automerge
 # (auto-merge pendiente; lo quita disablePullRequestAutoMerge), $FAKE/<pr>.on_enqueue (se ejecuta al encolar).
 # Con $FAKE/queue_enabled, «gh pr merge» encola aunque se pida --squash (comportamiento documentado de gh).
+# $FAKE/<pr>.merge_on_enqueue (GitHub la fusiona al encolar, antes de la primera lectura), $FAKE/<pr>.merge_lost
+# (serie: «gh pr merge» fusiona y sale con error: respuesta perdida), $FAKE/<pr>.fresh_lag (la primera lectura tras
+# encolar dice «fuera» aunque haya entrado).
 
 SCRIPT="scripts/merge-sprint.sh"
 
@@ -28,6 +31,8 @@ setup() {
   cat > "$TMPDIR_T/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 F="$FAKE"; a="$*"; echo "$a" >> "$F/calls"
+# $F/<pr>.lag_reads: tantas lecturas de mergeCommit/state como diga, tras fusionar, aún no ven la fusión.
+lagged() { local f="$F/$1.lag_reads" k; [[ -f "$f" && -f "$F/$1.merged_at" ]] || return 1; k=$(cat "$f"); (( k > 0 )) || return 1; echo $((k-1)) > "$f"; }
 case "$1 $2" in
   "pr list") ls "$F" | sed -n 's/^\([0-9]*\)\.head$/\1/p' | while read -r n; do [[ "$(cat "$F/$n.state" 2>/dev/null || echo OPEN)" == OPEN ]] && echo "$n"; done | sort -n ;;
   "pr view")
@@ -41,8 +46,10 @@ case "$1 $2" in
       *mergeStateStatus*) echo CLEAN ;;
       *isDraft*) echo true ;;
       *mergedBy*) echo executor ;;
-      *mergeCommit*) [[ "$(cat "$F/$n.state" 2>/dev/null)" == MERGED ]] && printf 'c%039d\n' "$n"; exit 0 ;;   # sin fusión no hay commit
-      *state*) [[ -f "$F/$n.state_fail" ]] && exit 1; cat "$F/$n.state" 2>/dev/null || echo OPEN ;;
+      *mergeCommit*) lagged "$n" && exit 0
+                     [[ "$(cat "$F/$n.state" 2>/dev/null)" == MERGED ]] && printf 'c%039d\n' "$n"; exit 0 ;;   # sin fusión no hay commit
+      *state*) [[ -f "$F/$n.state_fail" ]] && exit 1; lagged "$n" && { echo OPEN; exit 0; }
+               cat "$F/$n.state" 2>/dev/null || echo OPEN ;;
     esac ;;
   "pr diff") cat "$F/$3.files" ;;
   "pr checks") printf 'CI\t%s\n' "$(cat "$F/$3.checks" 2>/dev/null || echo pass)" ;;
@@ -53,7 +60,7 @@ case "$1 $2" in
       # Cola activa: gh encola aunque se pida --squash y sale con 0; GitHub decide después.
       echo "$3" >> "$F/enqueued"; touch "$F/$3.inqueue"; [[ -f "$F/$3.enqueue_lost" ]] && exit 1; exit 0
     fi
-    echo "$3" >> "$F/merged"; echo MERGED > "$F/$3.state"; exit 0 ;;
+    echo "$3" >> "$F/merged"; echo MERGED > "$F/$3.state"; touch "$F/$3.merged_at"; [[ -f "$F/$3.merge_lost" ]] && exit 1; exit 0 ;;
   *)
     case "$a" in
       "api graphql"*enqueuePullRequest*)
@@ -61,6 +68,8 @@ case "$1 $2" in
         if [[ -f "$F/$n.on_enqueue" ]]; then bash "$F/$n.on_enqueue"; mv "$F/$n.on_enqueue" "$F/$n.on_enqueue.done"; fi
         [[ -f "$F/queue_enabled" && "$h" == "$(cat "$F/$n.head")" ]] || exit 1
         if [[ -f "$F/$n.enqueue_auto" ]]; then touch "$F/$n.automerge"; exit 0; fi
+        # GitHub fusiona antes de la primera lectura (grupo ya probado): nunca se ve dentro de la cola.
+        if [[ -f "$F/$n.merge_on_enqueue" ]]; then echo "$n" >> "$F/enqueued"; echo "$n" >> "$F/merged"; echo MERGED > "$F/$n.state"; exit 0; fi
         echo "$n" >> "$F/enqueued"; touch "$F/$n.inqueue" "$F/$n.fresh"; [[ -f "$F/$n.enqueue_lost" ]] && exit 1; exit 0 ;;
       "api graphql"*disablePullRequestAutoMerge*)
         n=$(sed -E 's/.* -f id=PR_([0-9]+).*/\1/' <<<"$a"); [[ -f "$F/dequeue_fail" ]] && exit 1
@@ -72,6 +81,7 @@ case "$1 $2" in
       "api graphql"*isInMergeQueue*)
         n=$(sed -E 's/.* -F n=([0-9]+).*/\1/' <<<"$a")
         # La lectura que verifica la entrada (justo tras encolar) solo ve la PR dentro; GitHub decide en las siguientes.
+        if [[ -f "$F/$n.fresh" && -f "$F/$n.fresh_lag" ]]; then mv "$F/$n.fresh_lag" "$F/$n.fresh_lag.done"; echo false; exit 0; fi
         if [[ -f "$F/$n.fresh" ]]; then mv "$F/$n.fresh" "$F/$n.fresh.done"; echo true; exit 0; fi
         if [[ -f "$F/$n.on_poll" ]]; then bash "$F/$n.on_poll"; mv "$F/$n.on_poll" "$F/$n.on_poll.done"; fi
         if [[ -f "$F/$n.lag" && -f "$F/$n.inqueue" ]]; then rm "$F/$n.lag"; echo false; exit 0; fi
@@ -565,4 +575,113 @@ resv_of() { find "$MERGE_SPRINT_HOME/reservations" -name "pr.merge__$1.head"; }
   [ "$status" -eq 5 ]
   run grep -c 'enqueuePullRequest' "$FAKE/calls"
   [ "$output" = 0 ]
+}
+
+@test "cola: fusionada antes de la primera lectura cuenta contra max_merges, se registra y comprueba main; no pasa la segunda" {
+  queue_on
+  printf 'allowed_tiers=1,2,3\nttl_hours=12\nmax_merges=1\nmax_prs=50\n' > "$MERGE_SPRINT_POLICY"
+  mkpr 73 "scripts/a.sh"; mkpr 74 "scripts/b.sh"
+  review 73 APPROVE correctness; review 74 APPROVE correctness
+  touch "$FAKE/73.merge_on_enqueue"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"máximo de merges"* ]]
+  [ "$(paste -sd, "$FAKE/enqueued")" = "73" ]
+  [ "$(paste -sd, "$FAKE/merged")" = "73" ]
+  ledger_has MERGED 73
+  grep -q 'check-runs' "$FAKE/calls"     # la CI de main tras la fusión se comprobó
+  run ledger_has PARK 73 cola_rechazada
+  [ "$status" -ne 0 ]
+  [ ! -e "$FAKE/dequeued" ]
+}
+
+@test "serie con la cola de GitHub activa y respuesta perdida: la PR encolada se saca de la cola y el run para (exit 5)" {
+  touch "$FAKE/queue_enabled"; export MERGE_SPRINT_RESYNC=0   # modo serie
+  mkpr 75 "scripts/a.sh"; review 75 APPROVE correctness
+  echo wait > "$FAKE/75.queue_outcome"; touch "$FAKE/75.enqueue_lost"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"merge_no_inmediato"* ]]
+  grep -qx 75 "$FAKE/enqueued"
+  grep -qx 75 "$FAKE/dequeued"
+  [ ! -e "$FAKE/merged" ]
+  run ledger_has PARK 75
+  [ "$status" -ne 0 ]
+}
+
+@test "serie: gh pr merge sale con error pero la PR quedó fusionada; se registra MERGED, no se aparca" {
+  export MERGE_SPRINT_RESYNC=0
+  mkpr 76 "scripts/a.sh"; review 76 APPROVE correctness
+  touch "$FAKE/76.merge_lost"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  ledger_has MERGED 76
+  run ledger_has PARK 76
+  [ "$status" -ne 0 ]
+}
+
+@test "cola: grant revocado durante la CI de la primera PR (cola vacía) es anomalía antes de encolar" {
+  queue_on
+  mkpr 77 "scripts/a.sh"; review 77 APPROVE correctness
+  plan_and_grant
+  sed -i 's|^  "pr checks")|  "pr checks") bash "$SCRIPT_ABS" revoke >/dev/null;|' "$GH"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"grant_revocado"* ]]
+  run grep -c 'enqueuePullRequest' "$FAKE/calls"
+  [ "$output" = 0 ]
+  [ -z "$(resv_of 77)" ]
+}
+
+@test "serie: grant revocado durante la CI es anomalía antes de fusionar" {
+  export MERGE_SPRINT_RESYNC=0
+  mkpr 78 "scripts/a.sh"; review 78 APPROVE correctness
+  plan_and_grant
+  sed -i 's|^  "pr checks")|  "pr checks") bash "$SCRIPT_ABS" revoke >/dev/null;|' "$GH"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"grant_revocado"* ]]
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "cola: método de la cola cambiado a MERGE durante el run es anomalía antes de encolar la PR" {
+  queue_on
+  mkpr 79 "scripts/a.sh"; review 79 APPROVE correctness
+  plan_and_grant
+  sed -i "s|^  \"pr checks\")|  \"pr checks\") echo MERGE > '$FAKE/queue_method';|" "$GH"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"cola_metodo_no_squash"* ]]
+  run grep -c 'enqueuePullRequest' "$FAKE/calls"
+  [ "$output" = 0 ]
+}
+
+@test "cola boundary: una lectura «fuera» justo tras encolar (desfase) no saca la PR; se confirma y se fusiona" {
+  queue_on
+  mkpr 80 "scripts/a.sh"; review 80 APPROVE correctness
+  touch "$FAKE/80.fresh_lag"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ -e "$FAKE/80.fresh_lag.done" ]      # el desfase se produjo de verdad
+  [ ! -e "$FAKE/dequeued" ]
+  grep -qx 80 "$FAKE/merged"
+  ledger_has MERGED 80
+  run ledger_has PARK 80 cola_rechazada
+  [ "$status" -ne 0 ]
+}
+
+@test "serie boundary: commit y estado de la fusión tardan una lectura en verse; se relee y se registra, sin anomalía" {
+  export MERGE_SPRINT_RESYNC=0
+  mkpr 81 "scripts/a.sh"; review 81 APPROVE correctness
+  echo 2 > "$FAKE/81.lag_reads"     # la primera lectura de mergeCommit y la de state no ven la fusión
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ "$(cat "$FAKE/81.lag_reads")" = 0 ]   # el desfase se consumió de verdad
+  ledger_has MERGED 81
+  [[ "$output" != *"merge_no_inmediato"* ]]
 }
