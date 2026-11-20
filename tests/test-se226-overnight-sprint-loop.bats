@@ -68,14 +68,10 @@ setup() {
     export AGENT_RUNS_DIR="$tmpdir/runs"
     export SAVIA_WORKSPACE_DIR="$tmpdir"
     echo '[{"id":1,"description":"test","status":"pending"}]' > "$tmpdir/tasks.json"
-    # SE-472: el bucle exige grant vigente; grant real en un almacén aislado
-    export SAVIA_GRANTS_DIR="$tmpdir/grants" SAVIA_ACTIVE_USER_FILE="$tmpdir/active-user.md"
-    printf -- '---\nactive_slug: "tester"\n---\n' > "$SAVIA_ACTIVE_USER_FILE"
-    bash "$PWD/scripts/operator-grant.sh" grant --scope autonomy:overnight-sprint --context test --ttl-hours 1 >/dev/null
     run bash "$LOOP" --sprint-id "coh-smoke" --tasks "$tmpdir/tasks.json" --max-tasks 1 --dry-run
     # la tarea arrancó de verdad (si no, el test no prueba el cableado de coherencia)
     grep -q "TASK_START task_id=1" "$tmpdir/output/agent-runs/coh-smoke-audit.log"
-    unset OVERNIGHT_COHERENCE_GATE SAVIA_GRANTS_DIR SAVIA_ACTIVE_USER_FILE
+    unset OVERNIGHT_COHERENCE_GATE
     rm -rf "$tmpdir"
     [[ "$status" -eq 0 ]]
 }

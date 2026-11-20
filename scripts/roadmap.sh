@@ -171,22 +171,33 @@ case "$CMD" in
       done < <(find "$ROOT/docs/specs" -name 'SE-*.spec.md' | sort -V)
       [[ -n "$OMITTED" ]] && { echo "FAIL: specs omitidas de planning-state: $OMITTED"; ERR=1; }
     fi
-    # 6. Estado del spec en docs/specs vs state (YAML o Markdown legacy).
+    # 6. Estado del spec en docs/specs vs vista: igualdad estricta. La deriva heredada
+    #    (spec APPROVED con estado posterior) vive en status-drift-baseline.txt: solo puede
+    #    menguar. Una deriva nueva o una línea de la baseline ya corregida fallan.
+    DRIFT_BASE="$ROOT/docs/propuestas/status-drift-baseline.txt"
+    DRIFT_SEEN=""
     while IFS= read -r spec; do
       ID=$(basename "$spec" | grep -oP '^SE-\d+')
       [[ -z "$ID" ]] && continue
       SPEC_STATUS=$(grep -m1 -oP '^(?:status:\s*|\*\*Estado:\*\*\s*)\K[A-Z_]+' "$spec" 2>/dev/null || echo "")
       STATE_STATUS=$(jq -r --arg id "$ID" '.initiatives[] | select(.id==$id) | .status' "$STATE" 2>/dev/null | head -1)
       if [[ -n "$STATE_STATUS" && -n "$SPEC_STATUS" && "$SPEC_STATUS" != "$STATE_STATUS" ]]; then
-        COMPAT=0
-        [[ "$STATE_STATUS" == "IMPLEMENTED" && "$SPEC_STATUS" == "APPROVED" ]] && COMPAT=1
-        [[ "$STATE_STATUS" == "IMPLEMENTING" && "$SPEC_STATUS" == "APPROVED" ]] && COMPAT=1
-        if [[ $COMPAT -eq 0 ]]; then
+        DRIFT_SEEN="${DRIFT_SEEN}${ID} ${SPEC_STATUS} ${STATE_STATUS}"$'\n'
+        if ! grep -qxF "$ID $SPEC_STATUS $STATE_STATUS" "$DRIFT_BASE" 2>/dev/null; then
           echo "FAIL: $ID spec=$SPEC_STATUS vs state=$STATE_STATUS"
           ERR=1
         fi
       fi
     done < <(find "$ROOT/docs/specs" -name 'SE-*.spec.md' | sort)
+    if [[ -f "$DRIFT_BASE" ]]; then
+      while IFS= read -r line; do
+        [[ -z "$line" || "$line" == \#* ]] && continue
+        if ! grep -qxF "$line" <<<"$DRIFT_SEEN"; then
+          echo "FAIL: baseline de deriva obsoleta (ya no discrepa; quita la línea): $line"
+          ERR=1
+        fi
+      done < "$DRIFT_BASE"
+    fi
     # 7. Estado vigente de cada iniciativa trazada registrado en LOG.md (SE-378, append-only; vista SE-500).
     if [[ "$FLOOR" =~ ^[0-9]+$ ]]; then
       NOLOG=""

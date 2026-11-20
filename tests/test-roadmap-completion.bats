@@ -24,7 +24,7 @@ write_implemented_state() {
   {"id":"SE-396","status":"IMPLEMENTED","evidence":"PR #42","completion":$completion}
 ]}
 JSON
-  printf '%s\n' 'status: APPROVED' > "$FIXTURE/docs/specs/SE-396-example.spec.md"
+  printf '%s\n' 'status: IMPLEMENTED' > "$FIXTURE/docs/specs/SE-396-example.spec.md"
   printf '## 2026-09-26 SE-396 IMPLEMENTED\n' > "$FIXTURE/docs/propuestas/LOG.md"
 }
 
