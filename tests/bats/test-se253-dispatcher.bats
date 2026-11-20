@@ -59,9 +59,9 @@ teardown() {
 # AC-4.2: Dispatcher con tool=Edit sale con 0 cuando hooks no bloquean
 # ─────────────────────────────────────────────────────────────────────────────
 
-@test "AC-4.2a: dispatcher-pre con routing vacio sale con exit 0" {
-    # TSV vacío (solo comentario) → no hay hooks que ejecutar → exit 0
-    echo "# empty routing" > "$MOCK_TSV"
+@test "AC-4.2a: dispatcher-pre con routing vacio bloquea (SE-510: tabla vacía = fallo cerrado)" {
+    # TSV vacío (solo comentario): una tabla sin filas es una tabla rota o truncada → exit 2
+    printf '# empty routing\n# filas=0\n' > "$MOCK_TSV"
 
     # Creamos un dispatcher temporal que usa nuestro mock TSV
     local tmp_dispatcher
@@ -69,11 +69,11 @@ teardown() {
     cat "$DISPATCH_PRE" | sed "s|ROUTING=.*|ROUTING=\"$MOCK_TSV\"|" > "$tmp_dispatcher"
     chmod +x "$tmp_dispatcher"
 
-    printf '{"tool_name":"Edit","tool_input":{"file_path":"/tmp/test.sh"}}' \
-        | bash "$tmp_dispatcher"
-    exit_code=$?
+    run bash "$tmp_dispatcher" <<< '{"tool_name":"Edit","tool_input":{"file_path":"/tmp/test.sh"}}'
+    exit_code=$status
+    [[ "$output" == *"sin filas"* ]]
     rm -f "$tmp_dispatcher"
-    [ "$exit_code" -eq 0 ]
+    [ "$exit_code" -eq 2 ]
 }
 
 @test "AC-4.2b: dispatcher-pre con hook que devuelve 0 sale con exit 0" {
@@ -83,12 +83,12 @@ teardown() {
     chmod +x "$mock_hook"
 
     # TSV apuntando al hook mock (matcher=Edit, bloqueante=yes)
-    printf 'Edit\t%s\tspawn\tyes\tHook mock OK\n' "$mock_hook" > "$MOCK_TSV"
+    printf 'Edit\t%s\tspawn\tyes\tHook mock OK\n# filas=1\n' "${mock_hook#"$MOCK_DIR"/}" > "$MOCK_TSV"
 
     # Dispatcher temporal
     local tmp_dispatcher
     tmp_dispatcher="$(mktemp)"
-    cat "$DISPATCH_PRE" | sed "s|ROUTING=.*|ROUTING=\"$MOCK_TSV\"|; s|script_path=\"\$REPO_ROOT/\$script\"|script_path=\"\$script\"|" > "$tmp_dispatcher"
+    sed -e "s|ROUTING=.*|ROUTING=\"$MOCK_TSV\"|" -e "s|^REPO_ROOT=.*|REPO_ROOT=\"$MOCK_DIR\"|" "$DISPATCH_PRE" > "$tmp_dispatcher"
     chmod +x "$tmp_dispatcher"
 
     printf '{"tool_name":"Edit","tool_input":{}}' | bash "$tmp_dispatcher"
@@ -167,14 +167,15 @@ teardown() {
     chmod +x "$mock_hook"
 
     # TSV: matcher=Edit, hook=mock_block, mode=spawn, blocking=yes
-    printf 'Edit\t%s\tspawn\tyes\tHook mock que bloquea\n' "$mock_hook" > "$MOCK_TSV"
+    printf 'Edit\t%s\tspawn\tyes\tHook mock que bloquea\n# filas=1\n' "${mock_hook#"$MOCK_DIR"/}" > "$MOCK_TSV"
 
     # Dispatcher temporal con rutas absolutas
     local tmp_dispatcher
     tmp_dispatcher="$(mktemp)"
+    # La tabla lleva rutas relativas a la raíz (SE-510: absolutas o con `..` bloquean).
     sed \
         -e "s|ROUTING=.*|ROUTING=\"$MOCK_TSV\"|" \
-        -e 's|script_path="\$REPO_ROOT/\$script"|script_path="$script"|' \
+        -e "s|^REPO_ROOT=.*|REPO_ROOT=\"$MOCK_DIR\"|" \
         "$DISPATCH_PRE" > "$tmp_dispatcher"
     chmod +x "$tmp_dispatcher"
 
@@ -183,6 +184,7 @@ teardown() {
     rm -f "$tmp_dispatcher"
 
     [ "$exit_code" -eq 2 ]
+    [[ "$output" == *"hook blocked"* ]]   # el 2 viene del hook, no de una validación de la tabla
 }
 
 @test "AC-4.5b: dispatcher NO propaga exit 2 de hook no-bloqueante" {
@@ -192,13 +194,14 @@ teardown() {
     chmod +x "$mock_hook"
 
     # TSV: blocking=no
-    printf 'Edit\t%s\tspawn\tno\tHook mock no-bloqueante\n' "$mock_hook" > "$MOCK_TSV"
+    printf 'Edit\t%s\tspawn\tno\tHook mock no-bloqueante\n# filas=1\n' "${mock_hook#"$MOCK_DIR"/}" > "$MOCK_TSV"
 
     local tmp_dispatcher
     tmp_dispatcher="$(mktemp)"
+    # La tabla lleva rutas relativas a la raíz (SE-510: absolutas o con `..` bloquean).
     sed \
         -e "s|ROUTING=.*|ROUTING=\"$MOCK_TSV\"|" \
-        -e 's|script_path="\$REPO_ROOT/\$script"|script_path="$script"|' \
+        -e "s|^REPO_ROOT=.*|REPO_ROOT=\"$MOCK_DIR\"|" \
         "$DISPATCH_PRE" > "$tmp_dispatcher"
     chmod +x "$tmp_dispatcher"
 
@@ -243,14 +246,15 @@ teardown() {
     printf '#!/usr/bin/env bash\necho "second" >> "%s"\n' "$ORDER_FILE" > "$hook2"
     chmod +x "$hook1" "$hook2"
 
-    printf 'Edit\t%s\tspawn\tno\tPrimero\nEdit\t%s\tspawn\tno\tSegundo\n' \
-        "$hook1" "$hook2" > "$MOCK_TSV"
+    printf 'Edit\t%s\tspawn\tno\tPrimero\nEdit\t%s\tspawn\tno\tSegundo\n# filas=2\n' \
+        "${hook1#"$MOCK_DIR"/}" "${hook2#"$MOCK_DIR"/}" > "$MOCK_TSV"
 
     local tmp_dispatcher
     tmp_dispatcher="$(mktemp)"
+    # La tabla lleva rutas relativas a la raíz (SE-510: absolutas o con `..` bloquean).
     sed \
         -e "s|ROUTING=.*|ROUTING=\"$MOCK_TSV\"|" \
-        -e 's|script_path="\$REPO_ROOT/\$script"|script_path="$script"|' \
+        -e "s|^REPO_ROOT=.*|REPO_ROOT=\"$MOCK_DIR\"|" \
         "$DISPATCH_PRE" > "$tmp_dispatcher"
     chmod +x "$tmp_dispatcher"
 
