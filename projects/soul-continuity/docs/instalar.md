@@ -31,14 +31,22 @@ soul setup           # perfil, VPN, comprobaciones, servicio de tu usuario y emp
 
 ## 1. Obtener Soul
 
-Copia la carpeta `projects/soul-continuity/` del repositorio en tu equipo, por ejemplo en `~/soul-continuity`. Desde ahí:
+**Sin git (lo normal en un Mac, donde git pide instalar herramientas de desarrollo):**
+
+1. En la página del repositorio de Savia pulsa **Code → Download ZIP**.
+2. Descomprime el ZIP (doble clic en el archivo descargado).
+3. Dentro, mueve la carpeta `projects/soul-continuity` a tu carpeta personal, por ejemplo como `~/soul-continuity`.
+
+Con git, si ya lo tienes: clona el repositorio y copia `projects/soul-continuity/` a `~/soul-continuity`.
+
+Desde la carpeta `~/soul-continuity`, en una terminal:
 
 ```bash
 bash install.sh
 soul help
 ```
 
-`install.sh` crea `~/.local/bin/soul` y te avisa si esa carpeta no está en tu `PATH`. No pisa una orden `soul` que no sea suya. Con `--download` baja el Node oficial aunque el tuyo ya sirva; `SOUL_NODE_MIRROR` apunta a un espejo de nodejs.org de tu organización. En Windows, crea un `.cmd` con `node %USERPROFILE%\soul-continuity\bin\soul.mjs %*`.
+`install.sh` crea `~/.local/bin/soul`. Si esa carpeta no está en tu `PATH`, te pregunta `[s/N]` si añade la línea `export PATH="$HOME/.local/bin:$PATH"` al fichero de arranque de tu shell (`~/.zshrc` en macOS, `~/.bashrc` si usas bash). Solo escribe si contestas «s» y hay una terminal delante; no la duplica si ya está. Con cualquier otra respuesta, sin terminal o con otro shell, solo te dice qué línea añadir. Al final, `install.sh` te da el siguiente paso escrito para que funcione en ese momento: `soul setup` si `soul` ya se encuentra, «abre una terminal nueva y escribe: soul setup» si acaba de arreglar el PATH, o la ruta completa de la orden si no lo ha arreglado. Después abre una terminal nueva. No pisa una orden `soul` que no sea suya. Con `--download` baja el Node oficial aunque el tuyo ya sirva; `SOUL_NODE_MIRROR` apunta a un espejo de nodejs.org de tu organización. En Windows, crea un `.cmd` con `node %USERPROFILE%\soul-continuity\bin\soul.mjs %*`.
 
 No hace falta `npm install` para usar la CLI ni la API, porque no tienen dependencias de ejecución. Solo el adaptador `web` necesita `playwright-core`, sin descargar navegadores:
 
@@ -59,11 +67,19 @@ soul status
 
 ## 3. Activar adaptadores
 
-Nada está activo por defecto. Para leer una fuente hacen falta tres cosas en `config.json`, y las tres las escribes tú:
+Nada está activo por defecto. Para leer una fuente hacen falta tres cosas: el adaptador en `connectors.enabled`, la fuente en tu perfil con propósito y consentimiento, y su sesión (paso 4).
 
-1. el adaptador en `connectors.enabled`;
-2. la fuente en tu perfil, con propósito y consentimiento;
-3. su sesión (paso 4).
+**Camino corto**: una orden escribe las dos primeras. La ejecutas tú, en tu terminal (un agente no puede: el consentimiento lo das tú).
+
+```bash
+soul source add github                     # pregunta para qué (Intro acepta lo propuesto), muestra la declaración y pide «s»
+soul source add jira --purpose "Mis incidencias" --identity mi-cuenta-id
+soul source list                           # fuentes del perfil y su estado
+```
+
+La pantalla dice qué clase de dato es la fuente («Qué datos son») y dónde se guarda, sin etiquetas internas. Al escribir «s» queda registrado «Activo esta fuente bajo mi responsabilidad» con la fecha y la hora. Con cualquier otra respuesta no se escribe nada. Vale para `github`, `jira`, `azure-devops`, `google-workspace` y `m365-*`; `web` tiene su propio flujo (abajo). `--identity` guarda tu usuario (GitHub, Jira, Azure DevOps) o un correo (Google y Microsoft 365). Si la fuente ya está activa, lo dice y no la duplica. Al terminar te dice la orden del paso siguiente: `soul login <adaptador>`. `soul setup` te ofrece esto al final. Para retirarla, `soul revoke <adaptador>`.
+
+**A mano**, si prefieres editar `config.json` (o necesitas `bases` y `oauth`, que esta orden no toca):
 
 ```json
 {

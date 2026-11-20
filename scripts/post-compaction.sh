@@ -11,11 +11,17 @@
 #
 # - Solo entradas del proyecto activo; las de otro proyecto nunca. Sin proyecto
 #   determinable no se inyecta nada del almacén (sí session-hot.md).
+#   El proyecto es el de CLAUDE.local.md o el nombre base del remoto: dos remotos con
+#   el mismo nombre de repositorio (p. ej. un fork) comparten entradas en el mismo almacén.
 # - Entradas sin proyecto ("null"): solo si son fijadas.
 # - Fijadas primero (importance_tier A; si A supera el 30 % del almacén, umbral más
 #   estricto: A de tipo feedback/correction, sin campo nuevo — Q1), luego las recientes.
-# - Tope en bytes: SAVIA_REINJECT_MAX_BYTES (por defecto 4096, S0.5).
-# - session-hot.md se vacía SOLO después de emitir el bloque y solo si la emisión terminó bien.
+#   Solo se fija lo de origen owner/agent (SE-352): untrusted, system o sin origen nunca.
+# - Entradas sustituidas (valid_to / superseded_by, SPEC-034) no se reinyectan.
+# - Tope en bytes: SAVIA_REINJECT_MAX_BYTES (por defecto 4096, S0.5), salto final incluido.
+#   Si la línea de sesión no cabe ni sola, se omite y session-hot.md se conserva.
+# - session-hot.md se vacía SOLO después de emitir el bloque con su línea de sesión y solo
+#   si la emisión terminó bien.
 # Nunca bloquea: siempre exit 0.
 
 set -uo pipefail
@@ -92,6 +98,8 @@ def load_store():
                 continue
             if not isinstance(o, dict) or not str(o.get("title", "")).strip():
                 continue
+            if o.get("valid_to") or o.get("superseded_by"):
+                continue  # sustituida (SPEC-034): recall tampoco la devuelve
             exp = o.get("expires_at")
             if exp:
                 try:
@@ -122,30 +130,44 @@ def session_line():
     return "Esta sesión: " + clip(txt, SESSION_MAX)
 
 
+def fits(lines):
+    # +1: el printf del hook añade el salto de línea final.
+    return nbytes("\n".join(lines)) + 1 <= cap
+
+
 def emit(lines):
-    text = "\n".join(lines)
-    if nbytes(text) <= cap:
-        sys.stdout.write(text)
+    if fits(lines):
+        sys.stdout.write("\n".join(lines))
 
 
 sess = session_line()
+SESS_DROPPED = 10  # código de salida: bloque emitido sin la línea de sesión
 
 if not project:
     lines = ["Memoria tras compactar (proyecto: no determinado)",
              "No he podido determinar el proyecto: no reinyecto memoria del almacén."]
-    if sess:
+    if sess and fits(lines + [sess]):
         lines.append(sess)
+        emit(lines)
+        sys.exit(0)
     emit(lines)
-    sys.exit(0)
+    sys.exit(SESS_DROPPED if sess else 0)
 
 rows = load_store()
 # Fijada: tier A; si A pasa del 30 % del almacén, A de tipo feedback/correction.
-n_a = sum(1 for r in rows if r.get("importance_tier") == "A")
+TRUSTED = ("owner", "agent")
+
+
+def tier_a(r):
+    return r.get("importance_tier") == "A" and r.get("origin") in TRUSTED
+
+
+n_a = sum(1 for r in rows if tier_a(r))
 strict = bool(rows) and n_a * 100 > 30 * len(rows)
 
 
 def pinned(r):
-    if r.get("importance_tier") != "A":
+    if not tier_a(r):
         return False
     return r.get("type") in ("feedback", "correction") if strict else True
 
@@ -179,18 +201,31 @@ def render(shown):
     return lines
 
 
+if sess and not fits(render([])[:1] + [sess]):
+    sess = ""  # la sesión no cabe ni sola: fuera, para no descartar las fijadas
+    sess_dropped = True
+else:
+    sess_dropped = False
+
 shown = []
-if nbytes("\n".join(render(queue))) <= cap:
+if fits(render(queue)):
     shown = list(queue)  # todo cabe y entonces no hace falta la línea «y N más»
 else:
     for item in queue:
-        if nbytes("\n".join(render(shown + [item]))) > cap:
+        if not fits(render(shown + [item])):
             break  # orden estricto: lo que no cabe corta, no se salta a una menos importante
         shown.append(item)
-emit(render(shown))
+out = render(shown)
+if len(out) == 1 and not sess:
+    sys.exit(SESS_DROPPED if sess_dropped else 0)  # solo la cabecera: nada útil que emitir
+emit(out)
+sys.exit(SESS_DROPPED if sess_dropped else 0)
 PY
 )
 py_rc=$?
+
+keep_hot=false
+if [[ $py_rc -eq 10 ]]; then keep_hot=true; py_rc=0; fi
 
 if [[ $py_rc -ne 0 || -z "$block" ]]; then
     [[ -n "$status_line" ]] && printf '%s\n' "$status_line"
@@ -200,6 +235,6 @@ fi
 if printf '%s\n' "$block"; then
     [[ -n "$status_line" ]] && printf '%s\n' "$status_line"
     # Emitido bien: ahora sí se consume session-hot.md.
-    [[ -n "$SESSION_HOT" ]] && : > "$SESSION_HOT"
+    [[ -n "$SESSION_HOT" ]] && ! $keep_hot && : > "$SESSION_HOT"
 fi
 exit 0

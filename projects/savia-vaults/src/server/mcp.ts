@@ -313,7 +313,7 @@ export class MCPVaultServer {
               pathPrefix: { type: 'string' },
               includeStale: { type: 'boolean', description: 'Incluir documentos deprecated/superseded/vencidos' },
               maxChars: { type: 'number', description: 'Tamaño máximo de la respuesta en caracteres (def. 6000); se recorta el texto de los hits, nunca se omite uno' },
-              fields: { type: 'string', enum: ['lean', 'full'], description: 'lean (def.): dome, confidentiality, path, heading, text, score; full: todas las señales' },
+              fields: { type: 'string', enum: ['lean', 'full'], description: 'lean (def.): dome, confidentiality, path, heading, text, score, modified (fecha), status/supersededBy si existen, source; full: todas las señales' },
               route: { type: 'string', description: 'SE-489: ruta de recuperación opt-in (M0 = híbrido actual). Sin route, el comportamiento por defecto; con route, cada resultado añade evidence, trace y consumed' },
               budget: { type: 'object', description: 'SE-489 (con route): maxLatencyMs, maxModelCalls, maxNodes, maxHops, maxInputTokens; enteros ≥ 0', additionalProperties: false, properties: { maxLatencyMs: { type: 'number' }, maxModelCalls: { type: 'number' }, maxNodes: { type: 'number' }, maxHops: { type: 'number' }, maxInputTokens: { type: 'number' } } },
               seed: { type: 'number', description: 'SE-489 (con route): semilla entera de las decisiones no deterministas de la ruta' },

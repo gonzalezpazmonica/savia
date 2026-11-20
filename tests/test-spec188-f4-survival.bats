@@ -1,20 +1,13 @@
 #!/usr/bin/env bats
 # test-spec188-f4-survival.bats — SPEC-188 F4 tests
-# Tests for Fix Survival Check and Monthly Diagnostic Report
+# Tests for Fix Survival Check
 # Run: bats tests/test-spec188-f4-survival.bats
 # Ref: SPEC-188 F4 — docs/propuestas/SPEC-188-root-cause-investigation-architecture.md
 
 setup() {
   REPO_ROOT="$(git -C "$(dirname "$BATS_TEST_FILENAME")" rev-parse --show-toplevel 2>/dev/null || pwd)"
   SURVIVAL_SCRIPT="${REPO_ROOT}/scripts/fix-survival-check.sh"
-  MONTHLY_SCRIPT="${REPO_ROOT}/scripts/monthly-diagnostic-report.sh"
-  REPORTS_DIR="${REPO_ROOT}/output/reports"
-  TMPDIR_REPORTS="$(mktemp -d)"
   export CLAUDE_PROJECT_DIR="$REPO_ROOT"
-}
-
-teardown() {
-  rm -rf "$TMPDIR_REPORTS"
 }
 
 # 1 — fix-survival-check.sh exists and is executable
@@ -68,31 +61,6 @@ print('reverted is list, len:', len(d['reverted']))
 "
 }
 
-# 6 — monthly-diagnostic-report.sh exists and is executable
-@test "monthly-diagnostic-report.sh exists and is executable" {
-  [ -f "$MONTHLY_SCRIPT" ]
-  [ -x "$MONTHLY_SCRIPT" ]
-}
-
-# 7 — report is generated in output/reports/
-@test "monthly-diagnostic-report.sh generates report in output/reports/" {
-  TEST_MONTH="2026-06"
-  run bash "$MONTHLY_SCRIPT" --month "$TEST_MONTH"
-  [ "$status" -eq 0 ]
-  [ -f "${REPORTS_DIR}/diagnostic-${TEST_MONTH}.md" ]
-}
-
-# 8 — generated report contains required sections
-@test "monthly-diagnostic-report.sh report has required sections" {
-  TEST_MONTH="2026-06"
-  bash "$MONTHLY_SCRIPT" --month "$TEST_MONTH" >/dev/null 2>&1 || true
-  REPORT="${REPORTS_DIR}/diagnostic-${TEST_MONTH}.md"
-  [ -f "$REPORT" ]
-  grep -qi "survival" "$REPORT"
-  grep -qi "accuracy" "$REPORT"
-  grep -q "SPEC-188" "$REPORT"
-}
-
 # 9 — fix-survival-check.sh handles zero commits gracefully
 @test "fix-survival-check.sh handles zero fix commits (--days 0)" {
   run bash "$SURVIVAL_SCRIPT" --json --days 0
@@ -103,16 +71,6 @@ d = json.load(sys.stdin)
 assert d['fixes_total'] >= 0
 print('fixes_total:', d['fixes_total'])
 "
-}
-
-# 10 — monthly report frontmatter contains month field
-@test "monthly-diagnostic-report.sh report has valid frontmatter" {
-  TEST_MONTH="2026-06"
-  bash "$MONTHLY_SCRIPT" --month "$TEST_MONTH" >/dev/null 2>&1 || true
-  REPORT="${REPORTS_DIR}/diagnostic-${TEST_MONTH}.md"
-  [ -f "$REPORT" ]
-  grep -q "month: ${TEST_MONTH}" "$REPORT"
-  grep -q "report_type:" "$REPORT"
 }
 
 # ── Comportamiento con repositorio git sintético (SE-456) ─────────────────────

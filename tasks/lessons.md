@@ -70,3 +70,5 @@ Format: `| date | category | lesson | source |`
 | 2026-03-03 | Git | Default branch is `master` unless `init.defaultBranch` is configured. Always set `git config --global init.defaultBranch main` in test setup. | Test failure — Era 22 |
 
 | 2026-03-21 | Security | SIEMPRE firmar .confidentiality-signature como ULTIMO paso antes de push. El diff hash debe calcularse con merge-base, no three-dot diff, para compatibilidad con CI merge commits. HMAC solo sobre diff_hash, nunca sobre commit hash (cambia con squash). | Bug en pipeline de firma tras PRs #364-#365 |
+
+| 2026-11-14 | TypeScript | En fixtures de entornos alternativos, tipar el array como Record<string, string>[] evita inferir claves opcionales undefined incompatibles con el contrato del helper. Ejecutar typecheck además de los tests que eliminan tipos. | CI de source add |

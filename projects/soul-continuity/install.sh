@@ -5,7 +5,8 @@
 #      Si no lo hay, descarga el Node.js LTS oficial de nodejs.org, comprueba su SHA-256 con
 #      SHASUMS256.txt y lo deja en ~/.savia/node.
 #   2. Crea la orden «soul» en ~/.local/bin (sin alias). No pisa una orden «soul» que no sea suya.
-#   3. Dice el siguiente paso: soul setup.
+#   3. Dice el siguiente paso: soul setup, escrito de forma que funcione tal cual en ese momento
+#      (con la ruta completa si «soul» todavía no está en el PATH).
 #
 # Uso: bash install.sh [--download]
 #   --download   baja el Node oficial aunque el del PATH ya sirva.
@@ -103,18 +104,58 @@ say "Node.js que usará Soul: $NODE ($("$NODE" --version))"
 
 mkdir -p "$BIN_DIR"
 W="$BIN_DIR/soul"
+# Orden que funciona tal cual, sin depender del PATH (la ruta de la orden propia o, si hay una ajena, Node + el lanzador).
+RUN_SOUL="$(shq "$W")"
 if [ -e "$W" ] && ! grep -qF "$MARK" "$W"; then
   printf 'install.sh: ya hay una orden «soul» en %s que no creé yo; no la toco. Usa: "%s" "%s/bin/soul.mjs"\n' "$W" "$NODE" "$PKG" >&2
+  RUN_SOUL="$(shq "$NODE") $(shq "$PKG/bin/soul.mjs")"
 else
   printf '#!/bin/sh\n%s\nexec %s %s "$@"\n' "$MARK" "$(shq "$NODE")" "$(shq "$PKG/bin/soul.mjs")" > "$W"
   chmod 755 "$W"
   say "Orden creada: $W"
 fi
 
+PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+
+# Ofrece añadir PATH_LINE al fichero de arranque del shell de la persona (solo zsh o bash).
+# Solo escribe con un «s» explícito y en terminal interactiva. Idempotente. Compatible con bash 3.2.
+offer_path() {
+  local rc ans
+  case "$(basename "${SHELL:-}")" in
+    zsh) rc="$HOME/.zshrc" ;;
+    bash) rc="$HOME/.bashrc" ;;
+    *) return 1 ;;
+  esac
+  if [ -f "$rc" ] && grep -qxF "$PATH_LINE" "$rc"; then
+    say "$rc ya tiene la línea del PATH; abre una terminal nueva."
+    return 0
+  fi
+  [ -t 0 ] && [ -t 1 ] || return 1
+  printf '¿Añado %s a %s para que «soul» funcione en cada terminal nueva? [s/N] ' "$PATH_LINE" "$rc"
+  IFS= read -r ans || ans=""
+  case "$ans" in
+    s|S)
+      # Si el fichero no acaba en salto de línea, se añade uno para no pegar la línea a la anterior.
+      if [ -s "$rc" ] && [ -n "$(tail -c1 "$rc")" ]; then printf '\n' >> "$rc"; fi
+      printf '%s\n' "$PATH_LINE" >> "$rc"
+      say "Línea añadida a $rc. Abre una terminal nueva y escribe: soul help"
+      ;;
+    *) say "No he tocado $rc."; return 1 ;;
+  esac
+}
+
+# Qué escribir ahora para el siguiente paso: depende de si «soul» ya se encuentra en esta terminal.
+NEXT="soul setup"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
-  *) say "Aviso: $BIN_DIR no está en tu PATH. Añade esta línea a ~/.bashrc (o ~/.zshrc) y abre una terminal nueva:"
-     say "  export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
+  *) if offer_path; then
+       # El PATH queda arreglado para las terminales nuevas, no para esta.
+       NEXT="abre una terminal nueva y escribe: soul setup"
+     else
+       say "Aviso: $BIN_DIR no está en tu PATH. Añade esta línea a ~/.bashrc (o ~/.zshrc) y abre una terminal nueva:"
+       say "  $PATH_LINE"
+       NEXT="$RUN_SOUL setup"
+     fi ;;
 esac
 say ""
-say "Siguiente paso, en tu terminal: soul setup"
+say "Siguiente paso, en tu terminal: $NEXT"

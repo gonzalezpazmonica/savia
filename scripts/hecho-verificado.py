@@ -4,6 +4,7 @@
   classify <marca-de-fin> [--evidence F]... [--reviews F]... [--orchestrator IDS]
   measure --done-dir DIR [--window 14] [--until YYYY-MM-DD] [--evidence F]... [--reviews F]...
   check-prereg <prerregistro> <medicion>   (AC-1.8: 0 coincide · 1 no coincide · 2 error)
+  receipt <recibo.json> [--orchestrator IDS]   (SE-530 S2: estado derivado de un recibo con ejecutor, sha y verificaciones[])
 
 Salida de classify (el estado va siempre en la primera línea de stdout):
   0 verificado, o declarado con marca legible · 1 refutado · 2 marca ilegible, vacía o sin ESTADO:
@@ -23,6 +24,8 @@ MECANICAS = {"ci_base", "postcondicion"}
 CLASES = ("revision", "persona", "ci_base", "ci_propio", "postcondicion")
 CAMPOS_ESTADO = ("estado", "verificado")
 N_MIN, UMBRAL_PCT = 200, 10
+CAMPOS_ESTADO_RECIBO = ("estado", "verificado", "estado_efectivo")  # los escribiría el ejecutor: se ignoran (AC-2.7)
+SCHEMA_RECIBO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "schemas", "recibo-trabajo.schema.json")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -225,6 +228,78 @@ def cmd_classify(a):
     return 1 if st == "refutado" else 0
 
 
+def cmd_receipt(a):
+    """SE-530 S2. Estado de un recibo, derivado en lectura (D1, nunca guardado).
+    Salida: 0 verificado o declarado con recibo legible · 1 refutado · 2 recibo ilegible o que no valida (declarado)."""
+    try:
+        with open(a.receipt, encoding="utf-8") as f:
+            rec = json.load(f)
+    except (OSError, UnicodeDecodeError, ValueError) as e:
+        print("declarado: recibo ilegible (%s)" % type(e).__name__)
+        return 2
+    if not isinstance(rec, dict):
+        print("declarado: el recibo no es un objeto")
+        return 2
+    if "version" not in rec:  # recibo anterior a S2 (AC-2.8, D7): legible, sin campos nuevos, estado conservador
+        print("declarado: recibo anterior a S2, sin ejecutor ni verificaciones")
+        for k in ("ejecutor", "verificaciones", "sha"):  # campos S2 sin version: no se validan, se anotan
+            if k in rec:
+                print("anomalia=campo '%s' sin 'version': el recibo no se valida" % k)
+        return 0
+    anom = []
+    clean = {k: v for k, v in rec.items() if k not in CAMPOS_ESTADO_RECIBO}
+    for k in CAMPOS_ESTADO_RECIBO:
+        if k in rec:
+            anom.append("campo '%s' escrito por el ejecutor, ignorado" % k)
+    vs = clean.get("verificaciones")
+    if isinstance(vs, list):
+        limpias = []
+        for v in vs:
+            if isinstance(v, dict):
+                for k in CAMPOS_ESTADO_RECIBO:
+                    if k in v:
+                        anom.append("campo '%s' escrito por el ejecutor, ignorado" % k)
+                v = {k: x for k, x in v.items() if k not in CAMPOS_ESTADO_RECIBO}
+            limpias.append(v)
+        clean["verificaciones"] = limpias
+    try:
+        import jsonschema  # fail-closed: sin validador no se puede dar nada por bueno
+        with open(SCHEMA_RECIBO, encoding="utf-8") as f:
+            schema = json.load(f)
+        jsonschema.validate(clean, schema)
+    except ImportError:
+        print("declarado: no se puede validar el recibo contra el esquema (falta jsonschema)")
+        return 2
+    except (OSError, ValueError) as e:
+        print("declarado: esquema del recibo ilegible (%s)" % type(e).__name__)
+        return 2
+    except jsonschema.ValidationError as e:
+        print("declarado: el recibo no valida contra el esquema (%s)" % (e.message[:120]))
+        for x in sorted(set(anom)):
+            print("anomalia=%s" % x)
+        return 2
+    ev = Evidencia([], [])
+    ev.anom = anom
+    ev.heads[("job", clean["job"])] = clean["sha"]
+    for v in clean.get("verificaciones", []):
+        d = dict(v)
+        d["job"] = clean["job"]
+        d["ejecutor"] = clean["ejecutor"]  # el ejecutor lo fija el recibo, no cada verificación
+        ev.checks.append(d)
+    if not clean.get("verificaciones"):
+        print("declarado: el recibo no trae verificaciones")
+        for x in sorted(set(anom)):
+            print("anomalia=%s" % x)
+        return 0
+    st, motivo, vistas, _, an, _ = evaluar("OK", (None, "", ""), clean["job"], ev, orch_ids(a.orchestrator))
+    print("%s: %s" % (st, motivo))
+    for c in sorted(vistas):
+        print("clase=%s" % c)
+    for x in sorted(set(an)):
+        print("anomalia=%s" % x)
+    return 1 if st == "refutado" else 0
+
+
 def veredicto(n, sin):
     if n < N_MIN:
         return "no concluyente"
@@ -328,12 +403,15 @@ def main(argv=None):
             s.add_argument("--done-dir", required=True)
             s.add_argument("--window", type=int, default=14)
             s.add_argument("--until")
+    s = sub.add_parser("receipt")
+    s.add_argument("receipt")
+    s.add_argument("--orchestrator")
     s = sub.add_parser("check-prereg")
     s.add_argument("prereg")
     s.add_argument("medicion")
     a = ap.parse_args(argv)
     try:
-        return {"classify": cmd_classify, "measure": cmd_measure, "check-prereg": cmd_check_prereg}[a.cmd](a)
+        return {"classify": cmd_classify, "measure": cmd_measure, "check-prereg": cmd_check_prereg, "receipt": cmd_receipt}[a.cmd](a)
     except Exception as e:  # fail-closed: un error interno nunca es «refutado» (1)
         print("declarado: error interno (%s)" % type(e).__name__, file=sys.stderr)
         return 2

@@ -9,6 +9,7 @@ import * as path from 'node:path';
 
 const cli = path.resolve('node_modules/tsx/dist/cli.mjs');
 const source = path.resolve('src/cli/index.ts');
+const LIVE_TOKEN = 'live-'.padEnd(40, 'x');
 const temporaryPaths: string[] = [];
 const children: ChildProcess[] = [];
 
@@ -71,14 +72,16 @@ describe('live transport processes', () => {
     const child = spawn(process.execPath, [
       cli, source, 'serve', '--transport', 'a2a', '--host', '127.0.0.1',
       '--port', String(port), '--path', vault,
-    ], { stdio: ['ignore', 'ignore', 'pipe'] });
+    ], { stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, SAVIA_VAULTS_TOKEN: LIVE_TOKEN } });
     children.push(child);
     const base = `http://127.0.0.1:${port}`;
+    // SE-424 H5: A2A no escribe sin credencial; en bucle local vale el secreto del servicio.
+    const auth = { Authorization: `Bearer ${LIVE_TOKEN}` };
 
     let health: Response | undefined;
     for (let attempt = 0; attempt < 50; attempt++) {
       try {
-        health = await fetch(`${base}/health`);
+        health = await fetch(`${base}/health`, { headers: auth });
         if (health.ok) break;
       } catch {
         // Process startup is asynchronous.
@@ -89,16 +92,16 @@ describe('live transport processes', () => {
 
     const share = await fetch(`${base}/share`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...auth },
       body: JSON.stringify({ path: 'proof.md', content: '# Live proof\nA2A persistence token beta-947' }),
     });
     expect(share.ok).toBe(true);
     expect(fs.existsSync(path.join(vault, 'proof.md'))).toBe(true);
 
-    const search = await (await fetch(`${base}/search?q=beta-947`)).json() as { results: Array<{ path: string }> };
+    const search = await (await fetch(`${base}/search?q=beta-947`, { headers: auth })).json() as { results: Array<{ path: string }> };
     expect(search.results.some((result) => result.path === 'proof.md')).toBe(true);
 
-    const read = await fetch(`${base}/context/note/proof.md`);
+    const read = await fetch(`${base}/context/note/proof.md`, { headers: auth });
     expect(read.ok).toBe(true);
     expect(await read.text()).toContain('beta-947');
   }, 20_000);

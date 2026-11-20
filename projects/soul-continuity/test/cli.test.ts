@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { SourceAdapter } from "../src/contract/adapter.ts";
@@ -70,6 +70,37 @@ test("sin perfil: negativa clara y código 3", async () => {
   const s = setup({ profile: false });
   assert.equal(await runCli(["q1"], s.deps), 3);
   assert.match(s.err.join("\n"), /No sé quién eres/);
+});
+
+test("sin perfil: el mensaje dice qué orden ejecutar y no manda a editar config.json (adapters y q1)", async () => {
+  for (const cmd of ["adapters", "q1", "q2", "why"]) {
+    const s = setup({ profile: false });
+    const argv = cmd === "why" ? ["why", "e0"] : [cmd];
+    assert.equal(await runCli(argv, s.deps), 3, cmd);
+    const e = s.err.join("\n");
+    assert.match(e, /No sé quién eres/, cmd);
+    assert.match(e, /soul setup/, cmd);
+    assert.doesNotMatch(e, /config\.json|active_profile/, cmd);
+  }
+});
+
+test("perfil que no existe o sin referencia: dice qué mirar y tampoco manda a editar config.json", async () => {
+  const s = setup({ profile: false });
+  s.deps.env = { SOUL_PROFILE: "otra" };
+  assert.equal(await runCli(["adapters"], s.deps), 3);
+  const e = s.err.join("\n");
+  assert.match(e, /«otra» no existe/);
+  assert.match(e, /soul doctor|soul setup/);
+  assert.doesNotMatch(e, /config\.json|active_profile/);
+});
+
+test("init: dice cómo conectar una fuente (soul source add), no «actívalos en config.json»", async () => {
+  const s = setup({ profile: false });
+  rmSync(join(s.dir, "config.json"));
+  assert.equal(await runCli(["init", "trabajo", "--email", "yo@example.test"], s.deps), 0, s.err.join("\n"));
+  const o = s.out.join("\n");
+  assert.match(o, /soul source add/);
+  assert.doesNotMatch(o, /actívalos en config\.json/);
 });
 
 test("status responde sin perfil, sin red y en frío por debajo de 1 s", async () => {

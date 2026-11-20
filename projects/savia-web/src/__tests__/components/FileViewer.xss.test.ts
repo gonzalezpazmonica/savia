@@ -88,4 +88,28 @@ describe('FileViewer: markdown no ejecuta HTML activo (SE-528 S1)', () => {
     expect(html).toContain('rel="noopener')
     expect(html).toContain('<li>a</li>')
   })
+
+  describe('bloque de código sin resaltado (mutante W10)', () => {
+    const ATAQUE = '<img src=x onerror=alert(1)>'
+
+    it('lenguaje desconocido: los ángulos se muestran como texto y no hay elementos activos', () => {
+      const wrapper = mountMd('```zzz\n' + ATAQUE + '\n```')
+      const root = wrapper.find('.viewer-markdown').element
+      expect(root.querySelectorAll('img')).toHaveLength(0)
+      expect(findActiveContent(root)).toEqual([])
+      expect(wrapper.find('.viewer-markdown pre code').text()).toContain(ATAQUE)
+    })
+
+    it('sin lenguaje: igual', () => {
+      const wrapper = mountMd('```\n' + ATAQUE + '\n```')
+      expect(wrapper.find('.viewer-markdown').element.querySelectorAll('img')).toHaveLength(0)
+      expect(wrapper.find('.viewer-markdown pre code').text()).toContain(ATAQUE)
+    })
+
+    it('control positivo: lenguaje conocido resalta y conserva el texto', () => {
+      const wrapper = mountMd('```js\nconst a = 1\n```')
+      expect(wrapper.find('.viewer-markdown pre code .hljs-keyword').exists()).toBe(true)
+      expect(wrapper.find('.viewer-markdown pre code').text()).toContain('const a = 1')
+    })
+  })
 })
