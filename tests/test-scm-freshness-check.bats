@@ -17,8 +17,11 @@ setup_file() {
   export CHECK_OUT="$BATS_FILE_TMPDIR/check.out"
   export SCM_BEFORE="$BATS_FILE_TMPDIR/scm.before"
   git status --porcelain -- .scm > "$SCM_BEFORE"
-  bash "$CHECK" > "$CHECK_OUT" 2>&1
-  echo "$?" > "$BATS_FILE_TMPDIR/check.rc"
+  # El código se guarda y lo afirma la prueba «all checks green»; si setup_file abortara aquí,
+  # se perderían la salida del check y las otras 18 pruebas (nocturna 44621725564).
+  local rc=0
+  bash "$CHECK" > "$CHECK_OUT" 2>&1 || rc=$?
+  echo "$rc" > "$BATS_FILE_TMPDIR/check.rc"
 }
 
 setup() {
@@ -72,7 +75,8 @@ teardown() {
 }
 
 @test "all checks green: passed equals total, 0 failed" {
-  [ "$(cat "$BATS_FILE_TMPDIR/check.rc")" -eq 0 ]
+  local rc; rc="$(cat "$BATS_FILE_TMPDIR/check.rc")"
+  if [ "$rc" -ne 0 ]; then echo "ci-extended-checks.sh salió $rc:"; grep -nE "FAIL|failed|✗|❌" "$CHECK_OUT" | head -20; tail -15 "$CHECK_OUT"; false; fi
   run cat "$CHECK_OUT"
   [[ "$output" =~ Results:[[:space:]]+([0-9]+)[[:space:]]passed,[[:space:]]+0[[:space:]]failed[[:space:]]\(([0-9]+)[[:space:]]total ]]
   [[ "${BASH_REMATCH[1]}" == "${BASH_REMATCH[2]}" ]]
