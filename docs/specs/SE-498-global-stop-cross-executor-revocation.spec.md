@@ -389,3 +389,78 @@ Revertir la PR deja los cuatro STOP nativos como están hoy. El directorio `~/.s
 ## Aprobación
 
 APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva + tokens y efectos»), tras confirmar las escenas cuando la spec las exige. Se formaliza al fusionar la PR (SE-488). 
+
+## Rediseño 2026-11-20 (propuesto, pendiente de la operadora)
+
+> Estado: **propuesto**. No cambia el `status` de la spec ni desaparca nada: lo aprueba o lo rechaza la operadora. Hasta entonces F3 sigue aparcada en la cola (`parked` de S23 en `planning-state.json`). Leído en origin/main 6d42ab1bc.
+
+### Por qué hace falta
+
+SE-493 (Effect Ledger) se retiró el 2026-11-14 sin implementar (`docs/propuestas/LOG.d/SE-493-RETIRED.md`; código retirado en #1581). F3 se apoyaba en él en cuatro sitios: R5 (`reconcile` lee el ledger y usa sus sondas), R6.2 (aceptar inciertos por `effect_id` y resolverlos con `effect-ledger.py resolve`), el párrafo de reintentos de R6 (`attempt+1` de SE-493) y R8 (consulta del ledger en `prepare` y `dispatch`, estado `ABANDONED`). AC-1 y AC-5 prueban esas piezas.
+
+**Sobre «R7» en el aparcado.** La entrada `parked` de S23 dice «SE-498 F3 y R7». R7 (gate por frontend) no cita SE-493 ni depende de él: lee `savia-control.py check` y nada más, y está en F2. Lo que depende de SE-493 es R5, R6.2, el párrafo de reintentos de R6 y R8. Este rediseño trata el aparcado como «F3 y los requisitos que citan SE-493» y propone que R7 no figure como aparcado (decisión D1 abajo).
+
+### Fuente de verdad que sustituye al ledger
+
+Solo un ejecutor de Savia deja hoy registro de sus efectos en vuelo: el merge-sprint, para `pr.merge`. No se crea libro nuevo; F3 lee lo que ya existe.
+
+| Fuente | Dónde | Qué campos tiene | Qué aporta a F3 |
+|---|---|---|---|
+| Reservas F5 de `pr.merge` | `scripts/f5-state.sh:3` (estados `reserved → submitted → closed`), `:23-40` (`reserve`), `:41-43` (`mark_submitted`), `:44-52` (`close`, solo si el PR real está `MERGED`), `:53-59` (`release`, nunca sobre `closed` ni con PR `MERGED`), `:60-61` (`status`). Fichero `<reservas>/pr.merge__<N>.json` | `op`, `key` (número de PR), `state`, `ts`, `closed_at` | El estado en vuelo de cada fusión. El guard de `:8-11` limita el contrato a `pr.merge` y es permanente. |
+| SHA reservado | `scripts/merge-sprint.sh:624` (`resv_head`), escrito en `:676` antes de `f5 reserve` | `pr.merge__<N>.head` con el SHA pedido | Saber si la fusión real es la que se pidió. |
+| Reconciliación propia del sprint | `scripts/merge-sprint.sh:625-632` (`reconcilable`: SHA real = reservado y fusión hecha por la cuenta del ejecutor) y `:925-933` (uso en `run`) | — | La prueba de que una reserva `submitted` acabó en fusión propia. Es la «sonda» que sustituye a las de SE-493 para `pr.merge`. |
+| Ledger encadenado del merge-sprint | `scripts/merge-sprint.sh:22` (`$MERGE_SPRINT_HOME/ledger.jsonl`), `:37-46` (`chain_append` con `prev` y cerrojo), `:48-55` (`verify_chain`), `:60` (`ledger`), `:703` (evento `MERGED` con `pr`, `digest`, `grant`, `tier`, `head`, `merge_commit`, `equivalence`) | `ts`, `event` (`RUN`, `MERGED`, `STOP`, `REVOKE`, `PAUSE`, `PARK`, `F5_RELEASE_FALLO`…), `prev` | El recibo de una fusión registrada y la integridad del histórico (`verify-ledger`, `:1044`). |
+| Registro de runs | `scripts/savia-runs.sh:25` (`data/agent-runs-ledger.jsonl`, fuera de git), `:113-133` (`derive`), `:766-818` (cerrojo) | `run_id`, `mode`, `agent`, `activity_state`, `is_terminated`, `pr` (`number`, `state`, `ci`, `review`) | Qué trabajos seguían abiertos al parar y qué PR tienen. **No registra efectos**: sirve para informar, no para clasificar. |
+
+### R5 rediseñado — Clasificación de lo que estaba en vuelo
+
+`reconcile` lee las reservas F5 del merge-sprint (todas las carpetas de `$MERGE_SPRINT_HOME/reservations/`), su `.head` y el ledger del merge-sprint, solo si el ámbito parado cubre `executor:merge-sprint` (o es `global`). Antes de leer, ejecuta `verify_chain` sobre el ledger; si la cadena está rota, falta el directorio o una reserva no es JSON, sale 2 sin clasificar (fail-closed). La clasificación es total: lo que no casa con una fila es `INDETERMINATE`. `effect_id` pasa a ser `pr.merge:<N>`.
+
+| Clase | Estado observado | Acción de `reconcile` |
+|---|---|---|
+| `CONFIRMED` | Reserva `closed` y evento `MERGED` de ese PR en el ledger; o reserva `submitted` para la que `reconcilable` devuelve el SHA reservado (fusión propia aún sin registrar) | Ninguna. El informe dice «sin registrar en el ledger» en el segundo caso; lo registra el siguiente `run` del sprint con grant nuevo (`:925-933`). |
+| `REJECTED` | Reserva `reserved` (nunca pasó a `submitted`) con su ámbito parado al clasificar | `f5-state.sh release pr.merge <N>`. Si `release` falla (PR ya `MERGED`, reserva `closed`) o el ámbito se reanudó durante el `reconcile`, la clase es `INDETERMINATE`. |
+| `INDETERMINATE` | `submitted` sin fusión propia comprobable (PR abierto, cerrado, fusionado con otro SHA o por otra cuenta); `closed` sin `MERGED` en el ledger; cualquier estado no listado | Ninguna. Queda hasta que una reserva llegue a `closed` o la operadora la libere con `f5-state.sh release`. |
+| `COMPENSATED` | — | Ninguna fuente lo registra hoy: la clase sigue definida pero no se produce. |
+
+Para el resto de ejecutores (workers, bucle nocturno, Yema, Soul) no hay registro de efectos. El informe lista, por ejecutor parado, `SIN_REGISTRO_DE_EFECTOS` y los runs abiertos de `savia-runs.sh` (`is_terminated: false`) con su PR y estado derivado. Esa lista no cuenta para el exit de `reconcile` y el informe dice literalmente que «sin registro» no significa «nada en vuelo».
+
+### R6.2 y reintentos, rediseñados
+
+- La aceptación de inciertos funciona igual, con `effect_id` = `pr.merge:<N>`. Aceptar no toca la reserva: solo deja de bloquear ese `resume`.
+- Un incierto se resuelve sin orden nueva: la siguiente pasada de `reconcile` lo ve `closed` (fusión registrada) o ausente (`release` de la operadora).
+- Reintentos: tras cualquier STOP con motivo, el merge-sprint exige un grant nuevo (`:614-619`). Su único reintento interno (evento `RETRY` por main movido, `:860-861`) vuelve a pasar por `merge_at`, y con R8 rediseñado cada fusión pasa por `check`: una parada lo corta. El párrafo de `attempt+1` desaparece.
+
+### R8 rediseñado — Consultas al plano de control
+
+- **Kernel de autoridad (SE-496).** Sin cambios.
+- **merge-sprint** (sustituye a «Effect Ledger»). `merge_at` llama a `savia-control.py check --executor merge-sprint --issued-epoch <época del grant>` dos veces: antes de `f5 reserve` (`:676`) y justo antes de `gh pr merge` (`:677`), después de la comprobación del fichero STOP (`:665`). Con exit distinto de 0, no fusiona; si ya había reservado, hace `f5 release` y aparca el PR con motivo `control_parado`.
+
+### Plan por slices, F3 rediseñada
+
+| Fase | Contenido | Depende de |
+|---|---|---|
+| F3a | R5, R6.2 y R8 del merge-sprint sobre las reservas F5 y el ledger encadenado; AC-1 y AC-5 rediseñados | F0, F1 (adaptador del merge-sprint) |
+| F3b | R8 del kernel; AC-3 y AC-4 sin cambios | F0, SE-496 implementada |
+
+### Criterios de aceptación rediseñados (sustituyen a AC-1 y AC-5)
+
+Tests BATS con el stub de `gh` que cuenta `pr merge`, `MERGE_SPRINT_HOME` y `SAVIA_CONTROL_DIR` temporales.
+
+- **AC-1′ — STOP durante una fusión.** El stub de `gh pr merge` se bloquea en una FIFO. Con la llamada en vuelo, `pause` y después `revoke`. Al liberar: con éxito del stub, la reserva acaba `closed`, hay `MERGED` en el ledger y `reconcile` da `CONFIRMED`; si el stub muere sin responder, la reserva queda `submitted` con el PR abierto y la clase es `INDETERMINATE`. En ninguna variante falta el efecto del informe. El siguiente PR del manifiesto no se fusiona (contador 1). Con `revoke` entre `f5 reserve` y `gh pr merge` (stub de `f5` que detiene el paso), la segunda llamada a `check` corta: contador 0 y la reserva liberada. **Negativo:** sin parada, el segundo PR se fusiona (contador 2). **Mutación:** sin la segunda llamada a `check`, el contador del caso «`revoke` entre reserva y fusión» pasa a 1 y el test falla.
+- **AC-5′ — Ningún incierto como ausente.** Reserva `submitted` con PR abierto → `INDETERMINATE` y `resume` sale 5 hasta que la operadora lo acepte por `pr.merge:<N>`. Reserva con `state` inventado o `closed` sin `MERGED` en el ledger → `INDETERMINATE`. Reserva `reserved` con el ámbito parado → `REJECTED` y el fichero de reserva desaparece. `release` fallando (stub: PR `MERGED`) → `INDETERMINATE`. Ledger con la cadena rota → `reconcile` sale 2 y no escribe informe. Una reserva del merge-sprint con solo `executor:yema` parado no entra en el informe y `reconcile` sale 0. Con `executor:worker` parado y un run abierto en `savia-runs`, el informe lo lista como `SIN_REGISTRO_DE_EFECTOS` y el exit no cambia. **Mutación:** un `reconcile` que clasifique `submitted` con PR abierto como `REJECTED` hace fallar el test.
+
+AC-1 y AC-5 originales quedan sustituidos; AC-3 y AC-4 pasan a F3b sin cambios.
+
+### Qué se pierde respecto al diseño anterior
+
+1. **Cobertura.** Solo se clasifican las fusiones del merge-sprint. Los efectos en vuelo de workers, bucle nocturno, Yema y Soul no tienen registro: el informe dice `SIN_REGISTRO_DE_EFECTOS`, no «0 en vuelo». La escena 1 («1 efecto estaba en vuelo: merge de #1500, dudoso») se cumple para fusiones; para otros efectos, no.
+2. **Comprobación transaccional.** SE-493 comprobaba modo, época y `stop_seq` dentro de la transacción del `dispatch`. Ahora es una llamada a `check` justo antes de `gh pr merge`: queda una ventana de milisegundos entre la comprobación y la llamada remota. Se declara y no se cierra.
+3. **Defensa por `stop_seq` en el registro.** Las reservas F5 no guardan época ni `stop_seq`. Lo cubre otra regla que ya existe: tras un STOP con motivo, el sprint necesita un grant nuevo (`:614-619`) y cada fusión pasa por `check`.
+4. **`COMPENSATED`** no se produce: ninguna fuente lo registra.
+5. **Sondas.** La única es `reconcilable` (SHA y cuenta de la fusión real). No hay sonda `ABSENT` definitiva: una reserva `submitted` sin fusión queda `INDETERMINATE` hasta que la operadora la libere.
+
+### Decisiones para la operadora
+
+- **D1 — R7 en el aparcado.** (a) Quitar R7 del aparcado: F2 sigue su curso porque R7 no depende de SE-493 (recomendada). (b) Mantenerlo aparcado con F3.
+- **D2 — F3.** (a) Aprobar F3a sobre las reservas F5 y el ledger del merge-sprint, con las pérdidas declaradas (recomendada: el único efecto con registro y riesgo real hoy es la fusión). (b) Retirar F3 y dejar que `reconcile` informe solo de runs abiertos, sin clasificar nada. (c) Mantenerla aparcada hasta que exista un caso real de efecto incierto fuera de las fusiones.
