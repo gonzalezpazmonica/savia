@@ -48,9 +48,9 @@ set_base() {
   [[ "$output" == *"errores: 0"* ]]
 }
 
-@test "catálogo real: la lista congelada tiene 19 líneas y ninguna es de un agente inexistente" {
+@test "catálogo real: la lista congelada tiene 17 líneas (19 de SE-532 menos configurator y tabular-analyst, retirados en SE-527) y ninguna es de un agente inexistente" {
   n=$(grep -cvE '^(#|$)' "$REPO_ROOT/docs/agent-catalog-exceptions.txt")
-  [ "$n" -eq 19 ]
+  [ "$n" -eq 17 ]
   while IFS='|' read -r agent _rest; do
     agent="${agent// /}"
     [ -f "$REPO_ROOT/.opencode/agents/$agent.md" ]
