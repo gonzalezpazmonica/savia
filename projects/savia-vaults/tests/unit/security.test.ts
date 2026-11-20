@@ -173,47 +173,4 @@ describe('VaultSecurity', () => {
       expect(() => security.checkDepth(deep)).toThrow(SecurityError);
     });
   });
-
-  describe('guardRead full chain', () => {
-    it('returns absolute path for valid input', () => {
-      const notePath = path.join(config.path, 'notes', 'readme.md');
-      fs.mkdirSync(path.dirname(notePath), { recursive: true });
-      fs.writeFileSync(notePath, '# Hello');
-
-      try {
-        const result = security.guardRead('notes/readme.md');
-        expect(result).toBe(notePath);
-      } finally {
-        fs.unlinkSync(notePath);
-      }
-    });
-
-    it('throws on traversal attempt', () => {
-      expect(() => security.guardRead('../../../etc/passwd')).toThrow(SecurityError);
-    });
-
-    it('throws on excessive file size', () => {
-      const cfg = makeConfig({ maxFileSize: 10 });
-      const sec = new VaultSecurity(cfg);
-      const bigPath = path.join(cfg.path, 'big.md');
-      fs.writeFileSync(bigPath, 'x'.repeat(100));
-
-      try {
-        expect(() => sec.guardRead('big.md')).toThrow(SecurityError);
-      } finally {
-        fs.unlinkSync(bigPath);
-      }
-    });
-  });
-
-  describe('guardWrite full chain', () => {
-    it('returns absolute path for valid input', () => {
-      const result = security.guardWrite('new-note.md');
-      expect(result).toBe(path.join(config.path, 'new-note.md'));
-    });
-
-    it('blocks write to denied path', () => {
-      expect(() => security.guardWrite('.git/config')).toThrow(SecurityError);
-    });
-  });
 });

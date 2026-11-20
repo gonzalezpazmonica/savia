@@ -82,7 +82,7 @@ describe('SaviaVaults E2E — MCP Protocol', () => {
     const { VaultSecurity: VS } = await import('../../src/security/index.js');
     const security = new VS(config);
 
-    expect(() => security.guardRead('../../../etc/passwd')).toThrow();
-    expect(() => security.guardRead('.git/config')).toThrow();
+    expect(() => security.contain('../../../etc/passwd')).toThrow();
+    expect(() => security.contain('.git/config')).toThrow();
   });
 });
