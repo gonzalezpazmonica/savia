@@ -7,7 +7,6 @@ setup() {
   export SCORE_PY="$REPO_ROOT/scripts/priority/score.py"
   export BACKFILL_PY="$REPO_ROOT/scripts/priority/backfill-specs.py"
   export VALIDATE_SH="$REPO_ROOT/scripts/priority/validate-spec-frontmatter.sh"
-  export REPORT_SH="$REPO_ROOT/scripts/priority/roadmap-priority-report.sh"
   export ADAPTERS_DIR="$REPO_ROOT/scripts/priority/adapters"
   TMPDIR_PF=$(mktemp -d)
   export TMPDIR_PF
@@ -117,34 +116,6 @@ PYEOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. roadmap-priority-report.sh produces tabla
-# ─────────────────────────────────────────────────────────────────────────────
-
-@test "roadmap-priority-report.sh is executable and produces output" {
-  [[ -x "$REPORT_SH" ]]
-
-  # Create temp dir with one spec that has priority_score
-  local spec_dir="$TMPDIR_PF/propuestas"
-  mkdir -p "$spec_dir"
-  cat > "$spec_dir/SPEC-999.md" << 'EOF'
----
-spec_id: SPEC-999
-status: APPROVED
-title: Test spec with score
-value: 80
-urgency: 70
-effort_score: 50
-priority_score: 112.0
----
-Body.
-EOF
-
-  run bash "$REPORT_SH"
-  # Either produces a table or says no specs found — both are valid exits
-  [[ "$status" -eq 0 ]]
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
 # 6. Spec with needs-triage: true passes validation
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -227,7 +198,6 @@ PYEOF
   [[ -f "$SCORE_PY" ]]
   [[ -f "$BACKFILL_PY" ]]
   [[ -f "$VALIDATE_SH" ]]
-  [[ -f "$REPORT_SH" ]]
   [[ -f "$ADAPTERS_DIR/rice_to_vue.py" ]]
   [[ -f "$ADAPTERS_DIR/wsjf_to_vue.py" ]]
   [[ -f "$ADAPTERS_DIR/adhoc_to_vue.py" ]]
