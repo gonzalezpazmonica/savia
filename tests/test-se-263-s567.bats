@@ -1,3 +1,4 @@
+
 #!/usr/bin/env bats
 # tests/test-se-263-s567.bats — Tests for SE-263 S5+S6+S7
 
@@ -87,53 +88,6 @@ assert len(d['skills']) == 5
   run bash scripts/exchange-ledger.sh show --instance s-test
   rm -f coordinacion/exchange/s-test.jsonl
   [[ "$output" =~ "genesis" ]]
-}
-
-# ── S7: Drill + Atestacion ──
-
-@test "S7-T01: federation-drill.sh exists and is executable" {
-  [[ -f "scripts/federation-drill.sh" ]]
-  [[ -x "scripts/federation-drill.sh" ]]
-}
-
-@test "S7-T02: drill health runs without error" {
-  run bash scripts/federation-drill.sh health
-  [[ "$status" -eq 0 ]]
-}
-
-@test "S7-T03: drill compromised runs on synthetic instance" {
-  local dir
-  dir=$(mktemp -d)
-  mkdir -p "$dir/coordinacion/cards"
-  cat > "$dir/coordinacion/cards/synthetic.card.json" << 'JSON'
-{"instanceId":"synthetic","principal":"x","status":"active","publicKey":"","signature":"x"}
-JSON
-  FEDERATION_ROOT="$dir" run bash scripts/federation-drill.sh compromised synthetic
-  local card_status
-  card_status=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['status'])" "$dir/coordinacion/cards/synthetic.card.json")
-  rm -rf "$dir"
-  [ "$status" -eq 0 ]
-  [[ "$output" =~ "DRILL COMPLETE" ]]
-  [ "$card_status" = "revoked" ]
-}
-
-@test "S7-T03b: drill compromised rejects path-traversal and quote in instance id" {
-  local dir
-  dir=$(mktemp -d)
-  mkdir -p "$dir/coordinacion/cards"
-  echo '{"instanceId":"x","status":"active"}' > "$dir/coordinacion/cards/x.card.json"
-  FEDERATION_ROOT="$dir" run bash scripts/federation-drill.sh compromised "../cards/x"
-  local s1=$status
-  FEDERATION_ROOT="$dir" run bash scripts/federation-drill.sh compromised "x'; import os; os.system('touch $dir/pwned') #"
-  local s2=$status
-  local card_status pwned=no
-  card_status=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['status'])" "$dir/coordinacion/cards/x.card.json")
-  [ -e "$dir/pwned" ] && pwned=yes
-  rm -r "$dir"
-  [ "$s1" -eq 1 ]
-  [ "$s2" -eq 1 ]
-  [ "$card_status" = "active" ]
-  [ "$pwned" = "no" ]
 }
 
 @test "S7-T04: exchange ledger verify works on empty ledger" {

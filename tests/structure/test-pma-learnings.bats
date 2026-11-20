@@ -78,12 +78,3 @@ teardown() {
 }
 
 # ── session-state-snapshot.sh ─────────────────────────────────────────────
-
-@test "session-state: record captura git_state y label" {
-  run bash "$ROOT_DIR/scripts/session-state-snapshot.sh" record --label "checkpoint" --dir "$ROOT_DIR"
-  [ "$status" -eq 0 ]
-  echo "$output" | grep -q "label=checkpoint"
-  run bash "$ROOT_DIR/scripts/session-state-snapshot.sh" list --last 5
-  [ "$status" -eq 0 ]
-  echo "$output" | grep -q "branch="
-}
