@@ -4,7 +4,6 @@
 cobol-developer | R3 | context_cost | 2026-11-14 | clave sin definición de agente; estado previo a SE-532 S1
 coherence-validator | R3 | context_cost | 2026-11-14 | clave sin definición de agente; estado previo a SE-532 S1
 commit-guardian | R3 | context_cost | 2026-11-14 | clave sin definición de agente; estado previo a SE-532 S1
-configurator | R3 | ref | 2026-11-14 | clave sin definición de agente; estado previo a SE-532 S1
 context-dome-manager | R3 | ref | 2026-11-14 | clave sin definición de agente; estado previo a SE-532 S1
 criterion-simulation-judge | R2 | tools | 2026-11-14 | falta tools: el agente hereda todas las herramientas; estado previo a SE-532 S1
 criterion-simulation-judge | R3 | context_cost | 2026-11-14 | clave sin definición de agente; estado previo a SE-532 S1
@@ -18,5 +17,4 @@ security-auditor | R3 | context_cost | 2026-11-14 | clave sin definición de age
 security-defender | R3 | context_cost | 2026-11-14 | clave sin definición de agente; estado previo a SE-532 S1
 security-guardian | R3 | context_cost | 2026-11-14 | clave sin definición de agente; estado previo a SE-532 S1
 social-networks | R2 | tools | 2026-11-14 | falta tools: el agente hereda todas las herramientas; estado previo a SE-532 S1
-tabular-analyst | R1 | cabecera | 2026-11-14 | cabecera YAML ilegible (dos puntos sin comillas en description); estado previo a SE-532 S1
 test-runner | R3 | context_cost | 2026-11-14 | clave sin definición de agente; estado previo a SE-532 S1
