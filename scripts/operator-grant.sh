@@ -483,6 +483,75 @@ def braces(t):
         if len(out) + len(todo) > MAX_ALTS or steps > 20 * MAX_ALTS:
             block("orden con demasiadas expansiones de llaves para evaluarla")
     return out
+# Heredocs cuyo cuerpo es DATO para la expansión de llaves y comodines: bash no
+# expande {a,b} ni * dentro de un heredoc, y con delimitador entre comillas
+# tampoco $(…). Solo cuenta como dato si quien lo lee no es un shell. Lista
+# cerrada y fail-closed: ante cualquier duda se analiza la orden ENTERA, como antes.
+HD_RE = re.compile(r"(?<!<)<<(?!<)(-?)[ \t]*([\x27\"])([A-Za-z_][\w.-]*)\2(?=[ \t<>]|$)")
+HD_READERS = re.compile(r"cat|python3?(\.[0-9]+)?|node|perl|ruby")
+# Órdenes que ejecutan como shell lo que reciben o lo que se escribió antes.
+HD_SHELLS = re.compile(r"(^|[^\w.-])((ba|z|da|k|mk|ya|c|tc)?sh|fish|eval|exec|source|xargs|parallel"
+                       r"|busybox|env|sudo|su|ssh|nohup|timeout|watch|script|make|npm|npx)(?![\w.-])"
+                       r"|(^|[;&|(\s])\.[ \t]")
+# Cuerpo de intérprete que lanza un shell o enumera ficheros: se analiza entero.
+HD_ACTIVE = re.compile(r"os\.(system|exec|spawn|popen|walk|listdir|scandir)|subprocess|shell\s*=|pty\."
+                       r"|\bsystem\s*\(|\bexec\w*\s*\(|child_process|`|\bqx|glob|iterdir|readdir|opendir|Dir\[",
+                       re.I)
+def outside_quotes(line, pos):
+    """True si line[pos] está fuera de comillas y de comentarios en esa línea."""
+    sq = dq = esc = False
+    for i, c in enumerate(line[:pos]):
+        if esc:
+            esc = False
+        elif c == "\\" and not sq:
+            esc = True
+        elif c == "\x27" and not dq:
+            sq = not sq
+        elif c == "\"" and not sq:
+            dq = not dq
+        elif c == "#" and not sq and not dq and (i == 0 or line[i - 1] in " \t;&|("):
+            return False
+    return not (sq or dq or esc)
+def inert_heredocs(cmd):
+    """La orden sin los cuerpos de heredocs que son dato; la orden intacta si alguno es dudoso."""
+    lines, kept, i = cmd.split("\n"), [], 0
+    while i < len(lines):
+        line = lines[i]
+        if "<<" not in line.replace("<<<", ""):
+            kept.append(line)
+            i += 1
+            continue
+        found = list(HD_RE.finditer(line))
+        if len(found) != 1 or re.search(r"[|;&()`]|\$\(", line) or not outside_quotes(line, found[0].start()):
+            return cmd
+        dash, delim = found[0].group(1), found[0].group(3)
+        end = next((j for j in range(i + 1, len(lines))
+                    if (lines[j].lstrip("\t") if dash else lines[j]) == delim), None)
+        if end is None:
+            return cmd
+        try:
+            words = shlex.split(HD_RE.sub(" ", line), comments=False, posix=True)
+        except ValueError:
+            return cmd
+        while words and re.match(r"[A-Za-z_][A-Za-z0-9_]*=", words[0]):
+            words.pop(0)
+        head = os.path.basename(words[0]) if words else ""
+        if not HD_READERS.fullmatch(head):
+            return cmd
+        if head != "cat" and HD_ACTIVE.search("\n".join(lines[i + 1:end])):
+            return cmd
+        kept.append(line)
+        i = end + 1
+    if len(kept) == len(lines):
+        return cmd
+    for line in kept:
+        try:  # cada línea restante cierra sus comillas: ninguna envuelve un «heredoc»
+            shlex.split(line, comments=False, posix=True)
+        except ValueError:
+            return cmd
+    if HD_SHELLS.search("\n".join(kept)):
+        return cmd
+    return "\n".join(kept)
 def main():
     try:
         ev = json.load(sys.stdin)
@@ -521,10 +590,13 @@ def main():
         for form in (cmd, unescape(cmd)):
             if named.search(re.sub(r"[\"\x27\\\\]", "", form)):
                 deny()
+        # El nombre exacto se busca arriba en la orden ENTERA; llaves y comodines,
+        # sin los cuerpos de heredoc que son dato (python3 - <<PY con {a,b} o config/*).
+        scan = inert_heredocs(cmd)
         try:
-            toks = shlex.split(cmd, comments=False, posix=True)
+            toks = shlex.split(scan, comments=False, posix=True)
         except ValueError:
-            toks = cmd.split()
+            toks = scan.split()
         pieces = [p for tok in toks for p in re.split(r"[<>|;&=()`]", tok) if p]
         expanded = [(p, [c for c in braces(p) if c]) for p in pieces]
         def resolve(cand, base):
@@ -571,16 +643,32 @@ except BaseException as e:
 '
 
 guard_main() {
-  local input="" rc=0
+  local input="" rc=0 msg=""
+  # Medición (G4): una línea por decisión en output/guard-decisions/operator-grant.jsonl,
+  # con un código de motivo, nunca la orden. Sin la librería, no se mide (la decisión no cambia).
+  # shellcheck source=/dev/null
+  source "$REPO_ROOT/scripts/lib/guard-decision-log.sh" 2>/dev/null || guard_decision_log() { :; }
   if [[ ! -t 0 ]]; then input=$(timeout 3 cat 2>/dev/null) || true; fi
-  [[ -z "$input" ]] && { echo "BLOQUEADO [operator-grant-guard]: sin entrada del hook" >&2; return 2; }
-  printf '%s' "$input" | GUARD_SIGNERS_FILE="$SIGNERS_FILE" python3 -I -c "$GUARD_PY" || rc=$?
+  if [[ -z "$input" ]]; then
+    echo "BLOQUEADO [operator-grant-guard]: sin entrada del hook" >&2
+    guard_decision_log operator-grant block sin-entrada
+    return 2
+  fi
+  msg=$(printf '%s' "$input" | GUARD_SIGNERS_FILE="$SIGNERS_FILE" python3 -I -c "$GUARD_PY" 2>&1 >/dev/null) || rc=$?
+  [[ -n "$msg" ]] && printf '%s\n' "$msg" >&2
   # Claude Code solo bloquea con 2: cualquier otro fallo (python ausente = 127,
   # señal, excepción no prevista) sería fallo abierto.
   if (( rc != 0 )); then
     (( rc == 2 )) || echo "BLOQUEADO [operator-grant-guard]: el guard falló (exit $rc); sin evaluar no se deja pasar" >&2
+    case "$msg" in
+      *"raíz de confianza"*) guard_decision_log operator-grant block firmantes-destino ;;
+      *"demasiad"*) guard_decision_log operator-grant block limite-de-expansion ;;
+      *"no es JSON"*|*"no es un evento"*|*"evento "*) guard_decision_log operator-grant block evento-no-evaluable ;;
+      *) guard_decision_log operator-grant block fallo-cerrado ;;
+    esac
     return 2
   fi
+  guard_decision_log operator-grant allow sin-firmantes
   return 0
 }
 [[ "${1:-}" == "guard" ]] && { guard_main; exit $?; }
