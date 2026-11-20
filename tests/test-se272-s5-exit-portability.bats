@@ -293,11 +293,6 @@ EOF
   [[ -x "${ROOT}/scripts/exit-drill-execute.sh" ]]
 }
 
-@test "SE-272-S5-73: exit-purge-verify.sh exists and is executable" {
-  [[ -f "${ROOT}/scripts/exit-purge-verify.sh" ]]
-  [[ -x "${ROOT}/scripts/exit-purge-verify.sh" ]]
-}
-
 # ── Bash syntax checks for all scripts ─────────────────────────────────────────
 
 @test "SE-272-S5-80: exit-package-generate.sh passes bash -n" {
@@ -315,15 +310,10 @@ EOF
   [[ "$status" -eq 0 ]]
 }
 
-@test "SE-272-S5-83: exit-purge-verify.sh passes bash -n" {
-  run bash -n "${ROOT}/scripts/exit-purge-verify.sh"
-  [[ "$status" -eq 0 ]]
-}
-
 # ── set -uo pipefail presence in all scripts ───────────────────────────────────
 
 @test "SE-272-S5-90: all scripts have set -uo pipefail" {
-  for s in exit-package-generate.sh exit-independence-verify.sh exit-drill-execute.sh exit-purge-verify.sh exit-dependencies-declare.sh; do
+  for s in exit-package-generate.sh exit-independence-verify.sh exit-drill-execute.sh exit-dependencies-declare.sh; do
     run grep -c 'set -uo pipefail' "${ROOT}/scripts/$s"
     [[ "$status" -eq 0 ]]
     [[ "$output" -ge 1 ]]

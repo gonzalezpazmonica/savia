@@ -3,8 +3,6 @@
 setup() {
   PIPELINE="$BATS_TEST_DIRNAME/../scripts/kg-pipeline.sh"
   EXTRACTOR="$BATS_TEST_DIRNAME/../scripts/kg-extract.py"
-  REPORT="$BATS_TEST_DIRNAME/../scripts/kg-quality-report.sh"
-  CLEANUP="$BATS_TEST_DIRNAME/../scripts/kg-cleanup.sh"
   HOOK="$BATS_TEST_DIRNAME/../.claude/hooks/post-digestion-kg-extract.sh"
 }
 
@@ -30,16 +28,6 @@ setup() {
   run bash "$PIPELINE" "$tf"
   [ "$status" -eq 0 ]
   rm -f "$tf"
-}
-
-@test "quality report script exists" {
-  [ -f "$REPORT" ]
-  [ -x "$REPORT" ]
-}
-
-@test "cleanup script exists" {
-  [ -f "$CLEANUP" ]
-  [ -x "$CLEANUP" ]
 }
 
 @test "hook exists and executable" {

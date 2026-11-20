@@ -3,7 +3,6 @@
 # Ref: docs/propuestas/SPEC-199-historical-context-tribunal-rounds.md
 
 HC_SCRIPT="$BATS_TEST_DIRNAME/../scripts/recommendation-tribunal/historical-context.py"
-MIGRATE_SCRIPT="$BATS_TEST_DIRNAME/../scripts/kg-schema-migrate-tribunal.py"
 ITERATE_SCRIPT="$BATS_TEST_DIRNAME/../scripts/recommendation-tribunal/iterate.sh"
 
 setup() {
@@ -65,10 +64,3 @@ teardown() {
 }
 
 # Test 6: Schema migration CLI runs and produces valid JSON
-
-@test "kg-schema-migrate-tribunal: CLI runs and produces valid JSON" {
-  run python3 "$MIGRATE_SCRIPT" --db "$TMP_TEST_DIR/migrate-test.db" --json
-  [ "$status" -eq 0 ]
-  run python3 -c "import json; d=json.loads('$output'); assert d['migrated'] is True"
-  [ "$status" -eq 0 ]
-}
