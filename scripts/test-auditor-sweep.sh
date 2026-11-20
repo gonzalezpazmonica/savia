@@ -103,12 +103,18 @@ for f in "${TEST_FILES[@]}"; do
   # entra si no imprimió nada (con `|| echo` se concatenaban dos documentos y el score salía "68\n0").
   output=$(bash "$AUDITOR" "$f" 2>/dev/null)
   [[ -z "$output" ]] && output='{"total":0}'
+  # Solo vale un único documento JSON con "total" entero en 0..100. Dos documentos (aunque uno
+  # diga 100), un total fuera de rango o ilegible puntúan 0: la salida corrupta no certifica.
   if command -v jq >/dev/null 2>&1; then
-    score=$(echo "$output" | jq -r '.total // 0' 2>/dev/null | head -1)
+    score=$(printf '%s\n' "$output" | jq -rs \
+      'if length == 1 and (.[0].total | type) == "number" then .[0].total else "x" end' 2>/dev/null)
+  elif [[ "$(printf '%s\n' "$output" | grep -cE '"total"[[:space:]]*:')" == 1 ]]; then
+    score=$(printf '%s\n' "$output" | grep -oE '"total"[[:space:]]*:[[:space:]]*[0-9]+' | grep -oE '[0-9]+$')
   else
-    score=$(echo "$output" | grep -oE '"total"[[:space:]]*:[[:space:]]*[0-9]+' | grep -oE '[0-9]+' | head -1)
+    score=x
   fi
-  [[ "$score" =~ ^[0-9]+$ ]] || score=0
+  [[ "$score" =~ ^[0-9]+$ ]] && (( 10#$score <= 100 )) || score=0
+  score=$((10#$score))
   [[ "$score" -ge "$THRESHOLD" ]] && compliant=$((compliant + 1))
   RESULTS+=("$score|$rel")
 done

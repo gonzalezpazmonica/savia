@@ -184,3 +184,32 @@ print('ok')
   run bash "$SCRIPT" --bogus
   [[ "$status" -eq 2 ]]
 }
+
+# Auditor falso en un proyecto copia: el barrido solo debe aceptar un único documento con total 0..100.
+sweep_with_auditor() {  # sweep_with_auditor <cuerpo del auditor falso>
+  local p="$BATS_TEST_TMPDIR/proj"
+  mkdir -p "$p/scripts" "$p/tests"
+  cp "$SCRIPT" "$p/scripts/test-auditor-sweep.sh"
+  printf '#!/bin/bash\n%s\n' "$1" > "$p/scripts/test-auditor.sh"
+  chmod +x "$p/scripts/test-auditor.sh"
+  printf '#!/usr/bin/env bats\n' > "$p/tests/test-x.bats"
+  run bash "$p/scripts/test-auditor-sweep.sh" --json
+}
+
+@test "auditor con dos documentos contradictorios: score 0 y FAIL, no PASS" {
+  sweep_with_auditor "printf '%s\n' '{\"total\":100}' '{\"total\":0}'; exit 1"
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.verdict == "FAIL" and .compliant == 0' >/dev/null
+}
+
+@test "auditor con total fuera de rango (150): score 0" {
+  sweep_with_auditor "echo '{\"total\":150}'; exit 0"
+  [ "$status" -eq 1 ]
+  echo "$output" | jq -e '.verdict == "FAIL" and .compliant == 0' >/dev/null
+}
+
+@test "auditor con un único documento válido sobre el umbral: cuenta como conforme" {
+  sweep_with_auditor "echo '{\"total\":90}'; exit 1"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.verdict == "PASS" and .compliant == 1' >/dev/null
+}
