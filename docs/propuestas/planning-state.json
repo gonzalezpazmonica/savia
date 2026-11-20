@@ -1883,7 +1883,7 @@
           "SE-467"
         ],
         "title": "Deuda de calidad con pruebas de comportamiento",
-        "action": "Remedir deuda certificada y elegir el siguiente grupo por riesgo/uso; conservar umbral >=80 y ratchet; usar #1180 como evidencia de entrega, no como cierre de toda la wave.",
+        "action": "Remedir deuda certificada y elegir el siguiente grupo por riesgo/uso; conservar umbral >=80 y ratchet; usar #1180 como evidencia de entrega, no como cierre de toda la wave. SE-467 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): no se ejecuta hasta reactivarla.",
         "necessity": "alta",
         "urgency": "alta",
         "value": "alto",
@@ -1946,7 +1946,7 @@
           "SE-447"
         ],
         "title": "Savia Space 0.2 y la seguridad de su canal de aprobación",
-        "action": "Cerrar Space 0.2 (SE-428) y seguir por modo mediado (SE-434), experiencia (SE-432), proyectos y cúpulas (SE-436) e interoperabilidad (SE-429). SE-446 S0: sonda de autoaprobación contra el servidor real; si encuentra una vía abierta, su mitigación pasa a P0. SE-443, SE-447, SE-430, SE-435 y SE-439 después.",
+        "action": "Cerrar Space 0.2 (SE-428) y seguir por modo mediado (SE-434), experiencia (SE-432), proyectos y cúpulas (SE-436) e interoperabilidad (SE-429). SE-446 S0: sonda de autoaprobación contra el servidor real; si encuentra una vía abierta, su mitigación pasa a P0. SE-443, SE-430, SE-435 y SE-439 después. SE-447 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): se retoma solo si se reactiva.",
         "necessity": "alta",
         "urgency": "media",
         "value": "alto",
@@ -1984,13 +1984,13 @@
           "SE-474"
         ],
         "title": "Medir jueces y relevos antes de confiar en ellos",
-        "action": "SE-469: 30 casos de los golden sets en vivo con tope de gasto e IC95 por tribunal. SE-474: proveedor independiente opcional; la métrica de hallazgos que solo ve el segundo proveedor se mide una vez y la comparte con SE-476. SE-471 ya está en main (#1486) y pasa a S27.",
+        "action": "SE-469 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): sus 30 casos de golden sets en vivo no se ejecutan hasta reactivarla. SE-474: proveedor independiente opcional; la métrica de hallazgos que solo ve el segundo proveedor se mide una vez y la comparte con SE-476. SE-471 ya está en main (#1486) y pasa a S27.",
         "necessity": "alta",
         "urgency": "media",
         "value": "alto",
         "dependency_value": "da el primer dato de acierto de los tribunales que pesan en merges y separa el OK autodeclarado de lo validado",
-        "effort": "SE-469 medio (M); SE-474 por decidir",
-        "prerequisites": "SE-469 ya APPROVED y después de SE-468; SE-474 sigue PROPOSED y necesita decisión de la operadora.",
+        "effort": "SE-469 aparcada, sin esfuerzo asignado; SE-474 por decidir",
+        "prerequisites": "SE-469 aparcada (DEFERRED desde 2026-11-18) y, al retomarla, después de SE-468; SE-474 sigue PROPOSED y necesita decisión de la operadora.",
         "done": "Informe de concordancia con IC95 y decisión según kill criterion; decisión registrada sobre SE-474."
       },
       {
@@ -2060,7 +2060,7 @@
           "SE-503"
         ],
         "title": "Un laboratorio de conformidad y benchmark",
-        "action": "Unificar matriz negativa, bypass, caos, receipts y replay; baseline con trazas y selección fijadas. SE-495 y SE-503 (PROPOSED) aportan el banco de tareas reales y el verificador por proyecto. Las sondas adversariales de Savia Viva (P12, P14) se alojan aquí, sin suite paralela. Último slice: piloto de suite de conformidad sobre un solo contrato (SE-452).",
+        "action": "Unificar matriz negativa, bypass, caos, receipts y replay; baseline con trazas y selección fijadas. SE-495 y SE-503 (PROPOSED) aportan el banco de tareas reales y el verificador por proyecto. Las sondas adversariales de Savia Viva (P12, P14) se alojan aquí, sin suite paralela. SE-452 (piloto de conformidad) aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): este bloque no la incluye hasta reactivarla.",
         "necessity": "alta",
         "urgency": "media",
         "value": "alto",
@@ -2084,7 +2084,7 @@
           "SE-514"
         ],
         "title": "Atención humana y aprobaciones contestables",
-        "action": "SE-458 (tope y lotes de PRs en revisión), SE-459 S1 y S3 (tarjeta), SE-492 (estado declarado, no inferido), SE-507 (latido de runs, con el digest de SE-471 leyendo del ledger) y, encima, la cola única de SE-514. SE-461 a SE-463: composición de efectos, marca de sesión y cobertura de supervisión.",
+        "action": "SE-458 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar; tope y lotes de PRs en revisión sin decidir). SE-459 S1 y S3 (tarjeta), SE-492 (estado declarado, no inferido), SE-507 (latido de runs, con el digest de SE-471 leyendo del ledger) y, encima, la cola única de SE-514. SE-461 y SE-462: composición de efectos y marca de sesión. SE-463 (cobertura de supervisión) aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar).",
         "necessity": "media",
         "urgency": "media",
         "value": "alto",
@@ -2135,14 +2135,14 @@
           "SE-466"
         ],
         "title": "Higiene de contexto, instalación y operación",
-        "action": "SE-448 S0 y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores; SE-454 invariantes negativos como tests; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-472 se retira si ese bucle ya no se usa. SE-464 sin dependientes: se decide al llegar; SE-506 aplazada.",
+        "action": "SE-448 S0 y canario; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-472 se retira si ese bucle ya no se usa. SE-464 sin dependientes: se decide al llegar; SE-506 aplazada. SE-449, SE-450 y SE-454 aparcadas (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): no se ejecutan hasta reactivarlas.",
         "necessity": "media",
         "urgency": "baja",
         "value": "medio",
         "dependency_value": "reduce superficie sin bloquear otras fases",
         "effort": "slices pequeños independientes",
         "prerequisites": "Specs aprobadas salvo SE-464 (PROPOSED) y SE-506 (aplazada); se ejecutan por separado, una por vez; sin hueco WIP nuevo.",
-        "done": "Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición. Los invariantes de SE-454 llevan caso negativo y declaran lo que no demuestran."
+        "done": "Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición."
       },
       {
         "id": "S21",
@@ -2159,7 +2159,7 @@
         "necessity": "media",
         "urgency": "baja",
         "value": "medio",
-        "dependency_value": "frena los rodeos ante bloqueos de política y evita contar como evidencia independiente lo que no lo es; SE-477 da la estadística que usan SE-469 y SE-479",
+        "dependency_value": "frena los rodeos ante bloqueos de política y evita contar como evidencia independiente lo que no lo es; SE-477 da la estadística que usan SE-469 (aparcada, DEFERRED) y SE-479",
         "effort": "cuatro specs de slices pequeñas (S); SE-475 S2 y SE-479 S2 medianas",
         "prerequisites": "Aprobación de SE-476, SE-477 y SE-479 por la operadora (PROPOSED); SE-475 queda absorbida por SE-510 (S26); SE-479 S3 después de SE-468 y SE-477; sin hueco WIP nuevo.",
         "done": "Cada spec aprobada o descartada; las aprobadas con sus AC verificados, tests que fallan antes y pasan después, y paridad bash/TS donde aplica."
@@ -2196,7 +2196,7 @@
           "SE-408"
         ],
         "title": "Adopción y contexto de ficheros completo",
-        "action": "Instalación limpia/doctor; desktop y docs; Vaults adaptativo bajo evaluación. Files: serving/tus autenticado, snapshot/CAS, digest/citas/visor y lifecycle; después formatos remotos/media/email/conectores/Teams según demanda.",
+        "action": "Instalación limpia/doctor; desktop y docs; Vaults adaptativo bajo evaluación. SE-408 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): sin trabajo hasta reactivarla. Files: serving/tus autenticado, snapshot/CAS, digest/citas/visor y lifecycle; después formatos remotos/media/email/conectores/Teams según demanda.",
         "necessity": "media",
         "urgency": "baja",
         "value": "alto",
