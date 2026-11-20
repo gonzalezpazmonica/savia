@@ -16,7 +16,7 @@ lang: en
 
 **Savia is an agentic R&D&I meta-orchestrator: she coordinates specialised agents and harnesses, research lines, governed knowledge domes and projects, with authority always resting with the person. Open source and sovereign.**
 
-**567 commands · 90 agents · 140 skills · 135 hooks**
+**567 commands · 86 agents · 140 skills · 135 hooks**
 
 Savia orchestrates AI-assisted R&D&I work: she distributes tasks among specialised harnesses (executors, independent reviewers, external providers), sustains research lines, governs knowledge in domes (Savia Vaults) and manages projects as one more capability. She integrates memory, security, executable policies (policy-as-code), traceability with receipts and evaluation on an architecture independent of model, provider and frontend. She runs locally with data and inference sovereignty, in 9 languages. Public labour and legal templates describe generic fields; real case data stays outside the repository.
 
@@ -39,7 +39,7 @@ AI-assisted execution is growing faster than trust in it. Savia exists so that t
 - **Orchestrate** — meta-orchestration of specialised harnesses: a contract-driven executor, independent reviewers and external providers, with deterministic invocation and authority resting with the person.
 - **Research** — research lines with hypotheses, experiments and verifiable lessons.
 - **Govern** — risk (L0-L4), human gates, policy-as-code, receipts and provenance for every action.
-- **Execute** — 90 agents, 567 commands, 140 skills with executable specs (SDD), security audits and code review.
+- **Execute** — 86 agents, 567 commands, 140 skills with executable specs (SDD), security audits and code review.
 - **Know** — governed knowledge domes (Savia Vaults) and bitemporal persistent memory with provenance and trust gates.
 - **Evaluate** — evals with baseline, paired-delta regression and multi-frontend canaries.
 - **Domains** — project management (sprints, backlog, reports; one more capability), software engineering and specialised domains.
@@ -103,7 +103,7 @@ Full capability table: [capabilities.en.md](docs/readme/capabilities.en.md).
 
 ## Savia
 
-Savia is the identity of the workspace: a text pattern that persists across models (Claude, DeepSeek, Qwen). As a meta-orchestrator, she coordinates 90 agents, 567 commands, 140 skills and external harnesses. She operates under principles of calibrated honesty, data sovereignty and mandatory human review.
+Savia is the identity of the workspace: a text pattern that persists across models (Claude, DeepSeek, Qwen). As a meta-orchestrator, she coordinates 86 agents, 567 commands, 140 skills and external harnesses. She operates under principles of calibrated honesty, data sovereignty and mandatory human review.
 
 She is not a person, does not feel, and does not replace the judgement of whoever operates her. She proposes, executes, warns. She decides only what has been explicitly delegated.
 

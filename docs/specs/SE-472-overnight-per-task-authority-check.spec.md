@@ -1,5 +1,5 @@
 ---
-status: APPROVED
+status: RETIRED
 approved_at: 2026-10-27
 approved_by: "operadora, AskUserQuestion 2026-10-27"
 priority: P2
@@ -9,10 +9,19 @@ author: Savia
 phase: A
 risk: L2
 related_specs: [SE-343, SE-226, SE-445, SE-332, SE-471]
+timeline:
+  - from: "2026-10-27"
+    learned: "2026-10-27"
+    value: "APPROVED"
+  - from: "2026-11-20"
+    learned: "2026-11-20"
+    value: "RETIRED"
 origin: síntesis de una tesis sobre calendario agéntico y sprint nocturno; diseño en el repo de investigación privado
 ---
 
 # SE-472 — Vigencia de la autoridad comprobada antes de cada tarea nocturna
+
+> **Retirada/enmienda 2026-11-20 por decisión de la operadora (pregunta interactiva).** Se retira la spec y su S1 (`scripts/lib/overnight-authority.sh`, su prueba `tests/test-se472-overnight-authority.bats` y el cableado en `scripts/overnight-sprint-loop.sh`). Motivo, que ya preveía la enmienda del 2026-11-09: el bucle nocturno no lo llama ningún hook, flujo, comando, skill, lanzador ni temporizador; la noche real va por la cola y el reconciliador, y la autoridad de fusión se comprueba en cada fusión (SE-512). El texto se conserva como historia; el código se recupera del historial de git (versión anterior a esta PR). Reabrir solo si el bucle SE-226 pasa a usarse; su destino es una decisión aparte.
 
 ## Problema
 
