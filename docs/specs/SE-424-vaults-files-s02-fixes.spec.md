@@ -1,5 +1,5 @@
 ---
-status: APPROVED
+status: IMPLEMENTED
 approved_at: 2026-09-30
 approval: "Operadora 2026-09-30 en chat (AskUserQuestion): arreglos H1, H2, H3 y H4 aprobados, un PR Draft por arreglo"
 priority: P1
