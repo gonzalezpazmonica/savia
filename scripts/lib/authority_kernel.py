@@ -1194,7 +1194,10 @@ def consume_use(ctx):
     raise Deny("MAX_USES_EXHAUSTED", "contrato consumido")
 
 
-def audit_append(ctx, result, mode):
+def audit_append(ctx, result, mode, extra=None):
+    """extra: campos adicionales (p. ej. los del adaptador en sombra de F1); nunca pisan los del kernel.
+
+    El audit mezcla decisiones reales y de sombra (`mode`): quien cuente ALLOW debe filtrar por `mode`."""
     d = os.path.join(ctx.home, ".savia", "authority")
     os.makedirs(d, exist_ok=True)
     plain = set((ctx.descriptor or {}).get("audit_plain") or [])
@@ -1203,6 +1206,10 @@ def audit_append(ctx, result, mode):
              "capability": ctx.req["capability"], "action": ctx.req["action"]["name"], "params": params,
              "decision": result["decision"], "reason": result["reason"], "contract_id": result["contract_id"],
              "action_sha256": result["action_sha256"], "state_digest": result["state_digest"]}
+    for key, val in (extra or {}).items():
+        if key in entry or key == "prev_sha256":
+            raise ValueError("campo de audit reservado: " + key)
+        entry[key] = val
     path = os.path.join(d, "audit.jsonl")
     with open(path, "a+b") as f:
         if fcntl:

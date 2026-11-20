@@ -22,7 +22,6 @@ rules:
     tests:
       - test-se-097-rules-index-regen.bats
       - test-se-103-dormant-rules.bats
-      - test-se-102-eras-timeline.bats
 
   - dir: ".github/workflows/"
     tests:
@@ -38,11 +37,6 @@ rules:
   - dir: ".opencode/hooks/"
     tests:
       - test-se253-hooks-coverage.bats
-
-  - dir: "docs/"
-    tests:
-      - test-se-102-eras-timeline.bats
-      - test-se-080-attention-anchor.bats
 
   - file: ".claude/settings.json"
     tests:

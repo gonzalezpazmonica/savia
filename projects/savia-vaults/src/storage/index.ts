@@ -4,7 +4,7 @@ import * as crypto from 'node:crypto';
 import { simpleGit } from 'simple-git';
 import YAML from 'yaml';
 import type { VaultConfig, Note, Receipt, VaultStats, CommitEntry, Frontmatter } from '../types.js';
-import { signContent } from '../security/index.js';
+import { signContent, VaultSecurity } from '../security/index.js';
 import { fileClassification, fileOutOfLevel, fileVerdict, isMarkdown, parseClassification, verdictOf } from './note-level.js';
 
 /** Nota ausente, fuera de nivel o en cuarentena: una sola causa visible para no revelar existencia (SE-485 R3). */
@@ -14,9 +14,12 @@ export class NoteNotFoundError extends Error {
 
 export class VaultStorage {
   private config: VaultConfig;
+  /** SE-424 H5: toda ruta pedida pasa por aquí antes de tocar disco o git. */
+  private security: VaultSecurity;
 
   constructor(config: VaultConfig) {
     this.config = config;
+    this.security = new VaultSecurity(config);
   }
 
   async init(): Promise<void> {
@@ -47,8 +50,8 @@ export class VaultStorage {
     return fileOutOfLevel(path.join(this.config.path, notePath), notePath, this.config.confidentiality);
   }
 
-  async read(notePath: string): Promise<Note> {
-    const fullPath = path.join(this.config.path, notePath);
+  async read(requested: string): Promise<Note> {
+    const { abs: fullPath, rel: notePath } = this.security.contain(requested);
     if (!fs.existsSync(fullPath) || this.outOfLevel(notePath)) throw new NoteNotFoundError();
 
     const raw = fs.readFileSync(fullPath, 'utf-8');
@@ -67,8 +70,8 @@ export class VaultStorage {
     };
   }
 
-  async write(notePath: string, content: string, message?: string): Promise<Receipt> {
-    const fullPath = path.join(this.config.path, notePath);
+  async write(requested: string, content: string, message?: string): Promise<Receipt> {
+    const { abs: fullPath, rel: notePath } = this.security.contain(requested);
     // SE-420: ni se escribe una nota de nivel superior a la cúpula ni se pisa una que ya lo esté.
     if (isMarkdown(notePath)) {
       // SE-481 R2: una clasificación explícita no interpretable se rechaza antes de persistir.
@@ -93,7 +96,7 @@ export class VaultStorage {
 
     const git = simpleGit(this.config.path);
     try {
-      await git.add(notePath);
+      await git.raw(['add', '--', notePath]);
       await git.commit(message || `Write ${notePath}`);
     } catch {
       // git operations may fail in some environments; non-fatal
@@ -108,8 +111,8 @@ export class VaultStorage {
     };
   }
 
-  async delete(notePath: string, soft = true): Promise<void> {
-    const fullPath = path.join(this.config.path, notePath);
+  async delete(requested: string, soft = true): Promise<void> {
+    const { abs: fullPath, rel: notePath } = this.security.contain(requested);
     if (!fs.existsSync(fullPath)) return;
 
     if (soft) {
@@ -128,10 +131,10 @@ export class VaultStorage {
       if (soft) {
         const trashDir = path.join(this.config.path, '.trash');
         await git.add(trashDir);
-        await git.add(notePath);
+        await git.raw(['add', '--', notePath]);
         await git.commit(`Delete ${notePath} (soft)`);
       } else {
-        await git.rm(notePath);
+        await git.raw(['rm', '--', notePath]);
         await git.commit(`Delete ${notePath} (hard)`);
       }
     } catch {
@@ -212,18 +215,21 @@ export class VaultStorage {
     return { total: notes.length, byCode, notes };
   }
 
-  async diff(notePath: string): Promise<string> {
+  async diff(requested: string): Promise<string> {
+    const { rel: notePath } = this.security.contain(requested);
     if (this.outOfLevel(notePath)) throw new NoteNotFoundError();
     const git = simpleGit(this.config.path);
     try {
-      const d = await git.diff([notePath]);
+      // `--` antes de la ruta: un nombre como `--output=...` no es una opción de git.
+      const d = await git.diff(['--', notePath]);
       return d || '';
     } catch {
       return '';
     }
   }
 
-  async log(notePath: string, maxCount = 20): Promise<CommitEntry[]> {
+  async log(requested: string, maxCount = 20): Promise<CommitEntry[]> {
+    const { rel: notePath } = this.security.contain(requested);
     if (this.outOfLevel(notePath)) throw new NoteNotFoundError();
     const git = simpleGit(this.config.path);
     try {

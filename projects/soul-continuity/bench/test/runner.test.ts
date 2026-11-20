@@ -78,3 +78,45 @@ test("un título con controles en la respuesta cuenta como texto no inerte", asy
   assert.ok(r.metrics.unclean_titles > 0);
   assert.equal(r.gate.pass, false);
 });
+
+// --- Latencia p95 de Q1: una parada puntual del equipo no suspende, una lentitud sostenida sí ----------
+// Fallo real de main (windows-latest): p95 3620,9 ms con ~20-80 ms en las otras ejecuciones. Con 18
+// escenarios Q1, el p95 es el máximo: UNA medida con una parada de reloj de pared bastaba para suspender.
+const LATENCY = { only: ["B01", "B02", "T01"], thresholds: { p95_q1_ms: 400 } };
+const stallFirst = (calls: number, ms: number) => {
+  const ref = makeReference();
+  let n = 0;
+  return {
+    ...ref,
+    name: `parada-${calls}`,
+    answer: ((...a: Parameters<typeof ref.answer>) => {
+      if (++n <= calls) { const t = performance.now(); while (performance.now() - t < ms) { /* parada del equipo */ } }
+      return ref.answer(...a);
+    }) as typeof ref.answer,
+  };
+};
+
+test("p95 Q1: una parada puntual de 600 ms en una medida no suspende el gate (la mediana la absorbe)", async () => {
+  const r = await runBench(stallFirst(1, 600), LATENCY);
+  assert.deepEqual(r.gate.failures, []);
+  assert.ok(r.metrics.p95_q1_ms < 400, `p95 ${r.metrics.p95_q1_ms}`);
+});
+
+test("p95 Q1: una lentitud sostenida (3 de 5 medidas de un escenario) sigue suspendiendo", async () => {
+  const r = await runBench(stallFirst(3, 600), LATENCY);
+  assert.equal(r.gate.pass, false);
+  assert.ok(r.gate.failures.some((f) => f.includes("p95 Q1")), r.gate.failures.join("; "));
+});
+
+test("p95 Q1: un fallo del equipo no oculta un fallo real: 1 sola medida (reps=1) vuelve a suspender por la parada", async () => {
+  const r = await runBench(stallFirst(1, 600), { ...LATENCY, q1_reps: 1 });
+  assert.equal(r.gate.pass, false);
+});
+
+test("p95 Q1: el informe dice qué escenarios fueron los más lentos y sus medidas", async () => {
+  const r = await runBench(stallFirst(3, 600), LATENCY);
+  const f = r.gate.failures.find((x) => x.includes("p95 Q1")) ?? "";
+  assert.match(f, /mediana de 5/);
+  assert.match(f, /B01/);
+  assert.ok(r.scenarios.find((s) => s.id === "B01")?.samples_ms?.length === 5);
+});

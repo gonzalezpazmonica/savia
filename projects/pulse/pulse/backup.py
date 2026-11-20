@@ -91,7 +91,7 @@ def pendientes(root, ahora=None, incluir_respaldo=False):
 
 def es_aviso(p):
     """Fin correcto de un trabajo: informa, no pide nada (su propia petición dice que no hay que hacer nada)."""
-    return p["fuente"] == "AVISO_RUN" and not p["critica"] and p["si_no_contestas"] == events.NADA_QUE_HACER
+    return p["fuente"] == "AVISO_RUN" and not p["id"].startswith("nocturna-") and not p["critica"] and p["si_no_contestas"] == events.NADA_QUE_HACER
 
 
 _TRABAJO_OK = re.compile(r"^El trabajo (\S+) terminó bien\.$")
