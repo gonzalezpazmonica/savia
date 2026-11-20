@@ -1,0 +1,10 @@
+{
+  "id": "SE-472",
+  "status": "RETIRED",
+  "priority": "P2",
+  "title": "Vigencia de la autoridad comprobada antes de cada tarea nocturna",
+  "note": "Retirada/enmienda 2026-11-20 por decisión de la operadora (pregunta interactiva): nada llama a overnight-sprint-loop.sh; la autoridad de fusión la comprueba SE-512. Código recuperable del historial de git.",
+  "evidence": "docs/specs/SE-472-overnight-per-task-authority-check.spec.md",
+  "phase": "A",
+  "approval": "Operadora 2026-11-20: pregunta interactiva (retirar)"
+}
