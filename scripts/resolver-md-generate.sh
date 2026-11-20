@@ -89,7 +89,12 @@ sanitise() {
   s=$(echo "$s" | tr -s '[:space:]' ' ' | sed -E 's/^ +| +$//g')
   s="${s//|/\\|}"
   if [[ ${#s} -gt 90 ]]; then
-    s="${s:0:87}..."
+    # LC_ALL=C cuts bytes: drop a trailing partial UTF-8 sequence (SE-527 S1).
+    if command -v iconv >/dev/null 2>&1; then
+      s="$(printf '%s' "${s:0:87}" | iconv -f UTF-8 -t UTF-8 -c 2>/dev/null)..."
+    else
+      s="${s:0:87}..."
+    fi
   fi
   echo "$s"
 }

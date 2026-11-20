@@ -81,7 +81,7 @@
 
 <!-- AUTO_BEGIN — do not edit; regenerate via scripts/resolver-md-generate.sh -->
 
-### Skills (139)
+### Skills (140)
 
 | Intent (skill) | Target | Cuándo usar |
 |---|---|---|
@@ -109,7 +109,7 @@
 | `code-improvement-loop` | skill:code-improvement-loop | Usar cuando se quiere ejecutar mejora autónoma de código en segundo plano con PRs par... |
 | `codebase-map` | skill:codebase-map | Usar cuando se necesita un mapa de dependencias del workspace (comandos→agentes→reg... |
 | `codegraph` | skill:codegraph | Usar cuando se necesita indexación AST persistente para navegación de callers/callees... |
-| `company-messaging` | skill:company-messaging | Usar cuando se envían mensajes internos cifrados entre miembros de la organización v�... |
+| `company-messaging` | skill:company-messaging | Usar cuando se envían mensajes internos cifrados entre miembros de la organización v... |
 | `consensus-validation` | skill:consensus-validation | Usar cuando una decisión técnica o recomendación necesita validación por panel de j... |
 | `content-fingerprint` | skill:content-fingerprint | Usar cuando se necesita un identificador corto, deterministico y reproducible derivado ... |
 | `context-caching` | skill:context-caching | Usar cuando se optimiza el orden de carga de contexto para maximizar cache hits. |
@@ -152,6 +152,7 @@
 | `managed-content` | skill:managed-content | Usar cuando se regeneran secciones auto-generadas en documentos con marcadores de segur... |
 | `meeting-transcript-extract` | skill:meeting-transcript-extract | Usar cuando se necesita extraer la transcripción de una reunión Teams desde el browser. |
 | `memvid-backup` | skill:memvid-backup | Usar cuando se crea un backup portable de la memoria externa de Savia. |
+| `merge-plan` | skill:merge-plan | Prepara el plan ordenado de un merge-sprint y lee sus choques previstos. Usar cuando se... |
 | `meta-reflection` | skill:meta-reflection | Protocolo de las 4 meta-preguntas para cuestionar el encuadre de una tarea antes de eje... |
 | `mobile-security-scanner` | skill:mobile-security-scanner | Usar cuando se escanea un APK/AAB Android en busca de vulnerabilidades de seguridad. In... |
 | `model-upgrade-audit` | skill:model-upgrade-audit | Usar cuando hay un modelo nuevo disponible y se quiere detectar prompt debt en el works... |
@@ -225,7 +226,7 @@
 | `write-a-skill` | skill:write-a-skill | Guia para crear una nueva skill correctamente en pm-workspace. Usar cuando una tarea se... |
 | `zoom-out` | skill:zoom-out | Elevates perspective from trees to forest. Maps architecture, dependencies, and second-... |
 
-### Agents (90)
+### Agents (86)
 
 | Intent (agent) | Target | Cuándo usar |
 |---|---|---|
@@ -252,20 +253,18 @@
 | `compliance-judge` | agent:compliance-judge | Truth Tribunal judge — PII, N1-N4b levels, format rules, confidentiality |
 | `concession-judge` | agent:concession-judge | Recommendation Tribunal judge — detects position changes without new evidence (SPEC-192) |
 | `confidentiality-auditor` | agent:confidentiality-auditor | Audita cumplimiento de confidencialidad en PRs de pm-workspace (repo publico). Descubre... |
-| `configurator` | agent:configurator | Centralizes workspace dispatch decisions: selects skills, agents, rules, and memory que... |
 | `context-dome-manager` | agent:context-dome-manager | Arquitecto de conocimiento — disena, audita y evoluciona cupulas de contexto (SaviaVa... |
 | `correctness-judge` | agent:correctness-judge | Code Review Court judge — logic, tests, edge cases, error paths |
 | `court-orchestrator` | agent:court-orchestrator | Convenes the Code Review Court, manages fix cycles, produces .review.crc |
 | `criterion-simulation-judge` | agent:criterion-simulation-judge | Criterion Simulation Layer judge — SPEC-194. Executes 4 meta-questions (frame challen... |
 | `dev-orchestrator` | agent:dev-orchestrator | Analiza specs y crea planes de implementación con slices, dependencias y presupuestos ... |
-| `diagram-architect` | agent:diagram-architect | Architecture diagram specialist. Analyzes code and infrastructure to generate Mermaid d... |
+| `diagram-architect` | agent:diagram-architect | Architecture diagram analyst. Reviews an existing Mermaid diagram against the project's... |
 | `dotnet-developer` | agent:dotnet-developer | Implementación de código C#/.NET siguiendo specs SDD aprobadas. Usar PROACTIVELY cuan... |
 | `drift-auditor` | agent:drift-auditor | Auditoría de convergencia repo: detecta drift entre docs, config y código. Usar PROAC... |
 | `excel-digest` | agent:excel-digest | Digestion de hojas de calculo Excel (XLSX/XLS/CSV) — pipeline de 4 fases. Extrae estr... |
 | `expertise-asymmetry-judge` | agent:expertise-asymmetry-judge | 'Recommendation Tribunal judge — when draft falls in a domain the active user marks a... |
 | `factuality-judge` | agent:factuality-judge | Truth Tribunal judge — factual accuracy of claims against verifiable sources |
 | `feasibility-probe` | agent:feasibility-probe | Validates spec feasibility by attempting a time-boxed prototype. Produces viability rep... |
-| `fiction-framing-judge` | agent:fiction-framing-judge | Recommendation Tribunal judge — detects persona-shift plus content-equivalent framing... |
 | `fix-assigner` | agent:fix-assigner | Creates fix tasks from Court findings, assigns to dev agents, triggers re-review |
 | `frontend-developer` | agent:frontend-developer | Implementación de código frontend (Angular y React) siguiendo specs SDD aprobadas. Us... |
 | `frontend-test-runner` | agent:frontend-test-runner | Post-commit frontend test execution — unit, component, e2e, coverage |
@@ -305,9 +304,7 @@
 | `social-networks` | agent:social-networks | Coordinador agnóstico de redes sociales (SE-385). Selecciona proveedor, comprueba cred... |
 | `source-traceability-judge` | agent:source-traceability-judge | Truth Tribunal judge — every claim must have a verifiable @ref citation |
 | `spec-judge` | agent:spec-judge | Code Review Court judge — implementation vs approved spec, acceptance criteria |
-| `structural-framing-judge` | agent:structural-framing-judge | Recommendation Tribunal judge — detects output with manual/protocol form over CBRN or... |
 | `sycophancy-judge` | agent:sycophancy-judge | Recommendation Tribunal judge — detects empty social validation in conversational dra... |
-| `tabular-analyst` | agent:tabular-analyst | Analisis estadistico de datos tabulares. Usar PROACTIVELY cuando: se reciben datos en C... |
 | `tech-writer` | agent:tech-writer | Documentación técnica: README, CHANGELOG, comentarios XML en C#, docs de proyecto. Us... |
 | `terraform-developer` | agent:terraform-developer | Implementación de código Terraform (IaC) siguiendo specs SDD aprobadas. CRÍTICO: NUN... |
 | `test-architect` | agent:test-architect | Designs and generates the highest quality tests across all 16 language packs and 14 tes... |
