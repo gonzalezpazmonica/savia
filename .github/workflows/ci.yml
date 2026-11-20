@@ -8,6 +8,8 @@ on:
   # Cola de fusión de GitHub: los checks obligatorios («Validate workspace», «Lint Markdown», «BATS Hook
   # Tests») tienen que informarse también sobre el commit de grupo, o la cola se queda parada. En merge_group
   # no hay github.event.pull_request: la base sale de github.event.merge_group.base_sha (ver cada paso).
+  # Invariante: en merge_group corre el código del grupo con el token del repo base. Ningún workflow con este
+  # disparador recibe secretos ni permisos de escritura sin revisión explícita (hoy: contents: read, sin secretos).
   merge_group:
     types: [checks_requested]
 
