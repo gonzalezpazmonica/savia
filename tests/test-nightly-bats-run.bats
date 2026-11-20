@@ -13,6 +13,7 @@ setup() {
   cat > "$T/fakebats" <<EOF
 #!/bin/bash
 echo "\$1" >> "$T/order.log"
+echo "\${NIGHTLY_OUT-unset}" >> "$T/env.log"
 grep -q '^kill-runner' "\$1" && kill -KILL "\$(ps -o ppid= -p \$PPID | tr -d ' ')"
 exit "\$(sed -n 's/^rc=//p' "\$1")"
 EOF
@@ -93,6 +94,34 @@ suite() {  # suite <nombre> <rc> [serial|kill]
   [ "$output" = $'total=2\nfailed=1' ]
   grep -qxF "missing $k" "$OUT/failed.txt"
   grep -q 'missing' "$OUT/summary.md"
+}
+
+@test "si no puede escribir rc.txt sale 3 sin contadores (fail-closed)" {
+  bats_require_minimum_version 1.5.0
+  a=$(suite ko.bats 1)
+  mkdir -p "$OUT/rc.txt"
+  run --separate-stderr bash "$SCRIPT" "$OUT" "$a"
+  [ "$status" -eq 3 ]
+  [[ "$output" != *total=* ]]
+  [[ "$output" != *failed=* ]]
+  [[ "$stderr" == *rc.txt* ]]
+}
+
+@test "si falla el cómputo de fallidas (awk) sale 3 sin contadores" {
+  bats_require_minimum_version 1.5.0
+  a=$(suite ko.bats 1)
+  mkdir -p "$T/bin"; printf '#!/bin/sh\nexit 127\n' > "$T/bin/awk"; chmod +x "$T/bin/awk"
+  PATH="$T/bin:$PATH" run --separate-stderr bash "$SCRIPT" "$OUT" "$a"
+  [ "$status" -eq 3 ]
+  [[ "$output" != *failed=0* ]]
+  [[ "$output" != *total=* ]]
+}
+
+@test "la suite no hereda NIGHTLY_OUT (no puede escribir su propio resultado)" {
+  a=$(suite ok.bats 0)
+  run bash "$SCRIPT" "$OUT" "$a"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$T/env.log")" = "unset" ]
 }
 
 @test "sin suites: sale 2 y no imprime contadores (fail-closed)" {
