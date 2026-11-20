@@ -100,9 +100,18 @@ EOF
   gh_api repos_owner_repo_rules_branches_main '[{"type":"pull_request"}]'
   run sc epoch; [[ "$output" == *EPOCH_CHECK_NOT_REQUIRED* ]]
   gh_api repos_owner_repo_rules_branches_main \
-    '[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"control-epoch-monotonic"}]}}]'
-  run sc epoch; [ "$status" -eq 0 ]; [[ "$output" != *EPOCH_CHECK_NOT_REQUIRED* ]]
+    '[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"control-epoch-monotonic","integration_id":15368}]}}]'
+  run sc epoch; [ "$status" -eq 0 ]; [[ "$output" != *EPOCH_CHECK_NOT_REQUIRED* ]]; [[ "$output" != *EPOCH_CHECK_SOURCE_UNPINNED* ]]
   run sc status; [[ "$output" != *EPOCH_CHECK_NOT_REQUIRED* ]]
+}
+
+@test "security P2-4: un check de época obligatorio solo por nombre avisa EPOCH_CHECK_SOURCE_UNPINNED" {
+  gh_api repos_owner_repo_rules_branches_main \
+    '[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"control-epoch-monotonic"}]}}]'
+  run sc epoch; echo "$output"; [[ "$output" == *EPOCH_CHECK_SOURCE_UNPINNED* ]]; [[ "$output" != *EPOCH_CHECK_NOT_REQUIRED* ]]
+  gh_api repos_owner_repo_rules_branches_main \
+    '[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"control-epoch-monotonic","integration_id":99}]}}]'
+  run sc epoch; [[ "$output" == *EPOCH_CHECK_SOURCE_UNPINNED* ]]
 }
 
 @test "AC-8 publish-epoch: si el push salió y gh pr create falló, el reintento reutiliza la rama y abre la PR" {

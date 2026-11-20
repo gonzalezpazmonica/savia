@@ -294,3 +294,104 @@ seq_of() { jget "$SAVIA_CONTROL_DIR/state.json" "d['stops']['$1']['stop_seq']"; 
   mv "$SAVIA_EFFECT_LEDGER" "$T/ledger.guardado"
   run sc reconcile; echo "$output"; [ "$status" -eq 2 ]; [[ "$output" == *LEDGER_UNREADABLE* ]]
 }
+
+# ── refutación sobre fbb5eb6c5 (Codex P1-2, P1-3, P1-4) ─────────────────────
+
+@test "refutación P1-2: renovar la parada no descarga un incierto si luego desaparece el ledger" {
+  ledger '{"effect_id":"e1","executor":"a","state":"DISPATCHED"}'
+  sc pause --scope executor:a --reason inicial
+  run sc reconcile; [ "$status" -eq 5 ]; [[ "$output" == *"INDETERMINATE e1"* ]]
+  mv "$SAVIA_EFFECT_LEDGER" "$T/ledger.guardado"
+  sc pause --scope executor:a --reason renovacion
+  run sc reconcile; echo "$output"; [ "$status" -eq 2 ]; [[ "$output" == *LEDGER_UNREADABLE* ]]; [[ "$output" == *e1* ]]
+  operator_setup; approve executor:a 0 "$(seq_of executor:a)" '[]'
+  run sc resume --scope executor:a --via-pr; [ "$status" -eq 5 ]; [[ "$output" == *RECONCILE_REQUIRED* ]]
+  run sc check --executor a; [ "$status" -eq 6 ]
+}
+
+@test "refutación P1-2: la pérdida bloquea también el reconcile de otro ámbito (sin registro no se sabe de quién era)" {
+  ledger '{"effect_id":"e1","executor":"a","principal":"p","state":"DISPATCHED"}'
+  sc pause --scope executor:a --reason x
+  run sc reconcile; [ "$status" -eq 5 ]
+  mv "$SAVIA_EFFECT_LEDGER" "$T/ledger.guardado"
+  sc pause --scope principal:p --reason y
+  run sc reconcile --scope principal:p; echo "$output"; [ "$status" -eq 2 ]; [[ "$output" == *LEDGER_UNREADABLE* ]]
+}
+
+@test "refutación P1-2 (negativo): un incierto aceptado en un resume deja de contar aunque desaparezca del ledger" {
+  ledger '{"effect_id":"e1","executor":"a","state":"DISPATCHED"}'
+  operator_setup
+  sc pause --scope executor:a --reason x
+  run sc reconcile; [ "$status" -eq 5 ]
+  approve executor:a 0 "$(seq_of executor:a)" '["e1"]'
+  run sc resume --scope executor:a --via-pr; echo "$output"; [ "$status" -eq 0 ]
+  mv "$SAVIA_EFFECT_LEDGER" "$T/ledger.guardado"
+  sc pause --scope executor:a --reason otra
+  run sc reconcile; echo "$output"; [ "$status" -eq 0 ]
+}
+
+@test "refutación P1-3: un ejecutor null posterior no saca el efecto del ámbito" {
+  ledger '{"effect_id":"e1","executor":"a","principal":"p","state":"DISPATCHED"}'
+  sc pause --scope executor:a --reason x
+  run sc reconcile; [ "$status" -eq 5 ]
+  ledger '{"effect_id":"e1","executor":"a","principal":"p","state":"DISPATCHED"}' '{"effect_id":"e1","executor":null}'
+  run sc reconcile; echo "$output"; [ "$status" -eq 5 ]; [[ "$output" == *"INDETERMINATE e1 [executor:a]"* ]]
+}
+
+@test "refutación P1-3: un ejecutor con tipo malformado cuenta en todos los ámbitos (fail-closed)" {
+  ledger '{"effect_id":"e1","executor":"b","principal":"p","state":"DISPATCHED"}' '{"effect_id":"e1","executor":7}'
+  sc pause --scope executor:a --reason x
+  run sc reconcile; echo "$output"; [ "$status" -eq 5 ]; [[ "$output" == *"INDETERMINATE e1"* ]]
+}
+
+@test "refutación P1-3: un cambio de ejecutor no saca el efecto del ámbito del ejecutor anterior" {
+  ledger '{"effect_id":"e1","executor":"a","state":"DISPATCHED"}' '{"effect_id":"e1","executor":"b"}'
+  sc pause --scope executor:a --reason x
+  run sc reconcile; echo "$output"; [ "$status" -eq 5 ]; [[ "$output" == *"INDETERMINATE e1 [executor:a]"* ]]
+}
+
+@test "refutación P1-3 (negativo): un efecto bien atribuido a otro ejecutor sigue fuera del ámbito" {
+  ledger '{"effect_id":"e1","executor":"b","principal":"p","state":"DISPATCHED"}' '{"effect_id":"e1","executor":null}'
+  sc pause --scope executor:a --reason x
+  run sc reconcile; echo "$output"; [ "$status" -eq 0 ]; [[ "$output" != *e1* ]]
+}
+
+@test "refutación P1-4: la sonda del intento 0 no prueba la ausencia del intento 1" {
+  ledger '{"effect_id":"e1","executor":"a","attempt":0,"state":"FAILED","probe":{"result":"ABSENT","definitive":true}}' \
+         '{"effect_id":"e1","attempt":1,"state":"DISPATCHED"}' '{"effect_id":"e1","attempt":1,"state":"FAILED"}'
+  sc pause --scope executor:a --reason revision
+  run sc reconcile; echo "$output"; [ "$status" -eq 5 ]; [[ "$output" == *"INDETERMINATE e1"* ]]
+  operator_setup; approve executor:a 0 "$(seq_of executor:a)" '[]'
+  run sc resume --scope executor:a --via-pr; [ "$status" -eq 5 ]; [[ "$output" == *ACCEPT_MISMATCH* ]]
+  run sc check --executor a; [ "$status" -eq 6 ]
+}
+
+@test "refutación P1-4: un registro tardío del intento 0 no sustituye el estado del intento 1" {
+  ledger '{"effect_id":"e1","executor":"a","attempt":1,"state":"DISPATCHED"}' \
+         '{"effect_id":"e1","attempt":0,"state":"FAILED","probe":{"result":"ABSENT","definitive":true}}'
+  sc pause --scope executor:a --reason x
+  run sc reconcile; echo "$output"; [ "$status" -eq 5 ]; [[ "$output" == *"INDETERMINATE e1"* ]]
+}
+
+@test "refutación P1-4 (negativo): con sonda definitiva del mismo intento 1 sí es REJECTED" {
+  ledger '{"effect_id":"e1","executor":"a","attempt":0,"state":"FAILED","probe":{"result":"ABSENT","definitive":true}}' \
+         '{"effect_id":"e1","attempt":1,"state":"DISPATCHED"}' \
+         '{"effect_id":"e1","attempt":1,"state":"FAILED","probe":{"result":"ABSENT","definitive":true}}'
+  sc pause --scope executor:a --reason x
+  run sc reconcile; echo "$output"; [ "$status" -eq 0 ]; [[ "$output" == *"REJECTED e1"* ]]
+}
+
+@test "refutación P1-4: un attempt que no es entero natural hace el ledger ilegible" {
+  ledger '{"effect_id":"e1","executor":"a","attempt":"1","state":"DISPATCHED"}'
+  sc pause --scope executor:a --reason x
+  run sc reconcile; [ "$status" -eq 2 ]; [[ "$output" == *LEDGER_UNREADABLE* ]]
+}
+
+@test "security P2-2: GIT_CONFIG_GLOBAL y GIT_CONFIG_SYSTEM se descartan al arrancar" {
+  GIT_CONFIG_GLOBAL="$T/gitconfig" GIT_CONFIG_SYSTEM="$T/gitconfig" run python3 -I -c '
+import importlib.util, os, sys
+spec = importlib.util.spec_from_file_location("sc", sys.argv[1]); m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+print(sorted(k for k in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM") if k in os.environ))' "$R/scripts/savia-control.py"
+  echo "$output"; [ "$output" = "[]" ]
+}

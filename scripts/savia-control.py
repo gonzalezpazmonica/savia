@@ -37,6 +37,7 @@ REMOTE_PATH = "config/control/executors-remote.json"
 OPERATOR_PATH = "config/control/operator.json"
 RESUME_DIR = "config/control/resume"
 EPOCH_CHECK = "control-epoch-monotonic"
+ACTIONS_APP_ID = 15368  # app «GitHub Actions»: fuente del check obligatorio de época
 STATE_KEYS = {"version", "epoch", "stop_seq", "stops"}
 ENTRY_KEYS = {"mode", "stop_seq", "since", "reason", "actor"}
 FORBIDDEN_ANCESTORS = {"claude", "opencode", "script"}
@@ -49,10 +50,12 @@ GIT_REDIRECT_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FI
                      "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_PREFIX", "GIT_CEILING_DIRECTORIES",
                      "GIT_DISCOVERY_ACROSS_FILESYSTEM", "GIT_CONFIG", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS",
                      "GIT_EXEC_PATH", "GIT_REPLACE_REF_BASE", "GIT_NO_REPLACE_OBJECTS", "GIT_SHALLOW_FILE",
-                     "GIT_GRAFT_FILE")
+                     "GIT_GRAFT_FILE", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM")
 # Variables de gh que cambian contra qué repositorio o servidor se consulta: con GH_REPO ajeno, las reglas de main,
 # las PR y el merged_by de verify_pr vendrían de un repo del atacante. Se conservan las credenciales (GH_TOKEN,
-# GH_CONFIG_DIR): un token distinto no puede fabricar respuestas del repo de origin.
+# GH_CONFIG_DIR) y la red (HTTPS_PROXY, SSL_CERT_FILE). Esto NO es una barrera frente a un proceso con el mismo UID:
+# con GH_CONFIG_DIR, un proxy o un certificado propios puede fabricar respuestas, igual que puede reescribir
+# state.json. Esa barrera es condición de F2 (estado y verificación fuera del alcance del ejecutor).
 GH_REDIRECT_VARS = ("GH_REPO", "GH_HOST")
 
 
@@ -586,13 +589,16 @@ def epoch_warnings(ctx):
     w = list(ctx.warnings)
     try:
         rules = main_rules(ctx)
-        required = any(r.get("type") == "required_status_checks" and any(
-            c.get("context") == EPOCH_CHECK for c in (r.get("parameters") or {}).get("required_status_checks", []))
-            for r in rules if isinstance(r, dict))
+        checks = [c for r in rules if isinstance(r, dict) and r.get("type") == "required_status_checks"
+                  for c in (r.get("parameters") or {}).get("required_status_checks", []) or []
+                  if isinstance(c, dict) and c.get("context") == EPOCH_CHECK]
     except Fail:
-        required = False
-    if not required:
+        checks = []
+    if not checks:
         w.append("EPOCH_CHECK_NOT_REQUIRED")
+    elif not any(c.get("integration_id") == ACTIONS_APP_ID for c in checks):
+        # Solo por nombre, otro workflow de una PR puede publicar un job verde con el mismo nombre.
+        w.append("EPOCH_CHECK_SOURCE_UNPINNED")
     return w
 
 
@@ -686,53 +692,90 @@ def cmd_status(a):
 
 # ── reconcile (R5) ──────────────────────────────────────────────────────────
 
+OWNER_KEYS = ("executor", "principal", "contract")
+# Campos que describen un intento concreto: la evidencia de un intento (sonda, recibo, compensación) no vale para otro.
+ATTEMPT_KEYS = ("state", "probe", "receipt", "compensation")
+
+
 def ledger_records(ctx):
-    """Ledger de efectos (SE-493). Interino en F0: JSONL, el último registro de cada effect_id manda."""
+    """Ledger de efectos (SE-493). Interino en F0: JSONL; por effect_id se fusionan sus registros.
+
+    - La atribución se acumula: un registro posterior no borra un dueño ya conocido (ni con null). Un valor de
+      atribución malformado marca el efecto como sin atribución fiable, que cuenta en todos los ámbitos (fail-closed).
+    - Estado, sonda, recibo y compensación salen solo de los registros del intento más alto: la sonda definitiva del
+      intento 0 no prueba nada sobre el intento 1. Un registro sin `attempt` pertenece al intento vigente.
+    - `irreversible` es pegajoso: basta un registro que lo diga.
+    """
     p = ctx.paths["effect_ledger"]
-    recs = {}
+    recs, owners, attempts, cur = {}, {}, {}, {}
     if os.path.exists(p):
         try:
             with open(p) as f:
                 for line in f:
-                    if line.strip():
-                        r = json.loads(line)
-                        if not isinstance(r, dict) or not isinstance(r.get("effect_id"), str):
-                            raise ValueError
-                        # El último registro manda en los campos que trae, pero uno incompleto no borra los
-                        # anteriores (si no, perdería su ámbito y el efecto desaparecería de la reconciliación).
-                        recs[r["effect_id"]] = {**recs.get(r["effect_id"], {}), **r}
+                    if not line.strip():
+                        continue
+                    r = json.loads(line)
+                    if not isinstance(r, dict) or not isinstance(r.get("effect_id"), str):
+                        raise ValueError
+                    eid = r["effect_id"]
+                    att = r.get("attempt", cur.get(eid, 0))
+                    if not isinstance(att, int) or isinstance(att, bool) or att < 0:
+                        raise ValueError
+                    cur[eid] = max(cur.get(eid, att), att)
+                    per = attempts.setdefault(eid, {})
+                    per[att] = {**per.get(att, {}), **{k: r[k] for k in ATTEMPT_KEYS if k in r}}
+                    own = owners.setdefault(eid, {"_malformed": False})
+                    for k in OWNER_KEYS:
+                        if k in r:
+                            if isinstance(r[k], str) and r[k]:
+                                own.setdefault(k, set()).add(r[k])
+                            elif r[k] is not None:
+                                own["_malformed"] = True
+                    sticky = bool(recs.get(eid, {}).get("irreversible")) or r.get("irreversible") is True
+                    recs[eid] = {**recs.get(eid, {}), **r, "irreversible": sticky}
         except (OSError, ValueError):
             raise Fail(2, f"LEDGER_UNREADABLE: {p}")
+    for eid, rec in recs.items():
+        for k in ATTEMPT_KEYS:
+            rec.pop(k, None)
+        rec.update(attempts[eid][cur[eid]])
+        rec["attempt"] = cur[eid]
+        rec["_owners"] = owners[eid]
     return recs
 
 
-def known_indeterminate(ctx, scopes):
-    """Efectos que un reconcile anterior dejó INDETERMINATE para paradas que siguen abiertas (diario encadenado)."""
-    # Solo cuenta el último reconcile de cada ámbito, y un efecto que un reconcile posterior de cualquier ámbito
-    # abierto clasificó como resuelto deja de contar: la clase de un efecto no depende del ámbito desde el que se mira.
-    last, resolved_at = {}, {}
-    for i, r in enumerate(ctx.journal or []):
+def known_indeterminate(ctx):
+    """Efectos que algún reconcile dejó INDETERMINATE y que nada ha descargado después (diario encadenado).
+
+    Los descarga un reconcile posterior que los clasifique como resueltos (en cualquier ámbito: la clase de un efecto
+    no depende del ámbito desde el que se mira) o un resume que los acepte expresamente. Renovar una parada (nuevo
+    stop_seq) o levantar otra no aporta evidencia sobre el efecto y no lo descarga.
+    """
+    pending = set()
+    for r in ctx.journal or []:
         if r.get("op") == "reconcile":
             for c in r.get("scopes", []):
-                cur = ctx.stops.get(c.get("scope"))
-                if not (cur and cur["stop_seq"] == c.get("stop_seq")):
+                if not isinstance(c, dict):
                     continue
-                for x in c.get("resolved", []):
-                    if isinstance(x, str):
-                        resolved_at[x] = i
-                if c["scope"] in scopes:
-                    last[c["scope"]] = (i, {x for x in c.get("indeterminate", []) if isinstance(x, str)})
-    return {x for i, xs in last.values() for x in xs if resolved_at.get(x, -1) <= i}
+                pending -= {x for x in c.get("resolved", []) if isinstance(x, str)}
+            for c in r.get("scopes", []):
+                if isinstance(c, dict):
+                    pending |= {x for x in c.get("indeterminate", []) if isinstance(x, str)}
+        elif r.get("op") == "resume":
+            pending -= {a.get("effect_id") for a in r.get("accepted", []) if isinstance(a, dict)}
+    return pending
 
 
 def covers(scope, rec):
     if scope == "global":
         return True
     kind, _, ident = scope.partition(":")
-    owners = [rec.get(k) for k in ("executor", "principal", "contract")]
-    if not any(isinstance(o, str) and o for o in owners):
-        return True  # sin atribución no se puede descartar de ningún ámbito: fail-closed
-    return rec.get(kind) == ident
+    own = rec.get("_owners")
+    if own is None:  # registro no pasado por ledger_records
+        own = {k: {rec[k]} for k in OWNER_KEYS if isinstance(rec.get(k), str) and rec[k]}
+    if own.get("_malformed") or not any(own.get(k) for k in OWNER_KEYS):
+        return True  # sin atribución fiable no se puede descartar de ningún ámbito: fail-closed
+    return ident in own.get(kind, ())
 
 
 def abandon(effect_id):
@@ -777,11 +820,13 @@ def cmd_reconcile(a):
         effects = ledger_records(ctx)
         scopes = [a.scope] if a.scope else sorted(ctx.stops)
         scopes = [s for s in scopes if s in ctx.stops]
-        gone = sorted(known_indeterminate(ctx, scopes) - set(effects))
+        gone = sorted(known_indeterminate(ctx) - set(effects))
         if gone:
-            # Un ledger ausente o sin efectos ya reconocidos como inciertos no prueba que estén resueltos.
+            # Un ledger ausente o sin efectos ya reconocidos como inciertos no prueba que estén resueltos. Sin su
+            # registro no se sabe a qué ámbitos pertenecían, así que bloquea el reconcile de cualquier ámbito.
             raise Fail(2, "LEDGER_UNREADABLE: faltan en el ledger efectos INDETERMINATE de un reconcile "
-                          f"anterior ({', '.join(gone[:5])}); no se da por vacío")
+                          f"anterior ({', '.join(gone[:5])}); no se da por vacío. Restaura el ledger o registra "
+                          "en él su resolución")
         report, covered, any_indet = [], [], False
         for eid, rec in sorted(effects.items()):
             hit = [s for s in scopes if covers(s, rec)]
