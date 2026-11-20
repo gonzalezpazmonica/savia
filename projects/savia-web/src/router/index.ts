@@ -39,11 +39,10 @@ router.beforeEach(async (to) => {
     const { useAuthStore } = await import('../stores/auth')
     const auth = useAuthStore()
     // If role hasn't been loaded yet, try to fetch it
-    if (auth.role === 'user' && auth.token) {
+    if (auth.role === 'user' && auth.isLoggedIn) {
       try {
-        const res = await fetch(`${auth.serverUrl}/auth/me`, {
-          headers: { 'Authorization': `Bearer ${auth.token}` },
-        })
+        const { bridgeInit } = await import('../utils/bridgeAuth')
+        const res = await fetch(`${auth.serverUrl}/auth/me`, bridgeInit(auth.token))
         if (res.ok) {
           const data = await res.json()
           auth.role = data.role === 'admin' ? 'admin' : 'user'

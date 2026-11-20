@@ -8,6 +8,7 @@ set -uo pipefail
 #   overnight-sprint-state.sh checkpoint --task-id <n> --status in_progress|done|failed --model <tier>
 #   overnight-sprint-state.sh complete   --task-id <n> [--pr <url>]
 #   overnight-sprint-state.sh fail       --task-id <n> --reason <str>
+#   overnight-sprint-state.sh suspend    --reason <str> [--task-id <n>]  # pending → suspended (SE-472)
 #   overnight-sprint-state.sh status     # summary JSON to stdout
 #   overnight-sprint-state.sh export     # emit results.tsv to stdout
 #   overnight-sprint-state.sh --self-test
@@ -313,7 +314,8 @@ cmd_status() {
       pending: (.tasks | map(select(.status == "pending")) | length),
       in_progress: (.tasks | map(select(.status == "in_progress")) | length),
       done: (.tasks | map(select(.status == "done")) | length),
-      failed: (.tasks | map(select(.status == "failed")) | length)
+      failed: (.tasks | map(select(.status == "failed")) | length),
+      suspended: (.tasks | map(select(.status == "suspended")) | length)
     }' "$state_file"
   else
     python3 - "$state_file" <<'PY'
@@ -331,10 +333,64 @@ summary = {
     "in_progress": sum(1 for t in tasks if t.get("status") == "in_progress"),
     "done": sum(1 for t in tasks if t.get("status") == "done"),
     "failed": sum(1 for t in tasks if t.get("status") == "failed"),
+    "suspended": sum(1 for t in tasks if t.get("status") == "suspended"),
 }
 print(json.dumps(summary, indent=2))
 PY
   fi
+}
+
+cmd_suspend() {
+  # SE-472: pending tasks → suspended (reason recorded). With --task-id, that task is
+  # suspended too whatever its status (used when the authority lapses before a model
+  # escalation of the task in progress). Done/failed tasks are never touched otherwise.
+  # Works with jq or, without it, with python3 (stdlib).
+  local reason="" task_id=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --reason) reason="${2:-}"; shift 2 ;;
+      --task-id) task_id="${2:-}"; shift 2 ;;
+      *) _err "suspend: unknown arg: $1" ;;
+    esac
+  done
+  [[ -n "$reason" ]] || _err "suspend: --reason required"
+  [[ -z "$task_id" || "$task_id" =~ ^[0-9]+$ ]] || _err "suspend: --task-id must be numeric"
+
+  local sprint_id="${OVERNIGHT_SPRINT_ID:-}"
+  local state_file
+  if [[ -n "$sprint_id" ]]; then
+    state_file="$(_state_file "$sprint_id")"
+  else
+    state_file="$(find "$AGENT_RUNS_DIR" -name "state.json" -maxdepth 2 2>/dev/null \
+      | sort -t/ -k1 | tail -1)"
+    [[ -n "$state_file" && -f "$state_file" ]] || _err "suspend: no state.json found"
+  fi
+  [[ -f "$state_file" ]] || _err "suspend: state.json not found: $state_file"
+
+  local now
+  now="$(_now)"
+  if _jq_available; then
+    _update_state "$state_file" --arg now "$now" --arg reason "$reason" --arg tid "$task_id" \
+      '(.tasks |= map(if .status == "pending" or ($tid != "" and (.id | tostring) == $tid)
+          then .status = "suspended" | .suspended_at = $now | .suspend_reason = $reason
+          else . end)) |
+       (.last_checkpoint = $now)' || _err "suspend: state update failed"
+  else
+    python3 - "$state_file" "$now" "$reason" "$task_id" <<'PY2' || _err "suspend: state update failed"
+import json, os, sys, tempfile
+path, now, reason, tid = sys.argv[1:5]
+data = json.load(open(path))
+for t in data.get("tasks", []):
+    if t.get("status") == "pending" or (tid and str(t.get("id")) == tid):
+        t.update(status="suspended", suspended_at=now, suspend_reason=reason)
+data["last_checkpoint"] = now
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
+with os.fdopen(fd, "w") as f:
+    json.dump(data, f, indent=2)
+os.replace(tmp, path)
+PY2
+  fi
+  printf 'INFO: pending tasks suspended (%s)\n' "$reason" >&2
 }
 
 cmd_export() {
@@ -360,7 +416,7 @@ cmd_export() {
         (.model // ""),
         (.pr // ""),
         (.completed_at // ""),
-        (.fail_reason // "")
+        (.fail_reason // .suspend_reason // "")
       ] | @tsv' "$state_file"
   else
     python3 - "$state_file" <<'PY'
@@ -374,7 +430,7 @@ for t in data.get("tasks", []):
         t.get("model", ""),
         t.get("pr", ""),
         t.get("completed_at", ""),
-        t.get("fail_reason", ""),
+        t.get("fail_reason", "") or t.get("suspend_reason", ""),
     ]
     print("\t".join(row))
 PY
@@ -488,6 +544,7 @@ case "$COMMAND" in
   checkpoint)  cmd_checkpoint "$@" ;;
   complete)    cmd_complete "$@" ;;
   fail)        cmd_fail "$@" ;;
+  suspend)     cmd_suspend "$@" ;;
   status)      cmd_status "$@" ;;
   export)      cmd_export "$@" ;;
   --self-test) cmd_self_test ;;
@@ -500,6 +557,7 @@ Commands:
   checkpoint --task-id <n> --status in_progress|done|failed --model <tier>
   complete   --task-id <n> [--pr <url>]
   fail       --task-id <n> --reason <str>
+  suspend    --reason <authority_expired|authority_invalid|authority_missing> [--task-id <n>]
   status
   export
   --self-test

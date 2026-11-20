@@ -98,6 +98,20 @@ El servidor respeta niveles de confidencialidad (N1-N4) en el frontmatter de los
 
 Lee el [modelo de amenaza](docs/threat-model.md) para entender que se protege y que NO. Las garantias de seguridad se detallan en `docs/threat-model.md`.
 
+## Seguridad del servicio local (SE-424 H5)
+
+- **Ninguna ruta sale de su cúpula.** Todo acceso a disco del almacenamiento (leer, escribir,
+  comparar, historial, borrar) pasa por `VaultSecurity.contain`: rechaza `..`, rutas absolutas,
+  `%2e%2e`/`%2f`, barras invertidas, enlaces simbólicos que salen y `.git`/`.savia-vault`/`.trash`.
+- **Sin escritura sin contraseña.** El A2A local responde 401 a `POST /share` sin credencial,
+  en cualquier nivel (también N1/N2).
+- **Host admitido.** El A2A rechaza (403) una cabecera `Host` que no sea de bucle local, una IP
+  literal, el host de escucha o un nombre de `SAVIA_A2A_ALLOWED_HOSTS`.
+
+**Al actualizar:** quien escribía por A2A sin token (p. ej. `scripts/sldc-context-loop.sh --feed`)
+recibe 401. Crea un token `writer` y pásalo (`SLDC_VAULTS_TOKEN` en ese script). Pasos exactos en
+[`docs/USAGE.md`](docs/USAGE.md#escribir-por-a2a-se-424-h5).
+
 ## Quick Start
 
 ```bash

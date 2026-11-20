@@ -29,6 +29,28 @@ json_escape() {
     s="${s//\\/\\\\}"; printf '%s' "${s//\"/\\\"}"
 }
 
+# SE-352: ¿hay taint vigente (<30 min) para esta sesión? Fallo cerrado sin identificador.
+_turn_is_tainted() {
+    local dir="${SAVIA_MEMORY_TAINT_DIR:-/tmp/savia-memory-taint}" sid now f ts
+    sid="${SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-}}"
+    [[ "$sid" == "unknown" ]] && sid=""
+    [[ -d "$dir" ]] || return 1
+    now=$(date -u +%s 2>/dev/null || echo 0)
+    if [[ -n "$sid" ]]; then
+        [[ "$sid" =~ ^[A-Za-z0-9._-]+$ ]] || return 0   # id raro: no se confía
+        f="$dir/$sid"; [[ -f "$f" ]] || return 1
+        ts=$(head -1 "$f" 2>/dev/null); [[ "$ts" =~ ^[0-9]+$ ]] || return 0
+        [[ "$now" -lt $((ts + 1800)) ]]; return
+    fi
+    for f in "$dir"/*; do
+        [[ -f "$f" ]] || continue
+        ts=$(head -1 "$f" 2>/dev/null)
+        [[ "$ts" =~ ^[0-9]+$ ]] || return 0
+        [[ "$now" -lt $((ts + 1800)) ]] && return 0
+    done
+    return 1
+}
+
 cmd_save() {
     local type= title= content= concepts= topic_key= project= rev=1 expires_days=
     local what= why= where= learned= supersedes_key= valid_from= quality="unverified"
@@ -58,6 +80,11 @@ cmd_save() {
         expires_days=90
     fi
     [[ -z "$type" || -z "$title" ]] && { echo "Error: --type, --title requeridos"; exit 1; }
+    if [[ ! "$type" =~ ^[A-Za-z0-9_-]+$ ]]; then
+        echo "Error: --type '$type' inválido (solo letras, números, '-' y '_'); no se guarda nada." >&2
+        exit 1
+    fi
+    command -v python3 >/dev/null 2>&1 || { echo "Error: python3 es necesario para guardar sin riesgo de corromper el almacén." >&2; exit 1; }
 
     # SE-072: Verified Memory axiom — "No Execution, No Memory"
     # Reject saves without provenance. Escape hatch: SAVIA_VERIFIED_MEMORY_DISABLED=true
@@ -110,14 +137,11 @@ EOF
 
     # SE-352: turn taint — si el turno está marcado por memoria de origen de red,
     # la entrada se degrada a untrusted aunque se pidió origin superior.
-    local _taint_file="/tmp/savia-memory-taint/${SESSION_ID:-}"
-    if [[ -f "$_taint_file" && "$origin" != "untrusted" ]]; then
-        local _taint_epoch _now_epoch
-        _taint_epoch=$(cat "$_taint_file" 2>/dev/null | head -1 || echo 0)
-        _now_epoch=$(date -u +%s 2>/dev/null || echo 0)
-        if [[ "$_now_epoch" -lt $((_taint_epoch + 1800)) ]]; then
-            origin="untrusted"
-        fi
+    # El hook escribe la marca con el session_id que recibe por stdin; el runtime lo
+    # expone como CLAUDE_CODE_SESSION_ID (SESSION_ID se mantiene por compatibilidad).
+    # Fallo cerrado: sin identificador de sesión, cualquier marca reciente degrada.
+    if [[ "$origin" != "untrusted" ]] && _turn_is_tainted; then
+        origin="untrusted"
     fi
 
     # Build structured content from W/W/W/L fields
@@ -131,68 +155,19 @@ EOF
     fi
     [[ -z "$content" ]] && { echo "Error: --content or --what required"; exit 1; }
 
-    content=$(echo "$content" | redact_private | head -c 2000)
-    content=$(json_escape "$content")
-    content="${content//$'\n'/\\n}"; content="${content//$'\r'/\\r}"; content="${content//$'\t'/\\t}"
-    local tokens_est=$((${#content} / 4))
-    local hash=$(hash_content "$content") now=$(iso8601_now)
+    content=$(printf '%s' "$content" | redact_private)
+    local now=$(iso8601_now)
 
     [[ -z "$topic_key" ]] && topic_key=$(suggest_topic_key "$type" "$title")
 
-    # Parse concepts
-    local concepts_json="[]"
-    if [[ -n "$concepts" ]]; then
-        concepts_json="["; IFS=',' read -ra CPTS <<< "$concepts"
-        for i in "${!CPTS[@]}"; do
-            concepts_json="$concepts_json\"${CPTS[$i]// /}\""
-            [[ $i -lt $((${#CPTS[@]} - 1)) ]] && concepts_json="$concepts_json,"
-        done; concepts_json="$concepts_json]"
-    fi
-
     # SPEC-020: TTL
-    local expires_at="null"
+    local expires_at=""
     if [[ -n "$expires_days" ]]; then
-        expires_at=$(date -u -d "+${expires_days} days" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "null")
-    fi
-
-    # UPSERT + SPEC-019 contradiction
-    local supersedes="null"
-    if [[ -n "$topic_key" && "$topic_key" != "null" && -f "$STORE_FILE" ]]; then
-        local old_line=$(grep -F "\"topic_key\":\"$topic_key\"" "$STORE_FILE" 2>/dev/null | tail -1 || true)
-        if [[ -n "$old_line" ]]; then
-            rev=$(($(echo "$old_line" | grep -o '"rev":[0-9]*' | cut -d: -f2) + 1))
-            # Literal JSON con escapes (\" \\): [^"]* se cortaba en la primera comilla escapada.
-            local old_content=$(echo "$old_line" | grep -oE '"content":"([^"\\]|\\.)*"' | head -1 | sed 's/^"content":"//;s/"$//' | head -c 200)
-            # El recorte puede partir un escape: sin "\" final impar, el literal sigue siendo válido.
-            [[ "$old_content" =~ (\\+)$ ]] && (( ${#BASH_REMATCH[1]} % 2 )) && old_content="${old_content%\\}"
-            [[ -n "$old_content" && "$old_content" != "$content" ]] && supersedes="$old_content"
-            local temp_file=$(mktemp)
-            grep -vF "\"topic_key\":\"$topic_key\"" "$STORE_FILE" > "$temp_file" || true
-            mv "$temp_file" "$STORE_FILE"
-        fi
-    fi
-
-    # Dedup (15 min)
-    if [[ -f "$STORE_FILE" ]] && grep -qF "\"hash\":\"$hash\"" "$STORE_FILE" 2>/dev/null; then
-        local recent_ts=$(grep -F "\"hash\":\"$hash\"" "$STORE_FILE" | tail -1 | grep -o '"ts":"[^"]*"' | cut -d'"' -f4)
-        local recent_epoch=$(date -d "$recent_ts" +%s 2>/dev/null || echo 0)
-        local cutoff=$(date -u -d '15 minutes ago' +%s 2>/dev/null || echo 0)
-        if [[ $recent_epoch -gt $cutoff ]]; then echo "⊘ Duplicado omitido"; return 0; fi
+        expires_at=$(date -u -d "+${expires_days} days" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || true)
     fi
 
     # SPEC-034: temporal validity + SPEC-037: cognitive sector
-    local vf="${valid_from:-$now}"
     local sector=$(map_type_to_sector "$type")
-
-    # SPEC-034: mark superseded entry with valid_to
-    if [[ -n "$supersedes_key" && -f "$STORE_FILE" ]]; then
-        # Las claves de topic llevan "/" (tipo/slug): se escapan para sed.
-        local _k_re _k_rep _t_rep
-        _k_re=$(printf '%s' "$supersedes_key" | sed -e 's/[]\/$*.^[&]/\\&/g')
-        _t_rep=$(printf '%s' "$topic_key" | sed -e 's/[\\\/&]/\\&/g')
-        _k_rep=$(printf '%s' "$supersedes_key" | sed -e 's/[\\\/&]/\\&/g')
-        sed -i "s/\"topic_key\":\"$_k_re\"\(.*\)}/\"topic_key\":\"$_k_rep\"\1,\"valid_to\":\"$now\",\"superseded_by\":\"$_t_rep\"}/" "$STORE_FILE"
-    fi
 
     # SPEC-038: auto-classify knowledge domain (skip in test mode for speed)
     local domain="general"
@@ -219,29 +194,19 @@ EOF
         *)               memory_type_kg="unknown" ;;
     esac
 
-    # SE-076 Slice 1: build entities array for episodes (and any type that supplies refs)
-    local entities_json="[]"
-    if [[ -n "$entities" ]]; then
-        IFS=',' read -ra ENTS <<< "$entities"
-        entities_json="["
-        for i in "${!ENTS[@]}"; do
-            local e="${ENTS[$i]// /}"
-            [[ -z "$e" ]] && continue
-            entities_json="$entities_json\"$(json_escape "$e")\""
-            [[ $i -lt $((${#ENTS[@]} - 1)) ]] && entities_json="$entities_json,"
-        done
-        entities_json="$entities_json]"
-    fi
-
-    local json="{\"ts\":\"$now\",\"type\":\"$type\",\"sector\":\"$sector\",\"domain\":\"$domain\",\"title\":\"$(json_escape "$title")\",\"content\":\"$content\",\"concepts\":$concepts_json,\"tokens_est\":$tokens_est,\"topic_key\":\"${topic_key}\",\"project\":\"${project:-null}\",\"hash\":\"$hash\",\"rev\":$rev,\"valid_from\":\"$vf\",\"importance_tier\":\"$importance_tier\",\"quality\":\"$quality\",\"memory_type\":\"$memory_type_kg\",\"origin\":\"$origin\",\"questions\":[]"
-    [[ "$supersedes" != "null" ]] && json="$json,\"supersedes\":\"$supersedes\""
-    [[ "$expires_at" != "null" ]] && json="$json,\"expires_at\":\"$expires_at\""
-    [[ -n "$supersedes_key" ]] && json="$json,\"supersedes_key\":\"$supersedes_key\""
-    [[ -n "$source" ]] && json="$json,\"source\":\"$(json_escape "$source")\""
-    [[ "$entities_json" != "[]" ]] && json="$json,\"entities\":$entities_json"
-    [[ -n "$valid_to" ]] && json="$json,\"valid_to\":\"$valid_to\""
-    echo "$json}" >> "$STORE_FILE"
-    echo "✓ Guardado: $title (topic: $topic_key, rev: $rev)"
+    # Upsert (SPEC-019), dedup 15 min, supersedes (SPEC-034), serialización JSON,
+    # cerrojo y escritura atómica: todo en memory-store-write.py. Si falla, no hay
+    # «Guardado» y el almacén queda como estaba.
+    local _rc=0
+    printf '%s' "$content" | python3 "$SCRIPT_DIR/memory-store-write.py" save \
+        --store="$STORE_FILE" --type="$type" --title="$title" --topic="$topic_key" \
+        --now="$now" --sector="$sector" --domain="$domain" --tier="$importance_tier" \
+        --quality="$quality" --memory-type="$memory_type_kg" --origin="$origin" \
+        --project="$project" --concepts="$concepts" --entities="$entities" \
+        --valid-from="$valid_from" --valid-to="$valid_to" --supersedes-key="$supersedes_key" \
+        --source="$source" --expires-at="$expires_at" || _rc=$?
+    [[ $_rc -eq 3 ]] && return 0   # duplicado: ya informado, nada que indexar
+    [[ $_rc -ne 0 ]] && return 1
     _update_memory_index "$topic_key" "$title" "$type" "$origin" 2>/dev/null || true
     _maybe_rebuild_index
 
@@ -274,12 +239,15 @@ cmd_entity() { local action="${1:-list}" query= etype= proj=; shift 2>/dev/null 
 }
 
 cmd_session_summary() {
-    local goal= discoveries= accomplished= files= project=
+    # SE-529 S1: --source/--origin se reenvían a cmd_save. Sin ellos, SE-072 rechazaba el guardado
+    # y el resumen de pre-compact se perdía en silencio. No hay procedencia por defecto: quien llama la declara.
+    local goal= discoveries= accomplished= files= project= source= origin=
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --goal) goal="$2"; shift 2 ;; --discoveries) discoveries="$2"; shift 2 ;;
             --accomplished) accomplished="$2"; shift 2 ;; --files) files="$2"; shift 2 ;;
-            --project) project="$2"; shift 2 ;; *) shift ;;
+            --project) project="$2"; shift 2 ;; --source) source="$2"; shift 2 ;;
+            --origin) origin="$2"; shift 2 ;; *) shift ;;
         esac
     done
     [[ -z "$accomplished" ]] && { echo "Error: --accomplished requerido"; return 1; }
@@ -289,7 +257,8 @@ cmd_session_summary() {
     [[ -n "$files" ]] && content="$content | Files: $files"
     cmd_save --type "session-summary" --title "Session $(date +%Y-%m-%d)" \
         --content "$content" --concepts "session" \
-        --topic "session/$(date +%Y-%m-%d)" ${project:+--project "$project"}
+        --topic "session/$(date +%Y-%m-%d)" ${project:+--project "$project"} \
+        ${source:+--source "$source"} ${origin:+--origin "$origin"}
 }
 
 # SE-352: distribución de orígenes de las entradas de memoria
@@ -322,30 +291,24 @@ cmd_audit_origins() {
 
 # SE-352: consolidación con exclusión de orígenes no confiables
 # Regla (OpenClaw dreaming): untrusted/system NUNCA entran en la promoción.
-# Modo --dry-run: solo reporta qué se excluiría, sin tocar el store.
+# Excluir de la promoción no es borrar: las entradas excluidas (y las antiguas sin
+# campo origin, que cuentan como untrusted) pasan a un fichero de cuarentena junto
+# al almacén y siguen recuperables. Modo --dry-run: solo reporta, sin tocar nada.
 cmd_consolidate() {
     [[ ! -f "$STORE_FILE" ]] && { echo "No hay memory store"; return; }
-    local dry=false
+    local dry="" out excluded kept legacy quarantine
     while [[ $# -gt 0 ]]; do case "$1" in
-        --dry-run) dry=true; shift ;; *) shift ;; esac; done
-    local excluded=0 kept=0 tmp_file
-    tmp_file=$(mktemp); trap "rm -f '$tmp_file'" RETURN
-    while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        local o
-        o=$(echo "$line" | grep -o '"origin":"[^"]*"' | cut -d'"' -f4 || echo "untrusted")
-        [[ -z "$o" ]] && o="untrusted"
-        if [[ "$o" == "untrusted" || "$o" == "system" ]]; then
-            excluded=$((excluded + 1))
-            continue
-        fi
-        echo "$line" >> "$tmp_file"; kept=$((kept + 1))
-    done < "$STORE_FILE"
-    if $dry; then
+        --dry-run) dry="--dry-run"; shift ;; *) shift ;; esac; done
+    command -v python3 >/dev/null 2>&1 || { echo "Error: python3 es necesario para consolidar sin perder datos." >&2; return 1; }
+    out=$(python3 "$SCRIPT_DIR/memory-store-write.py" consolidate --store="$STORE_FILE" $dry) || return 1
+    read -r excluded kept legacy quarantine <<< "$out"
+    if [[ -n "$dry" ]]; then
         echo "Consolidación (dry-run): excluidas ${excluded} entradas untrusted/system, mantenidas ${kept}."
-        return
+    else
+        echo "Consolidación: excluidas ${excluded} entradas untrusted/system, mantenidas ${kept}."
+        [[ "$excluded" -gt 0 ]] && echo "  Las excluidas están en cuarentena (recuperables): ${quarantine}"
     fi
-    mv "$tmp_file" "$STORE_FILE"
-    echo "Consolidación: excluidas ${excluded} entradas untrusted/system, mantenidas ${kept}."
-    _maybe_rebuild_index
+    [[ "$legacy" -gt 0 ]] && echo "  ${legacy} entradas sin campo origin se tratan como untrusted."
+    [[ -z "$dry" ]] && _maybe_rebuild_index
+    return 0
 }

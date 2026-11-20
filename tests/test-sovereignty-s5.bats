@@ -50,12 +50,6 @@ assert r2.stdout.decode().strip() in ('CONFIDENTIAL','PUBLIC','AMBIGUOUS'), r2.s
 "
 }
 
-@test "AC-S5.4: reporte mensual de FP se genera" {
-  run bash scripts/classifier-fp-report.sh
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"reporte:"* ]]
-}
-
 @test "classifier telemetria: otel-emit acepta eventos classifier.*" {
   export SAVIA_TELEMETRY_FILE="${BATS_TEST_TMPDIR}/tp.jsonl"
   rm -f "$SAVIA_TELEMETRY_FILE"
@@ -229,80 +223,6 @@ YAML
   run bash -c "printf '%s' '$out' | bash scripts/sovereignty-decide.sh --dest n1"
   [ "$status" -eq 0 ]
   [ "$(echo "$output" | jq -r .action)" = "WARN" ]
-}
-
-# ── Comportamiento: classifier-fp-report.sh ───────────────────────────────────
-
-_telemetry() { mkdir -p "$CLAUDE_PROJECT_DIR/output"; cat > "$CLAUDE_PROJECT_DIR/output/telemetry-events.jsonl"; }
-
-@test "fp-report: cuenta bloqueos, veredictos y avisos solo del mes pedido" {
-  _telemetry <<'EOF'
-{"event":"classifier.block","ts":"2026-03-02T10:00:00Z"}
-{"event":"classifier.block","ts":"2026-03-09T10:00:00Z"}
-{"event":"classifier.block","ts":"2026-04-01T10:00:00Z"}
-{"event":"classifier.verdict","ts":"2026-03-03T10:00:00Z","action":"ALLOW"}
-{"event":"classifier.verdict","ts":"2026-03-04T10:00:00Z","action":"WARN"}
-{"event":"classifier.verdict","ts":"2026-03-05T10:00:00Z","action":"WARN"}
-{"event":"classifier.verdict","ts":"2026-04-04T10:00:00Z","action":"WARN"}
-{"event":"otro.evento","ts":"2026-03-04T10:00:00Z"}
-EOF
-  run bash scripts/classifier-fp-report.sh --month 2026-03
-  [ "$status" -eq 0 ]
-  f="$CLAUDE_PROJECT_DIR/output/classifier-fp-report-2026-03.md"
-  [[ "$output" == "reporte: $f" ]]
-  grep -q '^| Bloqueos del clasificador (classifier.block) | 2 |$' "$f"
-  grep -q '^| Veredictos emitidos (classifier.verdict) | 3 |$' "$f"
-  grep -q '^| Warnings en N1 (permitidos) | 2 |$' "$f"
-  grep -q '— 2026-03$' "$f"
-}
-
-@test "fp-report: sin telemetría ni auditoría todo vale 0 y el informe existe" {
-  run bash scripts/classifier-fp-report.sh --month 2026-05
-  [ "$status" -eq 0 ]
-  f="$CLAUDE_PROJECT_DIR/output/classifier-fp-report-2026-05.md"
-  [ -f "$f" ]
-  [ "$(grep -c '| 0 |$' "$f")" -eq 4 ]
-}
-
-@test "fp-report: overrides del mes en la auditoría cuentan como FP corregidos" {
-  mkdir -p "$CLAUDE_PROJECT_DIR/output"
-  cat > "$CLAUDE_PROJECT_DIR/output/data-sovereignty-audit.jsonl" <<'EOF'
-{"ts":"2026-03-05","note":"false_positive en docs"}
-{"ts":"2026-03-06","note":"Manual_Allow por operadora"}
-{"ts":"2026-03-07","note":"override puntual"}
-{"ts":"2026-04-07","note":"override de otro mes"}
-{"ts":"2026-03-08","note":"bloqueo normal"}
-EOF
-  run bash scripts/classifier-fp-report.sh --month 2026-03
-  grep -q '^| FPs corregidos / overrides registrados | 3 |$' "$CLAUDE_PROJECT_DIR/output/classifier-fp-report-2026-03.md"
-}
-
-@test "fp-report: el mes puede darse como primer argumento posicional" {
-  run bash scripts/classifier-fp-report.sh 2026-02
-  [ "$status" -eq 0 ]
-  [ -f "$CLAUDE_PROJECT_DIR/output/classifier-fp-report-2026-02.md" ]
-}
-
-@test "fp-report: SAVIA_CLASSIFIER_FP=1 emite classifier.false_positive con el recuento" {
-  mkdir -p "$CLAUDE_PROJECT_DIR/scripts" "$CLAUDE_PROJECT_DIR/output"
-  cat > "$CLAUDE_PROJECT_DIR/scripts/otel-emit.sh" <<'EOF'
-#!/usr/bin/env bash
-echo "$*" > "$(dirname "$0")/../emitted.txt"
-EOF
-  chmod +x "$CLAUDE_PROJECT_DIR/scripts/otel-emit.sh"
-  echo '{"ts":"2026-03-05","note":"override"}' > "$CLAUDE_PROJECT_DIR/output/data-sovereignty-audit.jsonl"
-  SAVIA_CLASSIFIER_FP=1 run bash scripts/classifier-fp-report.sh --month 2026-03
-  [ "$status" -eq 0 ]
-  grep -q '^classifier.false_positive agent_name=operator month=2026-03 corrected=1 retention_days=180$' "$CLAUDE_PROJECT_DIR/emitted.txt"
-}
-
-@test "fp-report: sin SAVIA_CLASSIFIER_FP no emite ningún evento" {
-  mkdir -p "$CLAUDE_PROJECT_DIR/scripts"
-  printf '#!/usr/bin/env bash\ntouch "$(dirname "$0")/../emitted.txt"\n' > "$CLAUDE_PROJECT_DIR/scripts/otel-emit.sh"
-  chmod +x "$CLAUDE_PROJECT_DIR/scripts/otel-emit.sh"
-  run bash scripts/classifier-fp-report.sh --month 2026-03
-  [ "$status" -eq 0 ]
-  [ ! -e "$CLAUDE_PROJECT_DIR/emitted.txt" ]
 }
 
 # ── Comportamiento: shim ollama-classify.sh ──────────────────────────────────

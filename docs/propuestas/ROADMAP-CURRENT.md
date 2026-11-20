@@ -205,7 +205,6 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-490 [APPROVED] Soul Continuidad v1: gemelo operativo en el portátil de trabajo, de solo lectura y con comunicación bidireccional — evidencia: docs/specs/SE-490-soul-continuity-work-laptop.spec.md
 - SE-496 [APPROVED] Ontología operativa gobernada: la autoridad vive fuera del modelo — evidencia: docs/specs/SE-496-governed-operational-ontology-authority.spec.md
 - SE-500 [APPROVED] Merge-sprint sin realineación manual: fragmentos de planificación, integración en línea y plan ordenado — evidencia: docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md
-- SE-493 [APPROVED] Effect Ledger y reconciliación de efectos ambiguos — evidencia: docs/specs/SE-493-effect-ledger-ambiguous-reconciliation.spec.md
 - SE-498 [APPROVED] STOP global y revocación entre ejecutores — evidencia: docs/specs/SE-498-global-stop-cross-executor-revocation.spec.md
 - SE-501 [APPROVED] Derivados fuera de las PR: firma de confidencialidad, SAM y manifiesto de reglas generados en main — evidencia: docs/specs/SE-501-derivados-fuera-de-las-pr.spec.md
 - SE-504 [APPROVED] Savia usable: una app como la de Claude o ChatGPT, conectada a Soul y Space — evidencia: docs/specs/SE-504-savia-usable-conversacion-documentos-contexto.spec.md
@@ -214,8 +213,12 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-510 [APPROVED] Guardas sin bloqueos falsos y un despachador por evento — evidencia: docs/specs/SE-510-guardas-sin-bloqueos-falsos-despachador.spec.md
 - SE-511 [IMPLEMENTING] Contexto fijo por turno a la mitad o menos — evidencia: docs/specs/SE-511-contexto-fijo-por-turno-a-la-mitad.spec.md
 - SE-512 [APPROVED] Grant de política para el sprint nocturno — evidencia: docs/specs/SE-512-grant-de-politica-nocturno.spec.md
-- SE-513 [APPROVED] Admisión duradera de cambios de intención y comprobación previa — evidencia: docs/specs/SE-513-admision-duradera-y-comprobacion-previa.spec.md
 - SE-514 [APPROVED] Atención humana: una sola cola de preguntas, con su porqué — evidencia: docs/specs/SE-514-atencion-humana-cola-unica.spec.md
 - SE-515 [APPROVED] Aprendizaje aplicado: de la lección recuperada a la obligación comprobada — evidencia: docs/specs/SE-515-aprendizaje-aplicado-obligacion-comprobada.spec.md
 - SE-517 [APPROVED] Motor de Space con suscripción ChatGPT (OAuth) — evidencia: docs/specs/SE-517-space-motor-suscripcion-chatgpt-oauth.spec.md
 - SE-518 [APPROVED] Pulse: el latido de la planta de trabajo — evidencia: docs/specs/SE-518-pulse-latido.spec.md
+- SE-527 [APPROVED] Recorte de agentes sobrantes (14 de 90, en cuatro slices) — evidencia: docs/specs/SE-527-recorte-de-agentes-sobrantes.spec.md
+- SE-528 [APPROVED] Tres arreglos de seguridad: web, puente y cúpulas — evidencia: docs/specs/SE-528-seguridad-web-puente-cupulas.spec.md
+- SE-530 [APPROVED] Hecho verificado: ningún trabajo se da por bueno por su propia palabra — evidencia: docs/specs/SE-530-hecho-verificado.spec.md
+- SE-531 [APPROVED] Ficha de harness ejecutable: capacidades del runtime y supervisión del proceso hijo — evidencia: docs/specs/SE-531-ficha-de-harness-ejecutable.spec.md
+- SE-532 [APPROVED] Catálogo de agentes con esquema, referencias comprobadas y retirada explícita (3 slices) — evidencia: docs/specs/SE-532-catalogo-de-agentes-con-esquema-y-retirada.spec.md

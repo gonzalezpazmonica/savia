@@ -227,6 +227,18 @@ check_generated_fresh() {
   wait
 }
 
+# ── SE-532 S1: catálogo de agentes (bloquea; ~1 s, también en --quick) ──
+check_agent_catalog() {
+  # SE-532 S1: esquema de cabecera y referencias cruzadas del catálogo (fail-closed).
+  local out="$TMPDIR_CI/3-agent-catalog" g rc
+  g=$(python3 "$(dirname "${BASH_SOURCE[0]}")/validate-agent-catalog.py" 2>&1); rc=$?
+  if [[ $rc -eq 0 ]]; then
+    echo "PASS Catálogo de agentes: esquema y referencias (SE-532)" > "$out"
+  else
+    echo "FAIL Catálogo de agentes (exit $rc): $(grep -m1 -E '^(ERROR|agentes)' <<< "$g")" > "$out"
+  fi
+}
+
 # ── SE-425: lockfiles versionados coherentes con su package.json (aviso) ──
 # Comparación estática de dependencias declaradas (sin red): `npm ci` en CI fallaría igual.
 LOCK_DIRS_DEFAULT='scripts projects/savia-vaults'
@@ -255,6 +267,15 @@ PY
 }
 
 # ── SE-407 S2: estado limpio al cerrar (advisory) ─────────────────────────
+# ── Frescura de la cúpula savia-docs (advisory, nunca bloquea; ~50 ms, también en --quick) ──
+# Solo git local. Silencio si la cúpula no existe en esta máquina (CI, otros operadores).
+check_vault_freshness() {
+  local msg
+  msg=$(timeout 5 bash "$REPO_ROOT_CI/scripts/vaults-freshness.sh" --summary 2>/dev/null | head -1)
+  [[ -n "$msg" ]] && echo "WARN $msg" > "$TMPDIR_CI/9c-vault-freshness"
+  return 0
+}
+
 check_clean_state() {
   clean_state_report "$REPO_ROOT_CI" 2>&1 | grep -E '^(PASS|WARN) ' > "$TMPDIR_CI/9b-clean-state"
 }
@@ -312,11 +333,13 @@ check_branch &
 check_coherence &
 check_file_sizes &
 check_frontmatter &
+check_agent_catalog &
 check_settings_json &
 check_changelog &
 check_generated_fresh &
 check_lockfiles &
 check_gate_unknown &
+check_vault_freshness &
 $CLEAN_STATE && check_clean_state &
 if ! $QUICK_MODE; then
   check_required_files &

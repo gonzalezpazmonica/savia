@@ -7,21 +7,28 @@ set -uo pipefail
 cmd_search() {
     [[ ! -f "$STORE_FILE" ]] && { echo "Usage: search requires a store file" >&2; return 1; }
     local query= type_filter= since_date= mode="auto" include_expired=false
-    local sector_filter= include_superseded=false min_origin=
+    local sector_filter= include_superseded=false min_origin= min_origin_set=false
     while [[ $# -gt 0 ]]; do case "$1" in
         --type) type_filter="$2"; shift 2;; --since) since_date="$2"; shift 2;;
         --mode) mode="$2"; shift 2;; --include-expired) include_expired=true; shift;;
         --sector) sector_filter="$2"; shift 2;;
         --include-superseded) include_superseded=true; shift;;
-        --min-origin) min_origin="$2"; shift 2;;   # SE-352: owner|agent|untrusted
+        --min-origin) [[ $# -lt 2 ]] && { echo "Error: --min-origin requiere un valor." >&2; return 1; }
+            min_origin="$2"; min_origin_set=true; shift 2;;   # SE-352: owner|agent|untrusted|system
         *) query="$1"; shift;; esac
     done
     [[ -z "$query" ]] && { echo "Usage: search \"query\" [--type tipo] [--since DATE] [--mode hybrid|vector|graph|grep|auto]" >&2; return 1; }
 
+    # SE-352: valor inválido = error (fail-closed), no se degrada a "sin filtro" ni a untrusted.
+    [[ "$min_origin_set" == "true" && -z "$min_origin" ]] && { echo "Error: --min-origin vacío (fail-closed)." >&2; return 1; }
+    case "$min_origin" in ""|owner|agent|untrusted|system) ;;
+        *) echo "Error: --min-origin '$min_origin' inválido. Válidos: owner|agent|untrusted|system." >&2; return 1;; esac
+    local origin_args=(); [[ -n "$min_origin" ]] && origin_args=(--min-origin "$min_origin")
+
     # SPEC-035: Hybrid search (vector + graph + grep combined)
     if [[ "$mode" == "hybrid" || "$mode" == "auto" ]] && [[ -n "$MEMORY_PYTHON" ]]; then
         local hybrid_result
-        hybrid_result=$("$MEMORY_PYTHON" "$SCRIPT_DIR/memory-hybrid.py" search "$query" --top 10 --store "$STORE_FILE" --mode hybrid 2>/dev/null) || true
+        hybrid_result=$("$MEMORY_PYTHON" "$SCRIPT_DIR/memory-hybrid.py" search "$query" --top 10 --store "$STORE_FILE" --mode hybrid ${origin_args[@]+"${origin_args[@]}"} 2>/dev/null) || true
         if [[ -n "$hybrid_result" ]] && echo "$hybrid_result" | "$MEMORY_PYTHON" -c "import sys,json; d=json.load(sys.stdin); exit(0 if d.get('results') else 1)" 2>/dev/null; then
             echo "$hybrid_result" | "$MEMORY_PYTHON" -c "
 import sys, json
@@ -38,13 +45,20 @@ print(f'  (hybrid: {src.get(\"vector\",0)} vec + {src.get(\"graph\",0)} graph + 
     fi
     # Vector-only search (legacy path)
     if [[ "$mode" == "vector" || "$mode" == "auto" ]]; then
-        local idx="${STORE_FILE%.jsonl}-index.idx"
+        local idx="${STORE_FILE%.jsonl}-index.idx" vec_filtered=false vec_filter_failed=false
         local idx_faiss="${STORE_FILE%.jsonl}-index.faiss"
         [[ -f "$idx_faiss" ]] && idx="$idx_faiss"
         if [[ -n "$MEMORY_PYTHON" && -f "$idx" ]]; then
-            local vec_result
+            local vec_result vec_ok_py="import sys,json; d=json.load(sys.stdin); exit(0 if not d.get('fallback') and d.get('results') else 1)"
             vec_result=$("$MEMORY_PYTHON" "$SCRIPT_DIR/memory-vector.py" search "$query" --top 10 --store "$STORE_FILE" 2>/dev/null) || true
-            if [[ -n "$vec_result" ]] && echo "$vec_result" | "$MEMORY_PYTHON" -c "import sys,json; d=json.load(sys.stdin); exit(0 if not d.get('fallback') and d.get('results') else 1)" 2>/dev/null; then
+            # SE-352: mismo filtro que hybrid, solo sobre un resultado vectorial válido.
+            # Filtro fallido = resultado descartado y error (fail-closed); 0 tras filtrar ≠ índice ausente.
+            if [[ -n "$min_origin" && -n "$vec_result" ]] && echo "$vec_result" | "$MEMORY_PYTHON" -c "$vec_ok_py" 2>/dev/null; then
+                if vec_result=$(echo "$vec_result" | "$MEMORY_PYTHON" "$SCRIPT_DIR/memory-origin.py" filter --store "$STORE_FILE" --min-origin "$min_origin" 2>/dev/null); then
+                    vec_filtered=true
+                else vec_result=""; vec_filter_failed=true; fi
+            fi
+            if [[ -n "$vec_result" ]] && echo "$vec_result" | "$MEMORY_PYTHON" -c "$vec_ok_py" 2>/dev/null; then
                 echo "$vec_result" | "$MEMORY_PYTHON" -c "
 import sys, json
 d = json.load(sys.stdin)
@@ -55,6 +69,9 @@ for r in d['results']:
                 echo "  (vector search)" >&2; return
             fi
         fi
+        # Índice presente pero el filtro de origen lo dejó sin resultados: no es «índice ausente».
+        [[ "$mode" == "vector" && "$vec_filter_failed" == "true" ]] && { echo "Error: no se pudo aplicar --min-origin al resultado vectorial (fail-closed)." >&2; return 1; }
+        [[ "$mode" == "vector" && "$vec_filtered" == "true" ]] && { echo "No se encontraron resultados"; return 0; }
         [[ "$mode" == "vector" ]] && { echo "Vector index not available. Run: bash scripts/memory-store.sh rebuild-index"; return 1; }
     fi
 
@@ -89,7 +106,7 @@ for r in d['results']:
             line_origin=$(echo "$line" | grep -o '"origin":"[^"]*"' | cut -d'"' -f4 || echo "untrusted")
             [[ -z "$line_origin" ]] && line_origin="untrusted"
             local origin_rank line_rank
-            case "$min_origin" in owner) origin_rank=4 ;; agent) origin_rank=3 ;; untrusted) origin_rank=2 ;; *) origin_rank=2 ;; esac
+            case "$min_origin" in owner) origin_rank=4 ;; agent) origin_rank=3 ;; untrusted) origin_rank=2 ;; system) origin_rank=1 ;; *) origin_rank=2 ;; esac
             case "$line_origin" in owner) line_rank=4 ;; agent) line_rank=3 ;; untrusted) line_rank=2 ;; system) line_rank=1 ;; *) line_rank=2 ;; esac
             [[ $line_rank -lt $origin_rank ]] && continue
         fi

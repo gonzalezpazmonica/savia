@@ -1,0 +1,10 @@
+{
+  "id": "SE-531",
+  "status": "APPROVED",
+  "priority": "P3",
+  "phase": "A",
+  "title": "Ficha de harness ejecutable: capacidades del runtime y supervisión del proceso hijo",
+  "evidence": "docs/specs/SE-531-ficha-de-harness-ejecutable.spec.md",
+  "note": "Pedida por la operadora el 2026-11-13 (spec B de tres; empieza por A y B; línea L39, fase M6). Tres slices: S1 ficha y validador con las fichas actuales (tier 2), S2 supervisión de árbol de procesos y bucle (tier 2-3, mide huérfanos antes), S3 catálogo de estaciones en el producto (tier 3, tras S1 y S2). Solo spec: ningún código se toca. Aprobada por la operadora el 2026-11-13 (pregunta interactiva, «Todas aprobadas con este mensaje»); se formaliza al fusionar (SE-488).",
+  "approval": "operadora, pregunta interactiva 2026-11-13 hacia las 21:30 («Todas aprobadas con este mensaje»); se formaliza al fusionar (SE-488)"
+}

@@ -228,10 +228,12 @@ la consolidación. Cuatro clases:
 
 Reglas:
 - **Fail-safe**: una entrada sin `--origin` ni source confiable se clasifica `untrusted`. NUNCA `owner` por defecto.
-- **Taint de turno**: tras una tool de red (webfetch, curl, git fetch...), las siguientes entradas del turno se degradan a `untrusted` (hook `memory-origin-gate.sh`).
-- **Consolidación**: `memory-store.sh consolidate` excluye `untrusted`/`system` de la promoción (`--dry-run` para previsualizar). Una entrada recuperada nunca promueve su propio nivel de confianza.
+- **Taint de turno**: tras una tool de red (webfetch, curl, git fetch...), las siguientes entradas del turno se degradan a `untrusted` (hook `memory-origin-gate.sh`). El guardado identifica la sesión con `CLAUDE_CODE_SESSION_ID` (o `SESSION_ID`); sin identificador y con una marca vigente, degrada igualmente (fallo cerrado).
+- **Consolidación**: `memory-store.sh consolidate` excluye `untrusted`/`system` de la promoción (`--dry-run` para previsualizar). Excluir no es borrar: las entradas excluidas, y las antiguas sin campo `origin`, pasan a `output/.memory-store-quarantine.jsonl` y siguen recuperables. Una entrada recuperada nunca promueve su propio nivel de confianza.
 - **Filtro de búsqueda**: `memory-store.sh search "..." --min-origin owner|agent|untrusted`.
 - **Auditoría**: `memory-store.sh audit-origins` reporta la distribución de orígenes.
+
+Integridad: `save` serializa con `json.dumps`, trabaja bajo cerrojo (`<almacén>.lock`) y escribe de forma atómica; si el dato no puede quedar íntegro y recuperable, sale con error y no escribe nada. `--type` solo admite letras, números, `-` y `_`.
 
 Persistencia: el campo `origin` se guarda en el JSONL y en el índice `MEMORY.md` como sufijo `· src:{origin}`.
 

@@ -51,7 +51,7 @@ test("install.sh --download: baja el Node oficial, comprueba su SHA-256, lo deja
   assert.ok(existsSync(join(home, ".savia/node/bin/node")));
   const wrapper = join(home, ".local/bin/soul");
   assert.match(readFileSync(wrapper, "utf8"), /generado por install\.sh/);
-  assert.match(r.stdout, /soul setup/);
+  assert.match(r.stdout, /Siguiente paso.* setup/);
   // La orden creada funciona de verdad.
   const h = spawnSync(wrapper, ["help"], { encoding: "utf8", env: { PATH: process.env.PATH ?? "", HOME: home } });
   assert.equal(h.status, 0, h.stderr);
@@ -143,4 +143,144 @@ test("install.sh: una ruta con comillas, $ y $(…) queda escapada en la orden s
   assert.equal(h.status, 0, h.stderr);
   assert.match(h.stdout, /Órdenes de soul/);
   assert.ok(!existsSync(join(base, "PWNED")) && !existsSync(join(base, "PWNED2")), "la ruta no se ejecutó como código");
+});
+
+// --- PATH: oferta de añadir ~/.local/bin al fichero de arranque del shell (SE-490 AC-1) ---
+const PTY = `
+import os, pty, sys, select
+ans, script = sys.argv[1], sys.argv[2]
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp("bash", ["bash", script])
+out = b""
+sent = False
+while True:
+    r, _, _ = select.select([fd], [], [], 20)
+    if not r: break
+    try: d = os.read(fd, 4096)
+    except OSError: break
+    if not d: break
+    out += d
+    if not sent and b"[s/N]" in out:
+        os.write(fd, ans.encode()); sent = True
+_, st = os.waitpid(pid, 0)
+sys.stdout.write(out.decode("utf8", "replace"))
+sys.exit(os.waitstatus_to_exitcode(st))
+`;
+const PTY_SKIP = SKIP || (spawnSync("python3", ["-c", "import pty"]).status === 0 ? false : "falta python3");
+const LINE = 'export PATH="$HOME/.local/bin:$PATH"';
+
+/** Ejecuta install.sh en una terminal simulada (pty) y contesta `ans` a la pregunta. */
+function runTty(ans: string, home: string, shell: string, script = SCRIPT) {
+  const env = { PATH: `${dirname(process.execPath)}:${process.env.PATH}`, HOME: home, SHELL: shell, SOUL_NODE_MIRROR_ALLOW_FILE: "1" };
+  return spawnSync("python3", ["-I", "-c", PTY, ans, script], { encoding: "utf8", env });
+}
+const count = (f: string) => readFileSync(f, "utf8").split("\n").filter((l) => l === LINE).length;
+
+test("install.sh PATH: con terminal y «s» añade la línea a ~/.zshrc una sola vez, también si se ejecuta dos veces", { skip: PTY_SKIP }, () => {
+  const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+  writeFileSync(join(home, ".zshrc"), "alias x=y"); // sin salto de línea final
+  const a = runTty("s\n", home, "/bin/zsh");
+  assert.equal(a.status, 0, a.stdout + a.stderr);
+  assert.equal(count(join(home, ".zshrc")), 1);
+  assert.match(readFileSync(join(home, ".zshrc"), "utf8"), /^alias x=y\n/);
+  const b = runTty("s\n", home, "/bin/zsh");
+  assert.equal(b.status, 0, b.stdout);
+  assert.equal(count(join(home, ".zshrc")), 1, "idempotente");
+  assert.ok(!existsSync(join(home, ".bashrc")), "no toca ~/.bashrc");
+});
+
+test("install.sh PATH: con bash escribe en ~/.bashrc y no en ~/.zshrc", { skip: PTY_SKIP }, () => {
+  const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+  const r = runTty("s\n", home, "/bin/bash");
+  assert.equal(r.status, 0, r.stdout);
+  assert.equal(count(join(home, ".bashrc")), 1);
+  assert.ok(!existsSync(join(home, ".zshrc")));
+});
+
+for (const ans of ["\n", "n\n", "no\n", "x\n"]) {
+  test(`install.sh PATH (negativo): la respuesta ${JSON.stringify(ans)} no escribe nada`, { skip: PTY_SKIP }, () => {
+    const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+    const r = runTty(ans, home, "/bin/zsh");
+    assert.equal(r.status, 0, r.stdout);
+    assert.ok(!existsSync(join(home, ".zshrc")) && !existsSync(join(home, ".bashrc")));
+    assert.match(r.stdout, /Aviso: .*no está en tu PATH/);
+  });
+}
+
+test("install.sh PATH (negativo): sin terminal no escribe nada y solo avisa", { skip: SKIP }, () => {
+  const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+  const r = run([], { HOME: home, SHELL: "/bin/zsh", PATH: `${dirname(process.execPath)}:${process.env.PATH}` });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.ok(!existsSync(join(home, ".zshrc")) && !existsSync(join(home, ".bashrc")));
+  assert.match(r.stdout, /Aviso: .*no está en tu PATH/);
+});
+
+test("install.sh PATH (negativo): con un shell desconocido solo avisa, aunque haya terminal", { skip: PTY_SKIP }, () => {
+  const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+  const r = runTty("s\n", home, "/usr/bin/fish");
+  assert.equal(r.status, 0, r.stdout);
+  assert.deepEqual(readdirSync(home).filter((f) => f.endsWith("rc")), []);
+  assert.match(r.stdout, /Aviso: .*no está en tu PATH/);
+});
+
+test("install.sh PATH: si ~/.local/bin ya está en el PATH no pregunta", { skip: SKIP }, () => {
+  const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+  const r = run([], { HOME: home, SHELL: "/bin/zsh", PATH: `${join(home, ".local/bin")}:${dirname(process.execPath)}:${process.env.PATH}` });
+  assert.doesNotMatch(r.stdout, /Aviso|\[s\/N\]/);
+  assert.ok(!existsSync(join(home, ".zshrc")));
+});
+
+test("instalar.md §1: ofrece el camino sin git (Download ZIP) y explica la pregunta del PATH", () => {
+  const doc = readFileSync(fileURLToPath(new URL("../docs/instalar.md", import.meta.url)), "utf8");
+  assert.match(doc, /Download ZIP/);
+  assert.match(doc, /~\/\.zshrc/);
+  assert.match(doc, /\[s\/N\]/);
+});
+
+// ---- Siguiente paso: tiene que funcionar tal cual en ese momento (guía del gemelo) ----
+
+const siguiente = (stdout: string) => stdout.split("\n").filter((l) => l.startsWith("Siguiente paso")).join("\n");
+
+test("install.sh siguiente paso: si «soul» no está en el PATH y no se tocó el rc, da la ruta completa de la orden", { skip: SKIP }, () => {
+  const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+  const r = run([], { HOME: home, SHELL: "/bin/zsh", PATH: `${dirname(process.execPath)}:${process.env.PATH}` });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const s = siguiente(r.stdout);
+  assert.ok(s.includes(`'${join(home, ".local/bin/soul")}' setup`), s);
+  assert.doesNotMatch(s, /: soul setup/);
+  // La orden que se muestra funciona tal cual, aunque «soul» no esté en el PATH.
+  const m = /: (.+) setup$/.exec(s);
+  assert.ok(m, s);
+  assert.equal(m[1], `'${join(home, ".local/bin/soul")}'`);
+  const h = spawnSync("sh", ["-c", `${m[1]} help`], { encoding: "utf8", env: { PATH: process.env.PATH ?? "", HOME: home } });
+  assert.equal(h.status, 0, h.stderr);
+  assert.match(h.stdout, /Órdenes de soul/);
+});
+
+test("install.sh siguiente paso (negativo): con ~/.local/bin ya en el PATH sigue siendo «soul setup»", { skip: SKIP }, () => {
+  const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+  const r = run([], { HOME: home, SHELL: "/bin/zsh", PATH: `${join(home, ".local/bin")}:${dirname(process.execPath)}:${process.env.PATH}` });
+  assert.match(siguiente(r.stdout), /: soul setup$/);
+});
+
+test("install.sh siguiente paso: si el rc ya tiene la línea, pide abrir una terminal nueva antes de «soul setup»", { skip: SKIP }, () => {
+  const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+  writeFileSync(join(home, ".zshrc"), `${LINE}\n`);
+  const r = run([], { HOME: home, SHELL: "/bin/zsh", PATH: `${dirname(process.execPath)}:${process.env.PATH}` });
+  assert.match(siguiente(r.stdout), /terminal nueva.*soul setup/);
+});
+
+test("install.sh siguiente paso: tras contestar «s» en la pregunta, pide abrir una terminal nueva", { skip: PTY_SKIP }, () => {
+  const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+  const r = runTty("s\n", home, "/bin/zsh");
+  assert.equal(r.status, 0, r.stdout);
+  assert.match(siguiente(r.stdout), /terminal nueva.*soul setup/);
+});
+
+test("install.sh siguiente paso (negativo): contestar «n» no promete que «soul» ya funcione; da la ruta completa", { skip: PTY_SKIP }, () => {
+  const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+  const r = runTty("n\n", home, "/bin/zsh");
+  assert.equal(r.status, 0, r.stdout);
+  assert.ok(siguiente(r.stdout).includes(`'${join(home, ".local/bin/soul")}' setup`), r.stdout);
 });

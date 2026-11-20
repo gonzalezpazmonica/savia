@@ -75,13 +75,15 @@ Las diez escenas confirmadas (E1–E10) se agrupan en cinco momentos para cumpli
 
 ## Slice S0 — Prototipo navegable
 
-- prototipo: `docs/specs/assets/SE-518-prototipo.html` (por construir en S0) — la tarjeta de la mañana (E1), la frase de fin de trabajo y la respuesta a «¿está funcionando?» (E2), la confirmación del freno (E3) y del volante (E4), el aviso de red (E5), la tarjeta de decisión (E7), la tarjeta de la instalación con el modo inicial elegido (E8) y el aviso de respaldo (E10), sobre datos de ejemplo, usable en el móvil. Incluye la salida de `pulse status` en texto.
+- prototipo: `docs/specs/assets/SE-518-prototipo.html` (estados `?s=manana|termina|freno|volante|red|decision|instalacion|respaldo|estado`) — la tarjeta de la mañana (E1), la frase de fin de trabajo y la respuesta a «¿está funcionando?» (E2), la confirmación del freno (E3) y del volante (E4), el aviso de red (E5), la tarjeta de decisión (E7), la tarjeta de la instalación con el modo inicial elegido (E8) y el aviso de respaldo (E10), sobre datos de ejemplo, usable en el móvil. Incluye la salida de `pulse status` en texto.
 - Además, S0 entrega tres medidas que deciden si el corte C sigue en pie: (a) sonda en una instalación macOS sin administrador: intérprete disponible (Python ≥ 3.9 o el runtime de Soul), LaunchAgent sin `sudo`, bloqueo de fichero sin `flock`; (b) qué modos permite la política de la organización, para informar la elección del operador (no cambia el defecto); (c) qué parte de la lógica del bucle actual es reutilizable como casos dorados del planificador.
+
+- medidas (entregadas, sin ejecutar en un Mac): `docs/specs/assets/prototipo-SE-518-medidas.md` y la sonda `scripts/pulse-probe-macos.sh`. Resultado: la lógica reutilizable del bucle actual es el 80 % de su batería de pruebas, por lo que C se sostiene, condicionada a (a); (a) y (b) quedan «sin datos» hasta correr la sonda con `--active` en el equipo de la organización. La decisión «C o basta A» es de la operadora.
 
 ### Confirmación del prototipo
 
 - fecha: pendiente
-- respuesta: pendiente. S1 no se pone en curso sin ella (SE-505).
+- respuesta: pendiente. La escribe la operadora en su propio commit o comentario, con enlace a su respuesta. S1 no se pone en curso sin ella (SE-505).
 
 ## Problema
 
@@ -302,12 +304,58 @@ Otros: identidad propia para los pushes de Pulse cuando el forge lo permita, dis
 | AC-31 | Todas | La métrica de HOLD por familia, nivel y verificado y la de consultivos abiertos se recalculan idénticas desde el ledger. **Negativo:** con el ledger vacío dan «sin datos»; un consultivo cuyo `seguimiento` sigue abierto no desaparece de la métrica | S5 |
 | AC-32 | Todas | El contrato de revisora (primera línea `VERDICT:` y cuerpo) con `familia=`, `nivel=`, `verificado=`, `origen=`, `clase=` y `seguimiento=` tiene esquema y validador, y el cómputo de `p0/p1/p2_blocking` excluye los consultivos. **Negativo:** una primera línea sin la forma exigida, o con un campo fuera del conjunto cerrado, equivale a HOLD. **Negativo:** el cambio del contrato no se fusiona sin la revisión humana del PR concreto (tier 4, SE-362) | S5c |
 
+## Enmienda A1 (APROBADA 2026-11-17) — Revisión diaria de la comprobación nocturna
+
+> Estado: **escena E11 confirmada y enmienda A1 aprobada por la operadora el 2026-11-17**, por pregunta interactiva; registrado en un comentario de la PR #1602 (puerta de comprensión cumplida). Implementada como slice S1n en esa misma PR. No cambia el `status` de la spec.
+
+**Por qué es una enmienda y no cabe en un slice aprobado.** S1 entrega contratos, lanzador, `pulse status` y respaldo, y dice expresamente que nadie invoca todavía nada de forma periódica. Consultar el forge es un observador de forge (arquitectura, pieza 1), que la spec reparte entre S2 (cabeza sin pruebas), S3 (forge caído) y S7 (adaptador de forge y configuración por operador); ninguno es una comprobación diaria del resultado de un flujo. Y E1–E10 no incluyen la escena «un rojo repetido se vuelve invisible»: la puerta de comprensión exige confirmarla antes de escribir código.
+
+### Escena E11. Lo que lleva días en rojo no se vuelve invisible
+
+La suite completa de pruebas corre cada noche en el forge y nunca bloquea una propuesta. Si falla una noche, nadie lo ve; si falla treinta, tampoco. Una vez al día, a una hora que la persona configura, Pulse mira el resultado de la última ejecución y lo cuenta en llano.
+
+- **Verde.** Una línea en `pulse status`: «Comprobación nocturna: bien (última ejecución hace 7 h).» No llega ningún aviso ni petición.
+- **Rojo.** Aparece en «Esperan algo de ti»: «La comprobación nocturna falló anoche y lleva 5 noches seguidas en rojo. Lo que falla está en: <enlace a la ejecución>. Qué hacer: abre la ejecución, mira qué prueba falla y decide si se arregla o se aparta con motivo. Si no haces nada: sigue en rojo y mañana te lo vuelvo a decir con la noche 6.» Cada día que sigue rojo, la petición se renueva con el contador; no se queda como una línea antigua que nadie mira.
+- **No se ejecutó.** Si la última ejecución tiene más de 26 horas, o no hay ninguna, es lo mismo que rojo: «La comprobación nocturna no se ha ejecutado en las últimas 26 horas.»
+- **Cancelada.** Cuenta como rojo (no probó nada).
+- **No se puede consultar.** Sin la herramienta del forge, sin sesión o sin red: también es una petición («No he podido mirar la comprobación nocturna: <motivo>. No sé si está bien»). Nunca «todo bien» por no haber podido mirar.
+- **Vuelve a verde.** La petición se cierra y se anota que la racha terminó, con su longitud.
+
+No pasa: que un rojo repetido quede en una sola línea antigua, que un fallo de consulta cuente como verde, que Pulse arregle, relance o cierre nada en el forge (solo lee), que el aviso llegue como «trabajo terminado bien», ni que el nombre del repositorio o del flujo esté escrito en el código.
+
+### Alcance
+
+- Fuente nueva de solo lectura que consulta con la herramienta de línea de órdenes del forge ya instalada y ya autenticada por la persona; sin credenciales nuevas, sin escribir en el forge. Repositorio y nombre del flujo salen de configuración; sin configuración no consulta y lo dice (fail-closed). Solo cuentan las ejecuciones de la rama vigilada (configurable, por defecto `main`): una ejecución manual en otra rama no tapa un rojo.
+- Orden `pulse` para lanzar desde un temporizador de usuario (systemd `--user` en Linux; launchd en macOS queda para S7). Se entrega una unidad y un temporizador de ejemplo en `projects/pulse/`; **no se instalan**. Activarlos es un acto de la persona.
+- Contadores y estado de la racha en el ledger de eventos (eventos nuevos con esquema), nunca contenido de la ejecución ni salida de pruebas.
+
+### Criterios de aceptación
+
+| AC | Escena | Criterio | Slice |
+|---|---|---|---|
+| AC-33 | E11 | Con la última ejecución verde y reciente, `pulse status` da una línea y no existe ninguna petición. **Negativo:** una ejecución verde de hace más de 26 h no cuenta como verde | S1n |
+| AC-34 | E11 | Con la última ejecución en fallo, hay una petición (qué, por qué ahora, si no contestas, si aplazas, caduca) en «Esperan algo de ti» y no entre los avisos de trabajos terminados. **Negativo:** con ejecución cancelada, el resultado es el mismo | S1n |
+| AC-35 | E11 | Rojo en N noches seguidas produce la petición con el contador N, renovada cada día. **Límite:** la noche 1 dice «anoche», no «1 noches seguidas». **Negativo:** una pasada repetida el mismo día no suma noche | S1n |
+| AC-36 | E11 | Sin ejecución en 26 h, o sin ninguna, hay petición. **Límite:** a 25 h 59 min no la hay; a 26 h 1 min, sí | S1n |
+| AC-37 | E11 | Con la herramienta ausente, la sesión caducada, el tiempo agotado o una respuesta ilegible hay petición «no he podido mirar» y no PASS. **Negativo:** un fallo de consulta tras un rojo no reinicia el contador de la racha | S1n |
+| AC-38 | E11 | Sin configuración de repositorio y flujo, no se consulta nada y `pulse status` lo dice. **Negativo:** el código y las pruebas no contienen el nombre de ningún repositorio concreto; la fuente solo ejecuta consultas de lectura (prueba estática) | S1n |
+| AC-39 | E11 | Al volver a verde se cierra la petición y se anota la longitud de la racha. **Negativo:** una racha cerrada no reaparece al día siguiente | S1n |
+
+### Criterio de abandono
+
+Se abandona (y se retira lo implementado) si, a los 30 días de activada, se cumple cualquiera de estas: (a) la persona la desactiva o la ignora (petición vencida sin respuesta más de 7 días seguidos con la racha abierta), lo que indica que el aviso no sirve como canal y hay que cambiar de canal, no repetirlo más; (b) más de 2 avisos falsos «no he podido mirar» por semana, lo que indica que la consulta no es fiable; (c) el forge ofrece una notificación nativa equivalente que la persona ya recibe. El abandono no baja los umbrales: cambia de mecanismo.
+
+### Tier
+
+Tier 2 (observar y publicar, solo lectura). La unidad y el temporizador de ejemplo son documentación; activarlos fuera del repo es decisión de la persona y no cambia el tier del PR.
+
 ## Slices
 
 | Slice | Entrega | Encaja en | Tier previsto |
 |---|---|---|---|
 | S0 | Prototipo confirmado; sonda macOS sin administrador; política de la organización (modos permitidos); medida de lógica reutilizable. Decide si sigue C o basta A (contratos sobre el bucle actual) | Esta spec + SE-505 | — |
 | S1 | Contratos (eventos, peticiones, latido, presencia, acuses) con esquema; el lanzador emite inicio y fin con código y clase; `pulse status`; canal de respaldo | SE-507 (latido y `finish --rc`) + SE-514 (Pulse productor) | 2 |
+| S1n | Enmienda A1: revisión diaria de la comprobación nocturna (fuente de forge de solo lectura, racha en el ledger, orden para temporizador de usuario, unidad y temporizador de ejemplo sin instalar). Requiere confirmar E11 | S1 | 2 |
 | S2 | Política de integración `solo_conflicto`, detección de cabeza sin pruebas y relanzamiento único; huella de contenido para relanzar revisoras; las dos PR de workflows | SE-500 + PR de workflows | 3 (Pulse), 4 (workflows) |
 | S3 | Señales tipadas y taxonomía de errores; cuarentena con motivo y dueño; intento ≠ intención | SE-493, SE-513 | 3 |
 | S4 | Pulse como ejecutor de SE-498; tic de control; volante que resta; reanudar solo la persona (CLI local o aprobación formal) | SE-498, SE-488 | 4 |

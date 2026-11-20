@@ -8,6 +8,10 @@ setup() {
   TMPDIR_MS=$(mktemp -d)
   export PROJECT_ROOT="$TMPDIR_MS"
   export SAVIA_TEST_MODE=true
+  # El taint de turno depende del entorno de la sesión que ejecuta los tests:
+  # se aísla (sin id de sesión heredado y con un directorio de marcas propio).
+  unset SESSION_ID CLAUDE_CODE_SESSION_ID
+  export SAVIA_MEMORY_TAINT_DIR="$TMPDIR_MS/taint"
   mkdir -p "$TMPDIR_MS/output"
 }
 
@@ -173,20 +177,20 @@ field() { # field N CAMPO → valor del campo en la línea N del store
 
 @test "origin: turno marcado como tainted degrada a untrusted aunque se pida owner" {
   export SESSION_ID="bats-s03c-$$"
-  mkdir -p /tmp/savia-memory-taint
-  date -u +%s > "/tmp/savia-memory-taint/$SESSION_ID"
+  mkdir -p "$SAVIA_MEMORY_TAINT_DIR"
+  date -u +%s > "$SAVIA_MEMORY_TAINT_DIR/$SESSION_ID"
   run sv --type decision --title "Tainted" --content "t" --origin owner
-  unlink "/tmp/savia-memory-taint/$SESSION_ID"
+  unlink "$SAVIA_MEMORY_TAINT_DIR/$SESSION_ID"
   [ "$status" -eq 0 ]
   [ "$(field 1 origin)" = "untrusted" ]
 }
 
 @test "origin: marca de taint caducada (>30 min) no degrada" {
   export SESSION_ID="bats-s03c-old-$$"
-  mkdir -p /tmp/savia-memory-taint
-  echo $(( $(date -u +%s) - 4000 )) > "/tmp/savia-memory-taint/$SESSION_ID"
+  mkdir -p "$SAVIA_MEMORY_TAINT_DIR"
+  echo $(( $(date -u +%s) - 4000 )) > "$SAVIA_MEMORY_TAINT_DIR/$SESSION_ID"
   run sv --type decision --title "Old taint" --content "t" --origin owner
-  unlink "/tmp/savia-memory-taint/$SESSION_ID"
+  unlink "$SAVIA_MEMORY_TAINT_DIR/$SESSION_ID"
   [ "$(field 1 origin)" = "owner" ]
 }
 
