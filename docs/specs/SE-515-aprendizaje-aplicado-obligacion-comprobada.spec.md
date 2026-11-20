@@ -161,7 +161,7 @@ Sin cambio de fondo. Se corrigen la entrada y el riesgo.
 - **Entrada corregida.** S2 con GO y una aprobación auténtica **ya implementada y fusionada** (SE-488 en estado IMPLEMENTED; SE-497 parte 2 solo cuenta cuando deje de estar PROPOSED). Un estado PROPOSED o IMPLEMENTING no vale como entrada. Sin SE-493 y sin SE-498.
 - **AC-12 y AC-13**: sin cambios.
 
-**Qué se pierde:** nada de S3. Los pasos 0–5 de `push-pr.sh` están dentro de `if ! $MERGE` (`:42`): la ruta `--merge` no ejecuta el verificador (ahí no se empuja, SE-343) y queda fuera de la garantía. Además el `git push` de `:82` va en una tubería a `tail` con `set -euo pipefail` (`:6`): un push fallido sí hace fallar la tubería y dispara el reintento, que es un `git push --force-with-lease` automático. Eso fuerza el push sin decisión humana; el verificador va antes y no lo cubre, y decidir si ese reintento debe existir es una cuestión aparte de este rediseño. Lo que S3 nunca tuvo (garantía fuera de `push-pr.sh`) sigue sin tenerlo.
+**Qué se pierde:** nada de S3. Los pasos 0–5 de `push-pr.sh` están dentro de `if ! $MERGE` (`:42`): la ruta `--merge` no ejecuta el verificador (ahí no se empuja, SE-343) y queda fuera de la garantía. Además el `git push` de `:82` va en una tubería a `tail` con `set -euo pipefail` (`:6`): un push fallido sí hace fallar la tubería y dispara el reintento, que es un `git push --force-with-lease` automático. Eso fuerza el push sin decisión humana; el verificador va antes y no lo cubre, y decidir si ese reintento debe existir es una cuestión aparte de este rediseño. Lo que S3 nunca tuvo (garantía fuera de `push-pr.sh`) sigue sin tenerlo. La documentación de cara a la persona para un dominio `guarded` repite el límite: `--merge` y el `git push` directo son `NOT_GUARANTEED`, y «guarded» no es una garantía de publicación.
 
 ### S4 rediseñado — revalidación sobre el recibo que ya existe
 
@@ -178,7 +178,9 @@ La revalidación no necesita un libro: compara, en el gate y justo antes del efe
 
 **Rastro.** (Origen de la época y `stop_seq` de la regla (3): el recibo de S2 no los lleva hoy, así que S2 se enmienda para guardarlos en el recibo, leídos de `savia-control.py` al planificar y cubiertos por el hash del recibo. No se admite un fichero aparte junto al recibo: podría quedar obsoleto o ser manipulado sin que `receipt-v2.sh verify` lo vea.) El veredicto de cada revalidación (`PASS`, `STALE_POLICY`, `STALE_CONTENT`, `STALE_EPOCH`, `UNREADABLE`) se anota con `scripts/session-action-log.sh log` (`output/session-action-log.jsonl`, campos `ts`, `action`, `target`, `result`, `detail`), que `push-pr.sh` ya usa en `_supervisor`. No es un libro de efectos ni prueba de integridad: `output/session-action-log.jsonl` no está encadenado ni firmado, a diferencia del ledger del merge-sprint; es una pista, no una garantía.
 
-**Entrada corregida.** S3 con GO y SE-498 F0 implementada (época y `stop_seq`). Sin SE-493.
+**Entrada corregida.** S3 con GO y SE-498 F0 implementada (época y `stop_seq`). Sin SE-493. **Enmienda a S2 (no hecha aquí):** S4 exige que el recibo de S2 guarde época y `stop_seq`; esa enmienda hay que aprobarla junto con D4. Además, S2 consulta «en la admisión de trabajo de riesgo **y preparación de efecto**»; la preparación de efecto es el `prepare` de SE-493, retirado. Este rediseño no reescribe ese punto de S2 y lo deja como hallazgo abierto: «S3 puede empezar cuando S2 dé GO» (D3a) presupone un S2 cuyo punto de preparación de efecto aún se apoya en SE-493.
+
+**Límite del recibo.** `receipt-v2.sh` (`sign`, `verify`) calcula sha256 sin clave y compara con `grep`: no es HMAC ni firma. Quien pueda escribir `output/receipts/` puede forjar un recibo con época y `stop_seq` vigentes y pasar la revalidación. El rediseño no lo cierra: la regla (3) protege contra el olvido y la deriva, no contra un escritor malicioso del directorio. Antes de implementar S4 hay que declarar ese límite en la documentación o exigir una firma.
 
 **Criterios de aceptación rediseñados (sustituyen a AC-14; AC-15 y AC-17 sin cambios).**
 
@@ -189,6 +191,7 @@ La revalidación no necesita un libro: compara, en el gate y justo antes del efe
 1. **Atadura recibo–efecto duradera.** Con SE-493, cada efecto guardaba el recibo que lo autorizó y el despacho lo comprobaba en la misma transacción. Ahora la comprobación ocurre en el gate, sin registro del efecto: queda la ventana entre la revalidación y `git push` (`:82`), y la auditoría posterior es la línea de `session-action-log`, no un estado del efecto.
 2. **Solo una ruta.** La revalidación vive en `push-pr.sh`. Otras rutas de efecto no la tienen; ya era así en S3–S4, pero SE-493 daba un punto común para ampliarla.
 3. **Dependencia que sigue abierta.** La dimensión de STOP espera a SE-498 F0. Sin ella, S4 solo revalida contenido y política.
+4. **Enmienda a S2 pendiente.** S4 necesita que S2 guarde época y `stop_seq` en su recibo, y el punto «preparación de efecto» de S2 sigue citando el `prepare` de SE-493.
 
 ### Decisiones para la operadora
 
