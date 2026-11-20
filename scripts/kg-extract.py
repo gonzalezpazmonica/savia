@@ -84,11 +84,11 @@ PATTERNS = {
             r"\b(?:architect|code-reviewer|business-analyst|"
             r"dotnet-developer|typescript-developer|frontend-developer|"
             r"python-developer|security-guardian|drift-auditor|"
-            r"test-engineer|commit-guardian|configurator|"
+            r"test-engineer|commit-guardian|"
             r"court-orchestrator|sdd-spec-writer|truth-tribunal|"
             r"dev-orchestrator|infrastructure-agent|diagram-architect|"
             r"pdf-digest|word-digest|excel-digest|meeting-digest|"
-            r"tabular-analyst|tabular-intelligence|"
+            r"tabular-intelligence|"
             r"reflection-validator|tech-writer|test-runner)\b"
         ),
         "entity_type": "system",
