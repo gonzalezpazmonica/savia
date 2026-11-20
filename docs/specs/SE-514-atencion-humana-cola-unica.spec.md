@@ -179,8 +179,8 @@ Se elige el registro de runs: ya es duradero, ya tiene cerrojo, ya modela «este
 **Criterios de aceptación añadidos (AC-3 a AC-8 sin cambios, salvo la cláusula de repregunta de AC-3, que pasa a AC-14).**
 
 - **AC-12 — Durabilidad sin almacén nuevo.** Una pregunta registrada sigue ahí tras matar el proceso que preguntó y reabrir la vista; un corte durante la escritura (proceso muerto antes del renombrado) deja el registro anterior íntegro, nunca uno a medias. Dos agentes que preguntan a la vez dejan las dos preguntas (con cerrojo; mutación: sin cerrojo, el test con escritores concurrentes pierde una y falla). El listado de ficheros de estado antes y después de S2 solo difiere en `data/agent-runs-ledger.jsonl`, sin contar los auxiliares que `savia-runs.sh` ya crea hoy (`<ledger>.lock` o `<ledger>.lockdir`, `:789`; `<ledger>.tmp.XXXXXX`, `:77`). Tras matar el proceso antes del renombrado puede quedar un `.tmp.*` huérfano: la vista no lo lee como registro (aserción: el contenido del `.tmp.*` no aparece en la salida) y el siguiente `start`/`state` no falla por su presencia.
-- **AC-14 — Repregunta.** Dos preguntas con el mismo `id` dentro de la ventana de `expires_at` dejan una sola entrada y la segunda se informa como repetida; pasada la caducidad, un `id` nuevo sí crea otra. (El `id` repetido es el único mecanismo de este rediseño contra la repregunta; el original de AC-3, «no más de una vez por ventana», queda cubierto solo por este caso: AC-3 no es «sin cambios» en ese punto.)
 - **AC-13 — Caducidad derivada.** Con el reloj del test pasado `expires_at`, la vista da `DEFER` sin que nadie lo haya escrito; con el reloj antes, `needs_input`. Una respuesta con `version` vieja sale rechazada y el registro no cambia.
+- **AC-14 — Repregunta.** Dos preguntas con el mismo `id` (derivado del asunto y el permiso, no elegido por el agente) dentro de la ventana de `expires_at` dejan una sola entrada y la segunda se informa como repetida; pasada la caducidad, un `id` nuevo sí crea otra. (El `id` repetido es el único mecanismo de este rediseño contra la repregunta; el original de AC-3, «no más de una vez por ventana», queda cubierto solo por este caso: AC-3 no es «sin cambios» en ese punto.)
 
 ### Qué se pierde respecto al diseño anterior
 
@@ -188,6 +188,7 @@ Se elige el registro de runs: ya es duradero, ya tiene cerrojo, ya modela «este
 2. **Estados de incorporación.** `APPLIED_TO_PLAN` y `UNKNOWN` de SE-513 no existen aquí: la vista dice «respondida», no «aplicada».
 3. **Cobertura.** Solo preguntas de trabajos registrados como run. Las de la sesión principal y los diálogos de permiso del frontend quedan fuera hasta que pasen por un run.
 4. **Escala.** El registro reescribe el fichero completo en cada cambio. Con muchos runs y preguntas, el coste crece; S2 lo mide y, si pasa de un umbral que fija S0, se reabre la decisión.
+5. **Repregunta.** AC-3 original («no se repregunta más de una vez por ventana») se debilita a «mismo `id` ⇒ una entrada» (AC-14). El `id` lo deriva el registro, no el agente: hash corto de `asunto` + `permission` normalizados, para que un agente que reformule la misma pregunta no eluda la deduplicación con un `id` nuevo. Una pregunta con asunto distinto sigue contando como otra; esa repregunta semántica no se detecta.
 
 ### Decisión para la operadora
 
