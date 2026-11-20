@@ -1,0 +1,9 @@
+---
+version_bump: minor
+section: Added
+---
+
+### Added
+
+- SE-496 F1: adaptador en sombra que proyecta cada grant vigente de SE-343 a un contrato de delegación y registra en el audit del kernel cuándo discrepa; no decide nada (scripts/lib/authority_shadow_se343.py). La pasada sale con exit 2 si queda incompleta (check que no corre o grant ilegible) y `report` cuenta runs y grants distintos, no solo líneas.
+

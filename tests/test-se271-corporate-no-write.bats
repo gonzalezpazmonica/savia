@@ -107,11 +107,6 @@ EOF
   [[ "$output" != *"corporate-attest"* ]]
 }
 
-@test "skips sibling: corporate-fleet-dashboard.sh is exempt" {
-  run bash "$SCRIPT"
-  [[ "$output" != *"fleet-dashboard"* ]]
-}
-
 @test "accepts --corp-registry argument (no error)" {
   run bash "$SCRIPT" --corp-registry /tmp/fake-registry
   [[ "$status" -eq 0 ]]

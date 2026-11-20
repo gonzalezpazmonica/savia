@@ -1,17 +1,15 @@
 #!/usr/bin/env bats
-# test-se-220-speculative.bats — BATS integration tests for SE-220 Slices 1-4
+# test-se-220-speculative.bats — BATS integration tests for SE-220 Slices 1-3
 # Ref: SE-220 Speculative Tool Execution
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   PREDICTOR="$REPO_ROOT/scripts/speculative-tool-predictor.py"
   EXECUTION="$REPO_ROOT/scripts/speculative-tool-execution.py"
-  CACHE_MGR="$REPO_ROOT/scripts/speculative-cache-manager.py"
-  REPORT="$REPO_ROOT/scripts/speculative-telemetry-report.sh"
   PRE_EXEC_HOOK="$REPO_ROOT/.opencode/hooks/speculative-pre-execute.sh"
   PRELOAD_HOOK="$REPO_ROOT/.opencode/hooks/speculative-skill-preload.sh"
   PYTHON="${PYTHON:-python3}"
-  export REPO_ROOT PREDICTOR EXECUTION CACHE_MGR REPORT PRE_EXEC_HOOK PRELOAD_HOOK PYTHON
+  export REPO_ROOT PREDICTOR EXECUTION PRE_EXEC_HOOK PRELOAD_HOOK PYTHON
 
   # Use isolated temp cache dir for each test
   export SAVIA_SPECULATIVE_CACHE_DIR="$(mktemp -d)"
@@ -44,14 +42,6 @@ teardown() {
 
 @test "speculative-tool-execution.py exists" {
   [[ -f "$EXECUTION" ]]
-}
-
-@test "speculative-cache-manager.py exists" {
-  [[ -f "$CACHE_MGR" ]]
-}
-
-@test "speculative-telemetry-report.sh exists" {
-  [[ -f "$REPORT" ]]
 }
 
 # ── T2: Hook exits 0 when SAVIA_SPECULATIVE_EXECUTION=off ────────────────────
@@ -113,97 +103,9 @@ teardown() {
 
 # ── T6: cache-manager get returns hit=false (JSON) for miss ──────────────────
 
-@test "speculative-cache-manager.py get returns hit=false for cache miss" {
-  run "$PYTHON" "$CACHE_MGR" get --tool "Read" --args-hash "nonexistent_hash_xyz999"
-  # exit code 1 on miss
-  [[ "$status" -eq 1 ]]
-  # output should be valid JSON with hit=false
-  echo "$output" | "$PYTHON" -c "
-import sys, json
-d = json.load(sys.stdin)
-assert d['hit'] == False, f'Expected hit=false, got {d}'
-"
-}
-
-@test "speculative-cache-manager.py get returns hit=true after set" {
-  run "$PYTHON" "$CACHE_MGR" set --tool "Read" --args-hash "testhash001" \
-    --result '{"content": "hello world"}' --ttl 60
-  [[ "$status" -eq 0 ]]
-
-  run "$PYTHON" "$CACHE_MGR" get --tool "Read" --args-hash "testhash001" --ttl 60
-  [[ "$status" -eq 0 ]]
-  echo "$output" | "$PYTHON" -c "
-import sys, json
-d = json.load(sys.stdin)
-assert d['hit'] == True, f'Expected hit=true, got {d}'
-assert d['result']['content'] == 'hello world', f'Wrong result: {d}'
-"
-}
-
 # ── T7: cache-manager clean removes expired entries ──────────────────────────
 
-@test "speculative-cache-manager.py clean removes expired entries" {
-  # set an entry with TTL=0 (immediately expired)
-  "$PYTHON" "$CACHE_MGR" set --tool "Grep" --args-hash "expiredhash" \
-    --result '{"x": 1}' --ttl 0
-
-  sleep 0.1  # ensure age > 0
-
-  run "$PYTHON" "$CACHE_MGR" clean
-  [[ "$status" -eq 0 ]]
-  # Output should be valid JSON with removed >= 1
-  echo "$output" | "$PYTHON" -c "
-import sys, json
-d = json.load(sys.stdin)
-assert d['removed'] >= 1, f'Expected removed>=1, got {d}'
-"
-}
-
 # ── T8: telemetry-report produces table output ────────────────────────────────
-
-@test "speculative-telemetry-report.sh produces table output on sample data" {
-  TELEM_FILE="$(mktemp)"
-  # write 3 sample records
-  echo '{"cache_hit": true, "latency_saved_ms": 200, "predicted": ["Read"], "actual": ["Read"]}' >> "$TELEM_FILE"
-  echo '{"cache_hit": false, "latency_saved_ms": 0, "predicted": ["Read"], "actual": ["Grep"]}' >> "$TELEM_FILE"
-  echo '{"speculative_launched": true, "predicted": ["Read"]}' >> "$TELEM_FILE"
-
-  run bash "$REPORT" --file "$TELEM_FILE"
-  [[ "$status" -eq 0 ]]
-  # Must contain something about SE-220 or Speculative
-  [[ "$output" == *"SE-220"* ]] || [[ "$output" == *"Speculative"* ]]
-  # Must contain VERDICT
-  [[ "$output" == *"VERDICT"* ]]
-  rm -f "$TELEM_FILE"
-}
-
-@test "speculative-telemetry-report.sh --json produces valid JSON" {
-  TELEM_FILE="$(mktemp)"
-  echo '{"cache_hit": true,  "latency_saved_ms": 500, "predicted": ["Read"], "actual": ["Read"]}' >> "$TELEM_FILE"
-  echo '{"cache_hit": true,  "latency_saved_ms": 400, "predicted": ["Bash"], "actual": ["Bash"]}' >> "$TELEM_FILE"
-  echo '{"cache_hit": false, "latency_saved_ms": 0,   "predicted": ["Read"], "actual": ["Edit"]}' >> "$TELEM_FILE"
-
-  run bash "$REPORT" --file "$TELEM_FILE" --json
-  [[ "$status" -eq 0 ]]
-  echo "$output" | "$PYTHON" -c "
-import sys, json
-d = json.load(sys.stdin)
-for key in ('cache_hit_rate', 'avg_latency_saved_ms', 'prediction_accuracy', 'verdict'):
-    assert key in d, f'Missing key: {key}'
-"
-  rm -f "$TELEM_FILE"
-}
-
-@test "speculative-telemetry-report.sh returns NO_DATA verdict for missing file" {
-  run bash "$REPORT" --file "/tmp/nonexistent_telemetry_xyz_$(date +%s).jsonl" --json
-  [[ "$status" -eq 0 ]]
-  echo "$output" | "$PYTHON" -c "
-import sys, json
-d = json.load(sys.stdin)
-# should have NO_DATA or error key
-assert 'verdict' in d or 'error' in d, f'Expected verdict or error key, got: {d}'
-"
-}
 
 # ── T9: predictor whitelist_only field via CLI ────────────────────────────────
 

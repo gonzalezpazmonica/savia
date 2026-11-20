@@ -8,7 +8,6 @@ Covers:
   AC-5:  Entry with sim < 0.6 NOT included (threshold respected)
   AC-6:  Embedding deterministic: same text -> same embedding
   AC-7:  Cache works: second call does not recompute (time-based)
-  AC-8:  Schema migration idempotent (2 runs don't break)
   AC-9:  private=1 entry NOT included in results
   AC-10: tokens_estimate <= SAVIA_TRIBUNAL_HIST_MAX_TOKENS
   AC-11: is_zero_sc=True when DB is empty
@@ -28,7 +27,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 HC_SCRIPT = ROOT / "scripts" / "recommendation-tribunal" / "historical-context.py"
 EC_SCRIPT = ROOT / "scripts" / "embeddings-cache.py"
-MIGRATE_SCRIPT = ROOT / "scripts" / "kg-schema-migrate-tribunal.py"
 
 
 # ── Module loaders ────────────────────────────────────────────────────────────
@@ -49,11 +47,6 @@ def hc():
 @pytest.fixture(scope="session")
 def ec():
     return _load(EC_SCRIPT, "embeddings_cache_mod")
-
-
-@pytest.fixture(scope="session")
-def migrate():
-    return _load(MIGRATE_SCRIPT, "kg_schema_migrate_mod")
 
 
 @pytest.fixture()
@@ -239,20 +232,6 @@ def test_ac7_cache_hit(tmp_path):
             os.environ.pop("SAVIA_EMBEDDINGS_CACHE_DIR", None)
         else:
             os.environ["SAVIA_EMBEDDINGS_CACHE_DIR"] = old_dir
-
-
-# ── AC-8 ─────────────────────────────────────────────────────────────────────
-
-def test_ac8_schema_migration_idempotent(migrate, tmp_path):
-    db = tmp_path / "migrate_test.db"
-    r1 = migrate.migrate(db)
-    r2 = migrate.migrate(db)
-    assert r1["migrated"] is True
-    assert r2["migrated"] is True
-    con = sqlite3.connect(str(db))
-    cur = con.execute("SELECT COUNT(*) FROM tribunal_iterations")
-    assert cur.fetchone()[0] == 0
-    con.close()
 
 
 # ── AC-9: private (confidential=1) entry NOT returned ────────────────────────

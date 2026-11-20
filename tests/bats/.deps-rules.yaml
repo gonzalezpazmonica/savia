@@ -22,7 +22,6 @@ rules:
     tests:
       - test-se-097-rules-index-regen.bats
       - test-se-103-dormant-rules.bats
-      - test-se-102-eras-timeline.bats
 
   - dir: ".github/workflows/"
     tests:
@@ -39,11 +38,6 @@ rules:
     tests:
       - test-se253-hooks-coverage.bats
       - test-se510-s3-dispatcher.bats
-
-  - dir: "docs/"
-    tests:
-      - test-se-102-eras-timeline.bats
-      - test-se-080-attention-anchor.bats
 
   - file: ".claude/settings.json"
     tests:

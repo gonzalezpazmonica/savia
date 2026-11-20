@@ -29,7 +29,7 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: saca de la cola hasta 22 specs sin escribir código y deja ver el backlog real; esfuerzo: revisión por lotes de cinco; sin hueco WIP.
 
 - **S03 · P0 · fase A** — Deuda de calidad con pruebas de comportamiento
-  Acción: Remedir deuda certificada y elegir el siguiente grupo por riesgo/uso; conservar umbral >=80 y ratchet; usar #1180 como evidencia de entrega, no como cierre de toda la wave.
+  Acción: Remedir deuda certificada y elegir el siguiente grupo por riesgo/uso; conservar umbral >=80 y ratchet; usar #1180 como evidencia de entrega, no como cierre de toda la wave. SE-467 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): no se ejecuta hasta reactivarla.
   Entrada: WIP actual; inventario actualizado; aprobación de avance de wave cuando corresponda.
   Salida: Reducción de deuda demostrada por comportamiento discriminante, baseline publicado y excepciones explícitas; no certificar por presencia de ficheros.
   Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: hace fiables los gates; esfuerzo: grupo pequeño; no prometer cierre de 128 skills por sesión.
@@ -47,7 +47,7 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: decide si el resto de Savia Viva se construye, se recorta o se descarta; esfuerzo: tres slices pequeños de lectura.
 
 - **S25 · P1 · fase A** — Savia Space 0.2 y la seguridad de su canal de aprobación
-  Acción: Cerrar Space 0.2 (SE-428) y seguir por modo mediado (SE-434), experiencia (SE-432), proyectos y cúpulas (SE-436) e interoperabilidad (SE-429). SE-446 S0: sonda de autoaprobación contra el servidor real; si encuentra una vía abierta, su mitigación pasa a P0. SE-443, SE-447, SE-430, SE-435 y SE-439 después.
+  Acción: Cerrar Space 0.2 (SE-428) y seguir por modo mediado (SE-434), experiencia (SE-432), proyectos y cúpulas (SE-436) e interoperabilidad (SE-429). SE-446 S0: sonda de autoaprobación contra el servidor real; si encuentra una vía abierta, su mitigación pasa a P0. SE-443, SE-430, SE-435 y SE-439 después. SE-447 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): se retoma solo si se reactiva.
   Entrada: Specs aprobadas; hueco WIP temporal de SE-428 (addendum ADR-002). El código vive en el repo de Space.
   Salida: Space 0.2 cerrado y el WIP vuelve a 3; informe de la sonda por vía y test permanente de que el agente no contesta su propio aviso.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: la política por herramienta presupone un canal de aprobación seguro; S22 se apoya en Space; esfuerzo: un slice cada vez dentro del hueco de Space.
@@ -59,10 +59,10 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: media; urgencia: media; valor: medio; desbloqueo: reduce trabajo abierto a medias; esfuerzo: restos pequeños.
 
 - **S19 · P1 · fase A** — Medir jueces y relevos antes de confiar en ellos
-  Acción: SE-469: 30 casos de los golden sets en vivo con tope de gasto e IC95 por tribunal. SE-474: proveedor independiente opcional; la métrica de hallazgos que solo ve el segundo proveedor se mide una vez y la comparte con SE-476. SE-471 ya está en main (#1486) y pasa a S27.
-  Entrada: SE-469 ya APPROVED y después de SE-468; SE-474 sigue PROPOSED y necesita decisión de la operadora.
+  Acción: SE-469 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): sus 30 casos de golden sets en vivo no se ejecutan hasta reactivarla. SE-474: proveedor independiente opcional; la métrica de hallazgos que solo ve el segundo proveedor se mide una vez y la comparte con SE-476. SE-471 ya está en main (#1486) y pasa a S27.
+  Entrada: SE-469 aparcada (DEFERRED desde 2026-11-18) y, al retomarla, después de SE-468; SE-474 sigue PROPOSED y necesita decisión de la operadora.
   Salida: Informe de concordancia con IC95 y decisión según kill criterion; decisión registrada sobre SE-474.
-  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: da el primer dato de acierto de los tribunales que pesan en merges y separa el OK autodeclarado de lo validado; esfuerzo: SE-469 medio (M); SE-474 por decidir.
+  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: da el primer dato de acierto de los tribunales que pesan en merges y separa el OK autodeclarado de lo validado; esfuerzo: SE-469 aparcada, sin esfuerzo asignado; SE-474 por decidir.
 
 - **S28 · P1 · fase C** — Lecciones con ámbito y aprobación auténtica
   Acción: Un solo esquema de lección: SE-473 es la dueña (ámbito, evidencia, caducidad, refutación y, nuevo, tipo de acción y punto de control); SE-497 parte 2 conserva el paso a activa (recibo, firma humana verificable, rollback, ninguna cifra concede autoridad). SE-409 se reduce a retirada por desuso. SE-460 declara que su sello local es higiene, no aprobación.
@@ -83,13 +83,13 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: evita duplicar autoridad; esfuerzo: F0 L31 8-16 h estimadas; implementación aparte.
 
 - **S06 · P1 · fase C** — Un laboratorio de conformidad y benchmark
-  Acción: Unificar matriz negativa, bypass, caos, receipts y replay; baseline con trazas y selección fijadas. SE-495 y SE-503 (PROPOSED) aportan el banco de tareas reales y el verificador por proyecto. Las sondas adversariales de Savia Viva (P12, P14) se alojan aquí, sin suite paralela. Último slice: piloto de suite de conformidad sobre un solo contrato (SE-452).
+  Acción: Unificar matriz negativa, bypass, caos, receipts y replay; baseline con trazas y selección fijadas. SE-495 y SE-503 (PROPOSED) aportan el banco de tareas reales y el verificador por proyecto. Las sondas adversariales de Savia Viva (P12, P14) se alojan aquí, sin suite paralela. SE-452 (piloto de conformidad) aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): este bloque no la incluye hasta reactivarla.
   Entrada: Gate B y corpus/contratos pinned; no ejecutar todos los experimentos Labs a la vez.
   Salida: Cero violaciones de invariantes bajo fallos en los tres frontends y cuatro niveles de replay; evidencia auditable.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: evidencia para portabilidad y pilotos; esfuerzo: slices por frontend/invariante.
 
 - **S30 · P1 · fase D** — Atención humana y aprobaciones contestables
-  Acción: SE-458 (tope y lotes de PRs en revisión), SE-459 S1 y S3 (tarjeta), SE-492 (estado declarado, no inferido), SE-507 (latido de runs, con el digest de SE-471 leyendo del ledger) y, encima, la cola única de SE-514. SE-461 a SE-463: composición de efectos, marca de sesión y cobertura de supervisión.
+  Acción: SE-458 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar; tope y lotes de PRs en revisión sin decidir). SE-459 S1 y S3 (tarjeta), SE-492 (estado declarado, no inferido), SE-507 (latido de runs, con el digest de SE-471 leyendo del ledger) y, encima, la cola única de SE-514. SE-461 y SE-462: composición de efectos y marca de sesión. SE-463 (cobertura de supervisión) aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar).
   Entrada: Aprobación de SE-492 y SE-507 por la operadora, con escenas confirmadas (SE-505). SE-514 ya aprobada (2026-11-09): su S1 va después de S22.
   Salida: Peticiones a la persona medidas antes y después; ningún permiso inferido del silencio; cada spec con sus negativos.
   Necesidad: media; urgencia: media; valor: alto; desbloqueo: protege el recurso más escaso; SE-515 con revisión obligatoria necesita esta cola; esfuerzo: slices pequeños independientes.
@@ -101,16 +101,16 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: media; urgencia: baja; valor: alto; desbloqueo: las lecciones y la evidencia de Savia Viva se sirven desde Vaults; esfuerzo: SE-489 decisión; SE-486 media.
 
 - **S14 · P2 · fase D** — Higiene de contexto, instalación y operación
-  Acción: SE-448 S0 y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores; SE-454 invariantes negativos como tests; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-472 se retira si ese bucle ya no se usa. SE-464 sin dependientes: se decide al llegar; SE-506 aplazada.
+  Acción: SE-448 S0 y canario; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-472 se retira si ese bucle ya no se usa. SE-464 sin dependientes: se decide al llegar; SE-506 aplazada. SE-449, SE-450 y SE-454 aparcadas (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): no se ejecutan hasta reactivarlas.
   Entrada: Specs aprobadas salvo SE-464 (PROPOSED) y SE-506 (aplazada); se ejecutan por separado, una por vez; sin hueco WIP nuevo.
-  Salida: Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición. Los invariantes de SE-454 llevan caso negativo y declaran lo que no demuestran.
+  Salida: Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición.
   Necesidad: media; urgencia: baja; valor: medio; desbloqueo: reduce superficie sin bloquear otras fases; esfuerzo: slices pequeños independientes.
 
 - **S21 · P2 · fase D** — Verificación honesta tras la revisión de Anthropic Research
   Acción: SE-476: acuerdo de jueces del mismo proveedor como correlacionado y autorrevisión fuera de la verificación. SE-477: IC, diferencia pareada y censura en comparativas. SE-479: casos imposibles dentro del alcance con control posible. SE-475 (clase del bloqueo) se hace dentro de SE-510.
   Entrada: Aprobación de SE-476, SE-477 y SE-479 por la operadora (PROPOSED); SE-475 queda absorbida por SE-510 (S26); SE-479 S3 después de SE-468 y SE-477; sin hueco WIP nuevo.
   Salida: Cada spec aprobada o descartada; las aprobadas con sus AC verificados, tests que fallan antes y pasan después, y paridad bash/TS donde aplica.
-  Necesidad: media; urgencia: baja; valor: medio; desbloqueo: frena los rodeos ante bloqueos de política y evita contar como evidencia independiente lo que no lo es; SE-477 da la estadística que usan SE-469 y SE-479; esfuerzo: cuatro specs de slices pequeñas (S); SE-475 S2 y SE-479 S2 medianas.
+  Necesidad: media; urgencia: baja; valor: medio; desbloqueo: frena los rodeos ante bloqueos de política y evita contar como evidencia independiente lo que no lo es; SE-477 da la estadística que usan SE-469 (aparcada, DEFERRED) y SE-479; esfuerzo: cuatro specs de slices pequeñas (S); SE-475 S2 y SE-479 S2 medianas.
 
 - **S07 · P2 · fase D** — Kernel mínimo y portabilidad
   Acción: Ablación acotada F0 revisada; SAM F5/F6; runtime/canaries comunes y coste de complejidad. Curación de skills sólo si demuestra utilidad.
@@ -119,7 +119,7 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: media; urgencia: media; valor: alto; desbloqueo: reduce coste de adopción; esfuerzo: probes antes de retirar componentes.
 
 - **S08 · P2 · fase E** — Adopción y contexto de ficheros completo
-  Acción: Instalación limpia/doctor; desktop y docs; Vaults adaptativo bajo evaluación. Files: serving/tus autenticado, snapshot/CAS, digest/citas/visor y lifecycle; después formatos remotos/media/email/conectores/Teams según demanda.
+  Acción: Instalación limpia/doctor; desktop y docs; Vaults adaptativo bajo evaluación. SE-408 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): sin trabajo hasta reactivarla. Files: serving/tus autenticado, snapshot/CAS, digest/citas/visor y lifecycle; después formatos remotos/media/email/conectores/Teams según demanda.
   Entrada: Gate D y autorización/revocación/scanner/restore de Files verificados. D08 S3 y paquetes Labs propuestos requieren aprobación; SE-289 S4 conforme ADR-002.
   Salida: Una persona ajena instala y usa un flujo seguro con citas y doctor verde; ampliar perfiles sólo tras conformance.
   Necesidad: media; urgencia: baja; valor: alto; desbloqueo: uso externo verificable; esfuerzo: un flujo de adopción y un perfil de formato cada vez.
@@ -150,7 +150,6 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-401 [APPROVED] Intent-to-Effect Execution Architecture (I2E) — evidencia: docs/specs/SE-401-intent-to-effect-execution-architecture.spec.md
 - SE-403 [APPROVED] Benchmark evidence: trazas, frontera, hash de selección — evidencia: PR #1171 mergeada 2026-09-28 sin review registrada; graduación pendiente de revisión humana (completion.human_review). Spec: docs/specs/SE-403-benchmark-evidence-frontier.spec.md · integrada #1171; revisar evidencia/graduación
 - SE-404 [APPROVED] Proceso proporcional: G13 v2 y una corrección por revisión — evidencia: PR #1170 mergeada 2026-09-28 sin review registrada; graduación pendiente de revisión humana (completion.human_review). Spec: docs/specs/SE-404-proportional-process-gates.spec.md · integrada #1170; revisar evidencia/graduación
-- SE-408 [APPROVED] Automatización móvil por árbol de accesibilidad (mobile-mcp) bajo soberanía — evidencia: docs/specs/SE-408-mobile-accessibility-automation.spec.md
 - SE-409 [APPROVED] Bucle experiencia → skill con curación y retirada — evidencia: docs/specs/SE-409-experience-to-skill-loop.spec.md
 - SE-426 [IMPLEMENTING] Firma de confidencialidad con secreto de CI y HMAC siempre verificado — evidencia: docs/specs/SE-426-confidentiality-hmac-ci-key.spec.md
 - SE-428 [IMPLEMENTING] Savia Space como sustituto de OpenCode, con OpenCode como motor — evidencia: docs/specs/SE-428-savia-space-orchestrator-opencode-engine.spec.md
@@ -168,28 +167,19 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-444 [APPROVED] Autoridad del verificador en los criterios de aceptación y cobertura no verificada explícita — evidencia: docs/specs/SE-444-verifier-authority-ac-closure.spec.md
 - SE-445 [APPROVED] Salvaguardas de ejecución autónoma: repetición bloqueante, presupuesto de turnos, revisor de acciones y criterio de éxito — evidencia: docs/specs/SE-445-autonomous-execution-safeguards.spec.md
 - SE-446 [APPROVED] Canal de aprobación inalcanzable para el agente: prueba de autoaprobación y mitigación — evidencia: docs/specs/SE-446-approval-channel-agent-unreachable.spec.md
-- SE-447 [APPROVED] Contexto acotado en sesiones largas: una sola captura viva, tope absoluto de compactación y clasificación de acciones de riesgo — evidencia: docs/specs/SE-447-bounded-context-long-sessions.spec.md
 - SE-448 [APPROVED] Fuga por salida de contenido externo: token canario, lista de destinos de URL e ID estable de hallazgos — evidencia: docs/specs/SE-448-external-content-leak-canary-urls.spec.md
-- SE-449 [APPROVED] Estado epistémico en hallazgos e informes: observado, derivado, inferido, desconocido — evidencia: docs/specs/SE-449-epistemic-status-in-reports.spec.md
-- SE-450 [APPROVED] Instaladores aditivos e idempotentes y propiedad de procesos con identidad de arranque — evidencia: docs/specs/SE-450-installer-and-process-ownership-hygiene.spec.md
 - SE-451 [APPROVED] Gobernanza de contribuciones: DCO frente a CLA y metadatos de licencia por fichero — evidencia: docs/specs/SE-451-contribution-governance-dco.spec.md
-- SE-452 [APPROVED] Suite de conformidad ejecutable publicada junto a cada contrato de interoperabilidad — evidencia: docs/specs/SE-452-contract-conformance-suites.spec.md
 - SE-453 [APPROVED] Contrato de resultado de los gates: limpio, hallazgos y desconocido — evidencia: docs/specs/SE-453-gate-result-contract.spec.md
-- SE-454 [APPROVED] Invariantes negativos como tests sobre fuentes sensibles y aserción de red en analizadores — evidencia: docs/specs/SE-454-negative-invariant-tests.spec.md
 - SE-465 [APPROVED] Dependencias de instalación sin fijar: imágenes, instaladores remotos, npm y pip — evidencia: docs/specs/SE-465-pinned-install-dependencies.spec.md
 - SE-466 [APPROVED] 214 avisos OSV en los lockfiles y una auditoría de CI que no puede fallar — evidencia: docs/specs/SE-466-dependency-vulnerability-triage.spec.md
-- SE-467 [APPROVED] El auditor de tests puntúa el idioma del nombre, no el caso probado — evidencia: docs/specs/SE-467-auditor-language-bias.spec.md
-- SE-458 [APPROVED] Presupuesto de atención humana: tope de PRs esperando revisión, lotes y prioridad — evidencia: docs/specs/SE-458-human-review-attention-budget.spec.md
 - SE-459 [APPROVED] Aprobaciones contestables: tarjeta de aprobación en lenguaje llano — evidencia: docs/specs/SE-459-contestable-approval-card.spec.md
 - SE-460 [APPROVED] Reactivación revalidada: automatizaciones y memoria con vigencia, procedencia y autoridad — evidencia: docs/specs/SE-460-revalidated-reactivation-context.spec.md
 - SE-461 [APPROVED] Composición de efectos: combinaciones prohibidas en contratos de Yema y pruebas negativas — evidencia: docs/specs/SE-461-effect-composition-contracts.spec.md
 - SE-462 [APPROVED] Leer no implica poder retransmitir: marca de sesión tras leer una cúpula N2+ — evidencia: docs/specs/SE-462-read-is-not-relay.spec.md
-- SE-463 [APPROVED] Cobertura de supervisión: reconciliar llamadas con lo que vieron los guards y fallar cerrado — evidencia: docs/specs/SE-463-supervision-coverage-reconciliation.spec.md
 - SE-455 [APPROVED] Ingeniería inversa para la soberanía tecnológica: REA como herramienta externa opcional con puerta de autorización — evidencia: docs/specs/SE-455-reverse-engineering-sovereignty.spec.md
 - SE-456 [APPROVED] Tests que no pueden fallar: detector de vacuidad y criterio de evidencia de REA en la QA — evidencia: docs/specs/SE-456-test-vacuity-evidence-criteria.spec.md
 - SE-457 [APPROVED] Skill harness-architecture: arquitectura de harness, metaharness, flujos largos, bucles y sprints — evidencia: docs/specs/SE-457-harness-architecture-skill.spec.md
 - SE-468 [APPROVED] El gate de evals debe poder fallar — evidencia: docs/specs/SE-468-honest-evals-gate.spec.md
-- SE-469 [APPROVED] Tribunales medidos con sus propios golden sets — evidencia: docs/specs/SE-469-tribunal-golden-set-live-runs.spec.md
 - SE-470 [APPROVED] Integridad de los artefactos de evaluación — evidencia: docs/specs/SE-470-eval-artifact-integrity.spec.md
 - SE-471 [APPROVED] Relevo nocturno con evidencia: declarado, validado y aceptado — evidencia: docs/specs/SE-471-overnight-handoff-evidence-digest.spec.md
 - SE-472 [APPROVED] Vigencia de la autoridad comprobada antes de cada tarea nocturna — evidencia: docs/specs/SE-472-overnight-per-task-authority-check.spec.md
