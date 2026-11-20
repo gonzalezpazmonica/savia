@@ -158,10 +158,10 @@ Sin cambio de fondo. Se corrigen la entrada y el riesgo.
 
 - **Ruta piloto (verificada).** `scripts/push-pr.sh`: sus pasos 0–5 salen con `exit 1` ante fallo (`:43-46` plan previo, `:61-64` árbol limpio, `:69` CI local, `:74` CHANGELOG, `:79` confidencialidad) y el efecto es `git push` en `:82`. El verificador de la obligación piloto va como un paso más antes de `:82`, con el mismo `exit 1`.
 - **Límite declarado.** `push-pr.sh` no es la única forma de publicar: un `git push` directo lo esquiva. G4 se declara «en `push-pr.sh`», y `git push` directo queda `NOT_GUARANTEED`, como ya dice «G4 se declara por ruta».
-- **Entrada corregida.** S2 con GO y aprobación auténtica disponible (SE-488, hoy IMPLEMENTING, o SE-497 parte 2, PROPOSED). Sin SE-493 y sin SE-498.
+- **Entrada corregida.** S2 con GO y una aprobación auténtica **ya implementada y fusionada** (SE-488 en estado IMPLEMENTED; SE-497 parte 2 solo cuenta cuando deje de estar PROPOSED). Un estado PROPOSED o IMPLEMENTING no vale como entrada. Sin SE-493 y sin SE-498.
 - **AC-12 y AC-13**: sin cambios.
 
-**Qué se pierde:** nada de S3. Lo que S3 nunca tuvo (garantía fuera de `push-pr.sh`) sigue sin tenerlo.
+**Qué se pierde:** nada de S3. Los pasos 0–5 de `push-pr.sh` están dentro de `if ! $MERGE` (`:42`): la ruta `--merge` no ejecuta el verificador (ahí no se empuja, SE-343) y queda fuera de la garantía. Además el `git push` de `:82` va en una tubería a `tail`, cuyo exit enmascara el del push: un push fallido no se detecta y el reintento `--force-with-lease` no se ejecuta nunca. El verificador va antes del push y no cubre ese fallo; corregir la tubería es una tarea aparte, no de este rediseño. Lo que S3 nunca tuvo (garantía fuera de `push-pr.sh`) sigue sin tenerlo.
 
 ### S4 rediseñado — revalidación sobre el recibo que ya existe
 
@@ -176,7 +176,7 @@ La revalidación no necesita un libro: compara, en el gate y justo antes del efe
 
 **Regla.** El paso nuevo de `push-pr.sh`, antes de `:82`: (1) `receipt-v2.sh verify` debe dar `RECEIPT VALID`; (2) el hash de la política en el recibo de S2 debe coincidir con el de la entrada actual; (3) la época y el `stop_seq` guardados en el recibo de S2 deben coincidir con los de `savia-control.py`. Si algo cambió, falta o no se puede leer, no se publica y se pide repetir la comprobación (fail-closed). No se reutiliza el paso `g0b` de `scripts/pr-plan-gates.sh:22-37`, que deja pasar si falta el script: aquí la ausencia bloquea.
 
-**Rastro.** El veredicto de cada revalidación (`PASS`, `STALE_POLICY`, `STALE_CONTENT`, `STALE_EPOCH`, `UNREADABLE`) se anota con `scripts/session-action-log.sh log` (`output/session-action-log.jsonl`, campos `ts`, `action`, `target`, `result`, `detail`), que `push-pr.sh` ya usa en `_supervisor`. No es un libro de efectos: solo deja constancia de qué se comprobó.
+**Rastro.** (Origen de la época y `stop_seq` de la regla (3): el recibo de S2 no los lleva hoy, así que F-S2 se enmienda para guardarlos en el recibo, o el paso los lee de `savia-control.py` al planificar y los guarda junto al recibo de S2 en un fichero propio del paso; la implementación elige una de las dos y lo declara.) El veredicto de cada revalidación (`PASS`, `STALE_POLICY`, `STALE_CONTENT`, `STALE_EPOCH`, `UNREADABLE`) se anota con `scripts/session-action-log.sh log` (`output/session-action-log.jsonl`, campos `ts`, `action`, `target`, `result`, `detail`), que `push-pr.sh` ya usa en `_supervisor`. No es un libro de efectos ni prueba de integridad: `output/session-action-log.jsonl` no está encadenado ni firmado, a diferencia del ledger del merge-sprint; es una pista, no una garantía.
 
 **Entrada corregida.** S3 con GO y SE-498 F0 implementada (época y `stop_seq`). Sin SE-493.
 
