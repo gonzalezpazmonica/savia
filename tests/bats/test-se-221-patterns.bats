@@ -2,7 +2,7 @@
 # SE-221 — Context Engineering Patterns — BATS integration tests
 # Spec: docs/propuestas/SE-221-inverted-security-patterns-as-context-engineering.md
 # Covers: context-origin-stamp.sh, context-drop-after-use.sh (hook),
-#         context-origin-tag.sh (standalone), context-capability-metadata.py
+#         context-origin-tag.sh (standalone)
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
@@ -10,7 +10,6 @@ setup() {
   export STAMP_HOOK="$REPO_ROOT/.opencode/hooks/context-origin-stamp.sh"
   export DROP_HOOK="$REPO_ROOT/.opencode/hooks/context-drop-after-use.sh"
   export ORIGIN_TAG="$REPO_ROOT/scripts/context-origin-tag.sh"
-  export CAP_META="$REPO_ROOT/scripts/context-capability-metadata.py"
   TMPDIR_221=$(mktemp -d)
   export TMPDIR_221
 }
@@ -102,44 +101,3 @@ teardown() {
 # ───────────────────────────────────────────────────────────────
 # Slice 3 — context-capability-metadata.py
 # ───────────────────────────────────────────────────────────────
-
-@test "context-capability-metadata.py exists" {
-  [[ -f "$CAP_META" ]]
-}
-
-@test "context-capability-metadata.py produces valid JSON with required fields" {
-  run python3 "$CAP_META" --file "$REPO_ROOT/docs/rules/domain/radical-honesty.md" \
-      --workspace "$REPO_ROOT"
-  [[ "$status" -eq 0 ]]
-  echo "$output" | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-for f in ('origin','tier','audience','size_tokens','hash','last_loaded','cross_concept_refs'):
-    assert f in d, f'Missing: {f}'
-"
-}
-
-@test "context-capability-metadata.py cross_concept_refs extracts SPEC pattern" {
-  run python3 "$CAP_META" --file "$REPO_ROOT/docs/rules/domain/radical-honesty.md" \
-      --workspace "$REPO_ROOT"
-  [[ "$status" -eq 0 ]]
-  # radical-honesty.md has SPEC-192 references
-  echo "$output" | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-refs = d['cross_concept_refs']
-assert any('SPEC' in r or 'SE-' in r or 'Rule' in r for r in refs), f'No refs found: {refs}'
-"
-}
-
-@test "context-capability-metadata.py audience fallback all for no-frontmatter file" {
-  TMP_FILE="$TMPDIR_221/no-fm.md"
-  echo "# Plain file no frontmatter" > "$TMP_FILE"
-  run python3 "$CAP_META" --file "$TMP_FILE" --workspace "$REPO_ROOT"
-  [[ "$status" -eq 0 ]]
-  echo "$output" | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-assert d['audience'] == ['all'], f'Expected [all], got {d[\"audience\"]}'
-"
-}

@@ -5,7 +5,7 @@ ilegible es «sin señales».
 """
 import datetime as dt
 
-from . import backup, events, store
+from . import backup, catalogo, events, nocturna, store
 
 LOCAL = "%H:%M"
 
@@ -26,7 +26,30 @@ def _hace(delta):
     return "%d h %d min" % (h, m) if m else "%d h" % h
 
 
-def collect(root, ahora=None):
+def _nocturna(evs, ahora, env):
+    """Estado de la comprobación nocturna para status. Sin datos fiables nunca es «bien»."""
+    try:
+        cfg = nocturna.configuracion(env)
+    except store.EntradaInvalida:
+        return {"estado": "config_invalida"}
+    if cfg is None:
+        return {"estado": "sin_configurar"}
+    u = nocturna.estado(evs)["ultimo"] if evs is not None else None
+    if u is None:
+        return {"estado": "sin_datos"}
+    n = nocturna.estado(evs)["racha"]
+    out = {"estado": u["resultado"], "racha": n, "pasada_edad_s": int((ahora - store.parse_ts(u["at"])).total_seconds())}
+    cierres = [e for e in evs if e["tipo"] == "nocturna_racha_cerrada" and e["dia"] == u["dia"]]
+    if cierres and u["resultado"] == "verde":
+        out["cerrada"] = cierres[-1]["longitud"]  # solo el día del cierre: al siguiente ya no reaparece
+    if u.get("ejecucion_at"):
+        out["ejecucion_edad_s"] = int((ahora - store.parse_ts(u["ejecucion_at"])).total_seconds())
+    if out["pasada_edad_s"] > nocturna.MAX_EDAD.total_seconds():
+        out["estado"] = "pasada_vieja"
+    return out
+
+
+def collect(root, ahora=None, env=None):
     ahora = ahora or store.now()
     out = {"at": store.fmt(ahora), "problemas": []}
     est, lat = store.read_json(root + "/" + events.LATIDO, "latido")
@@ -69,14 +92,46 @@ def collect(root, ahora=None):
         out["problemas"].append("no puedo leer el registro de eventos")
     if rechazadas:
         out["problemas"].append("%d líneas del registro de eventos son ilegibles" % len(rechazadas))
+    cat, ult = catalogo.estado(evs) if est_l == store.OK else ("sin_datos", None)
+    out["catalogo"] = {"estado": cat, "agentes": ult["agentes"] if cat == "con_deriva" else []}
+    out["nocturna"] = _nocturna(evs if est_l == store.OK else None, ahora, env)
     out["trabajos"], out["terminados_hoy"] = jobs, fin_hoy
-    todas = backup.pendientes(root, incluir_respaldo=True)
+    todas = backup.pendientes(root, ahora, incluir_respaldo=True)
     out["avisos"] = sum(1 for p in todas if backup.es_aviso(p))
     out["pendientes"] = [{"que": p["que"], "critica": p["critica"]} for p in todas if not backup.es_aviso(p)]
     out["modo"] = MODO
     vigente, motivo = backup.presencia(root)
     out["soul"] = {"presente": vigente, "motivo": motivo}
     return out
+
+
+def _noches(n):
+    return "%d noche%s seguida%s" % (n, "" if n == 1 else "s", "" if n == 1 else "s")
+
+
+def _linea_nocturna(n):
+    e = n["estado"]
+    if e == "sin_configurar":
+        return ("Comprobación nocturna: sin configurar (hacen falta %s y %s); no consulto nada."
+                % (nocturna.ENV_REPO, nocturna.ENV_FLUJO))
+    if e == "config_invalida":
+        return "Comprobación nocturna: la configuración no es válida; no consulto nada."
+    if e == "sin_datos":
+        return "Comprobación nocturna: todavía no se ha comprobado."
+    if e == "pasada_vieja":
+        return ("Comprobación nocturna: la última comprobación de Pulse fue hace %s; no sé cómo está ahora."
+                % _hace(dt.timedelta(seconds=n["pasada_edad_s"])))
+    if e == "verde":
+        linea = "Comprobación nocturna: bien (última ejecución hace %s)." % _hace(dt.timedelta(seconds=n["ejecucion_edad_s"]))
+        if n.get("cerrada"):
+            linea += " La racha en rojo terminó tras %s." % _noches(n["cerrada"]).replace(" seguidas", "").replace(" seguida", "")
+        return linea
+    sufijo = " Detalle en «Esperan algo de ti»."
+    if e == "rojo":
+        return "Comprobación nocturna: en rojo, %s.%s" % (_noches(n["racha"]), sufijo)
+    if e == "sin_ejecucion":
+        return "Comprobación nocturna: no se ha ejecutado en las últimas 26 horas (%s).%s" % (_noches(n["racha"]), sufijo)
+    return "Comprobación nocturna: no he podido mirarla, no sé si está bien.%s" % sufijo
 
 
 def render(d):
@@ -118,6 +173,14 @@ def render(d):
         L.append("Esperan algo de ti: %d%s. Detalle: pulse inbox." % (len(d["pendientes"]), " (%d crítica(s))" % crit if crit else ""))
     else:
         L.append("Esperan algo de ti: nada que conste.")
+    c = d["catalogo"]
+    if c["estado"] == "con_deriva":
+        L.append("Agentes desajustados con el repositorio: %s. Se resolverá al regenerar las copias." % ", ".join(c["agentes"]))
+    elif c["estado"] == "sin_deriva":
+        L.append("Catálogo de agentes: sin deriva (agentes de nivel superior).")
+    else:
+        L.append("Catálogo de agentes: sin datos.")
+    L.append(_linea_nocturna(d["nocturna"]))
     L.append("Freno: sin información (todavía no está conectado a Pulse).")
     if d["soul"]["presente"]:
         L.append("Soul: presente. Los avisos los da Soul.")

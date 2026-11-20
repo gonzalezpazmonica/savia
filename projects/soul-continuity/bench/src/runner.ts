@@ -8,7 +8,11 @@
  *   - fugas entre operadores (y hacia terceros) y entre niveles;
  *   - cuerpos y tokens en el directorio de estado; mutaciones en las fuentes;
  *   - violaciones del contrato (instantánea y respuesta);
- *   - p95 de Q1 (instantánea + respuesta) con fuentes en memoria.
+ *   - p95 de Q1 (instantánea + respuesta) con fuentes en memoria. Cada escenario Q1 se mide
+ *     `Q1_REPS` veces y cuenta su mediana: con 18 escenarios el p95 es el máximo, y una sola
+ *     parada de reloj de pared del equipo (CI compartido en Windows: 3620 ms frente a ~40)
+ *     suspendía el gate sin que el código tuviera culpa. Una lentitud real afecta a todas las
+ *     medidas del escenario y la mediana la conserva.
  * El gate es fail-closed: cualquier excepción inesperada cuenta como fallo.
  */
 
@@ -25,6 +29,8 @@ import {
 } from "./world.ts";
 
 export const THRESHOLDS = { precision: 0.9, p95_q1_ms: 2000 };
+/** Medidas por escenario Q1; la mediana de 5 absorbe hasta 2 paradas puntuales. */
+export const Q1_REPS = 5;
 
 /**
  * Escenarios de garantía: además del 90 % por pregunta, cada uno tiene que pasar.
@@ -44,6 +50,8 @@ export interface ScenarioResult {
   expected?: string[];
   got?: string[];
   ms?: number;
+  /** Q1: todas las medidas (la primera es la que valida el escenario); `ms` es su mediana. */
+  samples_ms?: number[];
 }
 
 export interface Metrics {
@@ -81,6 +89,12 @@ function filesUnder(dir: string): string[] {
   return out;
 }
 
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const h = s.length >> 1;
+  return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2;
+}
+
 function p95(xs: number[]): number {
   if (!xs.length) return 0;
   const s = [...xs].sort((a, b) => a - b);
@@ -89,8 +103,9 @@ function p95(xs: number[]): number {
 
 const eqSet = (a: string[], b: string[]) => a.length === b.length && [...a].sort().every((x, i) => x === [...b].sort()[i]);
 
-export async function runBench(impl: ContinuityImpl, opts: { only?: string[]; thresholds?: Partial<typeof THRESHOLDS> } = {}): Promise<Report> {
+export async function runBench(impl: ContinuityImpl, opts: { only?: string[]; thresholds?: Partial<typeof THRESHOLDS>; q1_reps?: number } = {}): Promise<Report> {
   const th = { ...THRESHOLDS, ...opts.thresholds };
+  const reps = Math.max(1, Math.floor(opts.q1_reps ?? Q1_REPS));
   const truth = readJson("truth/scenarios.json");
   const instants: Record<Instant, string> = truth.instants;
   const installs = loadInstalls();
@@ -118,11 +133,15 @@ export async function runBench(impl: ContinuityImpl, opts: { only?: string[]; th
     const envLogs: Json[] = [];
     const inst = installs[sc.install];
     const asking = world(inst.world).operator as string;
-    const snap = async (installId: string, at: Instant): Promise<Snapshot> => {
+    const rawSnap = async (installId: string, at: Instant): Promise<Snapshot> => {
       const i = installs[installId];
       const env = makeEnv({ installId, world: world(i.world), tenants, instant: at, installEnv: i.env ?? {} });
       const s = await impl.snapshot({ install: i.config, now: instants[at], stateDir, env, ttl_s: 3600 });
       envLogs.push(...env.log);
+      return s;
+    };
+    const snap = async (installId: string, at: Instant): Promise<Snapshot> => {
+      const s = await rawSnap(installId, at);
       for (const p of validateSnapshot(s)) { m.contract_violations++; reasons.push(`instantánea: ${p}`); }
       if (JSON.stringify(s).includes(BODY_CANARY)) { m.bodies_in_snapshot++; reasons.push("cuerpo en la instantánea"); }
       return s;
@@ -131,8 +150,9 @@ export async function runBench(impl: ContinuityImpl, opts: { only?: string[]; th
     let threw: unknown = null;
     let current: Snapshot | null = null;
     let ms = 0;
+    let q: Question | null = null;
+    let previous: Snapshot | undefined;
     try {
-      let previous: Snapshot | undefined;
       if (sc.ask.since) previous = await snap(sc.ask.previous_install ?? sc.install, sc.ask.since);
       for (const st of sc.steps ?? []) {
         const sid = st.install ?? sc.install;
@@ -146,7 +166,7 @@ export async function runBench(impl: ContinuityImpl, opts: { only?: string[]; th
       }
       const t0 = performance.now();
       current = await snap(sc.install, (sc.reuse_snapshot ?? sc.at) as Instant);
-      const q: Question = { q: sc.ask.q, previous, filter: sc.ask.filter, max_level: sc.ask.max_level, detail: sc.ask.detail };
+      q = { q: sc.ask.q, previous, filter: sc.ask.filter, max_level: sc.ask.max_level, detail: sc.ask.detail };
       try {
         answer = impl.answer(current, q, { install: inst.config, now: instants[sc.at as Instant] });
       } catch (e) {
@@ -164,6 +184,25 @@ export async function runBench(impl: ContinuityImpl, opts: { only?: string[]; th
       const text = readFileSync(f, "utf8");
       if (text.includes(BODY_CANARY)) { m.bodies_persisted++; reasons.push(`cuerpo persistido: ${f.slice(stateDir.length)}`); }
       if (text.includes(TOKEN_CANARY)) { m.tokens_on_disk++; reasons.push(`token en disco: ${f.slice(stateDir.length)}`); }
+    }
+    // Medidas repetidas de Q1 (mismo trabajo que la primera; no se vuelven a validar). Un fallo aquí
+    // es un error inesperado: el gate no se queda con la medida buena y calla la mala.
+    let samples: number[] | undefined;
+    if (sc.ask.q === "Q1" && !sc.expect_error && ms && q && !threw && reps > 1) {
+      samples = [ms];
+      try {
+        for (let r = 1; r < reps; r++) {
+          const t = performance.now();
+          const s = await rawSnap(sc.install, (sc.reuse_snapshot ?? sc.at) as Instant);
+          impl.answer(s, q, { install: inst.config, now: instants[sc.at as Instant] });
+          samples.push(performance.now() - t);
+        }
+        ms = median(samples);
+      } catch (e) {
+        m.unexpected_errors++;
+        reasons.push(`error inesperado en medida repetida de Q1: ${(e as Error).message}`);
+        samples = undefined;
+      }
     }
     rmSync(stateDir, { recursive: true, force: true });
     const muts = envLogs.filter((l) => l.mutation).length;
@@ -240,7 +279,8 @@ export async function runBench(impl: ContinuityImpl, opts: { only?: string[]; th
     const pass = reasons.length === 0;
     if (pass) pq.passed++;
     else if ((sc.tags as string[]).some((t) => CRITICAL_TAGS.includes(t))) m.critical_failed++;
-    results.push({ id: sc.id, q: sc.ask.q, tags: sc.tags, pass, reasons, expected: sc.expect, got, ms: Math.round(ms * 10) / 10 });
+    results.push({ id: sc.id, q: sc.ask.q, tags: sc.tags, pass, reasons, expected: sc.expect, got, ms: Math.round(ms * 10) / 10,
+      ...(samples && { samples_ms: samples.map((x) => Math.round(x * 10) / 10) }) });
   }
 
   for (const [q, v] of Object.entries(m.per_question)) {
@@ -269,6 +309,10 @@ export async function runBench(impl: ContinuityImpl, opts: { only?: string[]; th
     failures.push(`críticos: ${m.critical_failed} escenarios de garantía fallidos (${results.filter((r) => !r.pass && r.tags.some((t) => CRITICAL_TAGS.includes(t))).map((r) => r.id).join(", ")})`);
   }
   if (!q1ms.length && !opts.only) failures.push("sin medidas de Q1");
-  if (m.p95_q1_ms >= th.p95_q1_ms) failures.push(`p95 Q1 ${m.p95_q1_ms} ms ≥ ${th.p95_q1_ms} ms`);
+  if (m.p95_q1_ms >= th.p95_q1_ms) {
+    const slow = results.filter((r) => r.q === "Q1" && r.ms).sort((a, b) => (b.ms ?? 0) - (a.ms ?? 0)).slice(0, 3)
+      .map((r) => `${r.id} ${r.ms} ms [${(r.samples_ms ?? []).join(", ")}]`).join("; ");
+    failures.push(`p95 Q1 ${m.p95_q1_ms} ms ≥ ${th.p95_q1_ms} ms (mediana de ${reps} por escenario; más lentos: ${slow})`);
+  }
   return { impl: impl.name, metrics: m, gate: { pass: failures.length === 0, failures }, scenarios: results };
 }

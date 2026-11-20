@@ -14,6 +14,10 @@ setup() {
   export SAVIA_VERIFIED_MEMORY_DISABLED=false
   export HOME="$(mktemp -d)"
   export SAVIA_EMBED_PORT=0
+  # El taint de turno depende del entorno de la sesión que ejecuta los tests: se
+  # aísla el id heredado y el directorio de marcas que lee el guardado.
+  unset SESSION_ID CLAUDE_CODE_SESSION_ID
+  export SAVIA_MEMORY_TAINT_DIR="$PROJECT_ROOT/taint"
   # El gate escribe en /tmp (ruta fija): sin esto un fichero residual de una
   # ejecución anterior hace pasar o fallar los tests por estado compartido.
   rm -f /tmp/savia-memory-taint/s1 /tmp/savia-memory-taint/s2 \
@@ -179,9 +183,9 @@ _origin_of_last() { tail -n1 "$PROJECT_ROOT/output/.memory-store.jsonl" | grep -
 
 # ── Comportamiento: taint de turno degrada el origen al guardar ───────────────
 
-_taint() { # <sid> <epoch>
-  mkdir -p /tmp/savia-memory-taint
-  printf '%s\n' "$2" > "/tmp/savia-memory-taint/$1"
+_taint() { # <sid> <epoch> — marca que lee el guardado (directorio aislado)
+  mkdir -p "$SAVIA_MEMORY_TAINT_DIR"
+  printf '%s\n' "$2" > "$SAVIA_MEMORY_TAINT_DIR/$1"
 }
 
 @test "turno con taint fresco degrada owner a untrusted al guardar" {
@@ -400,9 +404,8 @@ _seed_search() {
   [[ "$(_origin_of_last)" == "untrusted" ]]
 }
 
-@test "sin SESSION_ID no se aplica el taint de una sesión llamada x" {
+@test "sin SESSION_ID y con una marca vigente, el guardado degrada (fallo cerrado)" {
   _taint "x" "$(date -u +%s)"
-  env -u SESSION_ID "$STORE" save --type discovery --title "SinSid" --content "contenido de prueba t6" --source "user:explicit" >/dev/null
-  rm -f /tmp/savia-memory-taint/x
-  [[ "$(_origin_of_last)" == "owner" ]]
+  env -u SESSION_ID -u CLAUDE_CODE_SESSION_ID "$STORE" save --type discovery --title "SinSid" --content "contenido de prueba t6" --source "user:explicit" >/dev/null
+  [[ "$(_origin_of_last)" == "untrusted" ]]
 }

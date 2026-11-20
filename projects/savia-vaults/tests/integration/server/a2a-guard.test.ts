@@ -68,10 +68,12 @@ describe('SE-424 H2: guarda de A2A', () => {
     expect((await fetch(`${url}/context/note/nota.md?dome=B`)).status).toBe(404);
     expect((await fetch(`${url}/context/note/nota.md?dome=A`)).status).toBe(200);
     const shareB = await fetch(`${url}/share`, { method: 'POST', body: JSON.stringify({ dome: 'B', path: 'x.md', content: 'x' }) });
-    expect(shareB.status).toBe(404);
+    expect(shareB.status).toBe(401); // SE-424 H5: sin credencial, toda escritura es 401 (antes 404 por nivel)
     expect(fs.existsSync(path.join(tmp, 'B', 'x.md'))).toBe(false);
+    // SE-424 H5 («sin escritura sin contraseña»): ni siquiera la N2 admite escritura sin credencial.
     const shareA = await fetch(`${url}/share`, { method: 'POST', body: JSON.stringify({ dome: 'A', path: 'x.md', content: 'x' }) });
-    expect(shareA.status).toBe(200);
+    expect(shareA.status).toBe(401);
+    expect(fs.existsSync(path.join(tmp, 'A', 'x.md'))).toBe(false);
   });
 
   it('AC2: sin CORS abierto; una petición de navegador de otro origen se rechaza (lectura y escritura)', async () => {

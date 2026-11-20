@@ -81,6 +81,10 @@ class H(http.server.BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(n)
         open(out, "ab").write(self.path.encode() + b" " + body + b"\n")
+        # modo auth: como el A2A real desde SE-424 H5, sin credencial válida no se escribe (401)
+        if mode == "auth" and self.headers.get("Authorization", "") != "Bearer " + os.environ.get("FAKE_A2A_TOKEN", "-"):
+            data = b'{"error":"Unauthorized"}'
+            self.send_response(401); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data); return
         if mode == "vacio":
             self.send_response(200); self.send_header("Content-Length", "0"); self.end_headers(); return
         data = b'{"error":"dome cerrado"}' if mode == "error" else b'{"ok":true}'
@@ -181,6 +185,45 @@ notas() { # lista de ficheros por stdin → JSON de notas (una por línea)
   [ "$(wc -l < "$BATS_TEST_TMPDIR/posts.log")" -eq 2 ]
   grep -q '^/share ' "$BATS_TEST_TMPDIR/posts.log"
   [ ! -d "$SLDC_PENDING_DIR" ] || [ -z "$(ls -A "$SLDC_PENDING_DIR")" ]
+}
+
+@test "SE-424 H5: --feed envía SLDC_VAULTS_TOKEN como credencial y el A2A lo acepta" {
+  export FAKE_A2A_TOKEN="tok-falso-$RANDOM"
+  mkwork; start_a2a auth
+  run bash -c "cd '$WORK' && echo CHANGELOG.d/cambio.md | SLDC_VAULTS_TOKEN='$FAKE_A2A_TOKEN' bash '$SCRIPT' --base A --feed"
+  stop_a2a
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK: example-context/releases/cambio.md"* ]]
+  [ ! -d "$SLDC_PENDING_DIR" ] || [ -z "$(ls -A "$SLDC_PENDING_DIR")" ]
+}
+
+@test "SE-424 H5: sin SLDC_VAULTS_TOKEN el A2A responde 401 y la nota queda pendiente (no OK)" {
+  export FAKE_A2A_TOKEN="tok-falso-$RANDOM"
+  mkwork; start_a2a auth
+  run bash -c "cd '$WORK' && echo CHANGELOG.d/cambio.md | env -u SLDC_VAULTS_TOKEN bash '$SCRIPT' --base A --feed"
+  stop_a2a
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"OK:"* ]]
+  [ "$(ls "$SLDC_PENDING_DIR" | wc -l)" -eq 1 ]
+}
+
+@test "SE-424 H5: el token va por stdin de curl, no en su línea de órdenes" {
+  local tok="tok-falso-$RANDOM"
+  mkdir -p "$TESTDIR/bin"
+  cat > "$TESTDIR/bin/curl" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$*" > "$TESTDIR/curl-args"
+cat > "$TESTDIR/curl-stdin"
+echo '{"ok":true}'
+SH
+  chmod +x "$TESTDIR/bin/curl"
+  mkwork
+  run bash -c "cd '$WORK' && echo CHANGELOG.d/cambio.md | PATH='$TESTDIR/bin':\$PATH SLDC_VAULTS_TOKEN='$tok' bash '$SCRIPT' --base A --feed"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK:"* ]]
+  run grep -c "$tok" "$TESTDIR/curl-args"
+  [ "$output" = "0" ]
+  grep -q "Authorization: Bearer $tok" "$TESTDIR/curl-stdin"
 }
 
 @test "--feed con respuesta de error de la cúpula encola la nota como pendiente" {

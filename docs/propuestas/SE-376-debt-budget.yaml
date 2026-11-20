@@ -17,6 +17,17 @@ current_wave: 0            # 0 = baseline freeze (curation aún no ejecutada)
 # comportamiento certificada y mutación verificada (azure-devops-queries, mobile-security-scanner,
 # pr-agent-judge, merge-plan) pero siguen en beta: promoverlas edita .claude/ y queda pendiente de la
 # operadora (112/140 con las 4 en stable, medido en copia temporal). Ratchet intacto (baseline wave 0 = 133).
+# 2026-11-16 (remedición, S03 grupo 3): auditor en vivo 140 skills, 24 Calibrated -> deuda 116/140
+# (sin cambio: las 5 skills tratadas siguen en beta y promoverlas edita .claude/, pendiente de la
+# operadora). Con tls-security-checker, network-recon, dynamic-web-tester, tier3-probes y
+# org-registrar en stable la deuda sería 111/140, medido en copia temporal con SKILL_AUDIT_ROOT.
+# Las tres primeras ya tenían pruebas profundas bajo otro nombre y no contaban; ahora son
+# tests/test-<skill>.bats. Ratchet intacto (baseline wave 0 = 133).
+# 2026-11-17 (remedición, S03 grupo 4): auditor en vivo 140 skills, 24 Calibrated -> deuda 116/140
+# (sin cambio: promover a stable edita .claude/, pendiente de la operadora). Con harness-architecture
+# y rbac-management en stable la deuda sería 114/140, medido en copia temporal con SKILL_AUDIT_ROOT.
+# verification-lattice queda sin tratar (bloqueo del juez de responsabilidad al escribir sus tests).
+# Ratchet intacto (baseline wave 0 = 133).
 waves:
   0: 133                   # baseline +1 2026-09-05 (social-linkedin nueva, no calibrada aun)
   1: 95                    # tras curation wave 1 (DELETE de stubs + REFACTOR rápidos)
