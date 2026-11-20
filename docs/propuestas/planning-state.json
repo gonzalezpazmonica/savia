@@ -1809,7 +1809,6 @@
         "phase": "A",
         "priority": "P0",
         "initiatives": [
-          "SE-493",
           "SE-498",
           "SE-508",
           "SE-496",
@@ -1821,14 +1820,21 @@
           "SE-494"
         ],
         "title": "Fundamentos de efectos y autoridad: construir en orden",
-        "action": "Construir en este orden: SE-488 (aprobación por fusión), SE-508 (control previo de MCP y WebFetch: hoy no hay ninguno, arranca en observación), SE-493 (ledger de efectos), SE-498 (STOP y revocación), SE-496 (contrato de delegación). SE-512 se aprueba por el camino de SE-488, sin tercer formato de firma. SE-491, SE-499 y SE-494 siguen por decidir; SE-502 queda aplazada hasta tener las tres primeras.",
+        "action": "Construir en este orden: SE-488 (aprobación por fusión), SE-508 (control previo de MCP y WebFetch: hoy no hay ninguno, arranca en observación), SE-498 (STOP y revocación), SE-496 (contrato de delegación). SE-512 se aprueba por el camino de SE-488, sin tercer formato de firma. SE-491, SE-499 y SE-494 siguen por decidir; SE-502 queda aplazada hasta tener las tres primeras.",
         "necessity": "alta",
         "urgency": "alta",
         "value": "alto",
-        "dependency_value": "Savia Viva (SE-513 S3, SE-515 S3–S4), el sprint nocturno y el modo mediado de Space dependen de este bloque",
+        "dependency_value": "Savia Viva (SE-515 S3–S4), el sprint nocturno y el modo mediado de Space dependen de este bloque",
         "effort": "cinco specs medianas en serie; cuatro decisiones pendientes",
-        "prerequisites": "SE-493, SE-496, SE-498 y SE-508 aprobadas (2026-11-09, escenas confirmadas); falta el prototipo S0 de cada una antes de S1. Una en curso cada vez; riesgo alto: revisión humana del PR concreto. SE-512, SE-491, SE-499 y SE-494 siguen PROPOSED.",
-        "done": "Cada spec decidida; las aprobadas con sus AC y pruebas negativas en los dos frontends; ninguna ruta de efecto nueva sin su gate."
+        "prerequisites": "SE-496, SE-498 y SE-508 aprobadas (2026-11-09, escenas confirmadas); falta el prototipo S0 de cada una antes de S1. Una en curso cada vez; riesgo alto: revisión humana del PR concreto. SE-512, SE-491, SE-499 y SE-494 siguen PROPOSED.",
+        "done": "Cada spec decidida; las aprobadas con sus AC y pruebas negativas en los dos frontends; ninguna ruta de efecto nueva sin su gate.",
+        "parked": [
+          {
+            "slices": "SE-498 F3 y R7",
+            "blocked_by": "SE-493",
+            "reason": "decisión de la operadora 2026-11-19: rediseñar a partir del 26-11 sobre el registro existente"
+          }
+        ]
       },
       {
         "id": "S27",
@@ -1908,18 +1914,17 @@
         "phase": "A",
         "priority": "P1",
         "initiatives": [
-          "SE-513",
           "SE-514",
           "SE-515"
         ],
         "title": "Savia Viva A0: auditoría del estado real y sondas, sin cambios de autoridad",
-        "action": "Slice S0 de las tres specs de Savia Viva R6: matriz de cobertura de rutas de efecto por frontend, desglose del recall por criterio, tabla de soporte de cambio en caliente por harness, medición de peticiones a la persona y fixtures de las sondas P0–P15. Solo lectura y fixtures.",
+        "action": "Slice S0 de las dos specs vigentes de Savia Viva R6 (SE-514 y SE-515): matriz de cobertura de rutas de efecto por frontend, desglose del recall por criterio, tabla de soporte de cambio en caliente por harness, medición de peticiones a la persona y fixtures de las sondas P0–P15. Solo lectura y fixtures.",
         "necessity": "alta",
         "urgency": "media",
         "value": "alto",
         "dependency_value": "decide si el resto de Savia Viva se construye, se recorta o se descarta",
-        "effort": "tres slices pequeños de lectura",
-        "prerequisites": "SE-513, SE-514 y SE-515 aprobadas (2026-11-09) con escenas confirmadas; S0 es solo lectura y fixtures, más los prototipos de SE-513 y SE-514. No ocupa hueco WIP.",
+        "effort": "dos slices pequeños de lectura",
+        "prerequisites": "SE-514 y SE-515 aprobadas (2026-11-09) con escenas confirmadas; S0 es solo lectura y fixtures, más el prototipo de SE-514. No ocupa hueco WIP.",
         "done": "Informe con observado, inferido y no verificado, commits y hashes fijados, dominio piloto elegido con tres casos y tres contraejemplos, y condiciones de NO-GO escritas antes de medir."
       },
       {
@@ -2013,18 +2018,17 @@
         "phase": "C",
         "priority": "P1",
         "initiatives": [
-          "SE-515",
-          "SE-513"
+          "SE-515"
         ],
-        "title": "Savia Viva: recall trazado, vinculación en sombra y admisión duradera",
-        "action": "SE-515 S1–S2: prueba de entrega del recall, métrica marcada como no medida cuando usa valores fijos, resolvedor de aplicabilidad por metadatos en sombra y evaluación en casos reservados. SE-513 S1–S2: admisión y salida en una transacción y promoción por regla.",
+        "title": "Savia Viva: recall trazado y vinculación en sombra",
+        "action": "SE-515 S1–S2: prueba de entrega del recall, métrica marcada como no medida cuando usa valores fijos, resolvedor de aplicabilidad por metadatos en sombra y evaluación en casos reservados.",
         "necessity": "media",
         "urgency": "baja",
         "value": "por demostrar",
         "dependency_value": "primera evidencia de si una lección cambia una decisión",
         "effort": "slices pequeños; el experimento manda",
         "prerequisites": "S24 publicada con resultado que lo justifique; S28 con el esquema decidido; cada slice de SE-515 a partir de S1 necesita su propia aprobación, según la spec.",
-        "done": "Ablación con y sin recall publicada (cero cambios es resultado válido); GO, NO-GO o retirada de la vinculación orientativa; cero entradas admitidas perdidas bajo cortes."
+        "done": "Ablación con y sin recall publicada (cero cambios es resultado válido); GO, NO-GO o retirada de la vinculación orientativa."
       },
       {
         "id": "S05",
@@ -2087,7 +2091,14 @@
         "dependency_value": "protege el recurso más escaso; SE-515 con revisión obligatoria necesita esta cola",
         "effort": "slices pequeños independientes",
         "prerequisites": "Aprobación de SE-492 y SE-507 por la operadora, con escenas confirmadas (SE-505). SE-514 ya aprobada (2026-11-09): su S1 va después de S22.",
-        "done": "Peticiones a la persona medidas antes y después; ningún permiso inferido del silencio; cada spec con sus negativos."
+        "done": "Peticiones a la persona medidas antes y después; ningún permiso inferido del silencio; cada spec con sus negativos.",
+        "parked": [
+          {
+            "slices": "SE-514 S2",
+            "blocked_by": "SE-513",
+            "reason": "decisión de la operadora 2026-11-19: rediseñar a partir del 26-11 sobre el registro existente"
+          }
+        ]
       },
       {
         "id": "S31",
@@ -2208,8 +2219,15 @@
         "value": "por demostrar",
         "dependency_value": "convierte una lección en garantía comprobable, o lo descarta con datos",
         "effort": "un dominio; medio",
-        "prerequisites": "S29 con GO; S23 con SE-493 y SE-498 implementadas en la ruta piloto; S28 con aprobación auténtica disponible.",
-        "done": "El efecto inválido se bloquea en la ruta cubierta aunque el modelo ignore la lección; garantía declarada por ruta; canario con retirada."
+        "prerequisites": "S29 con GO; S23 con SE-498 implementada en la ruta piloto (el libro de efectos está retirado: SE-515 S3–S4 queda aparcada por decisión de la operadora); S28 con aprobación auténtica disponible.",
+        "done": "El efecto inválido se bloquea en la ruta cubierta aunque el modelo ignore la lección; garantía declarada por ruta; canario con retirada.",
+        "parked": [
+          {
+            "slices": "SE-515 S3–S4",
+            "blocked_by": "SE-493",
+            "reason": "decisión de la operadora 2026-11-19: rediseñar a partir del 26-11 sobre el registro existente"
+          }
+        ]
       },
       {
         "id": "S09",
