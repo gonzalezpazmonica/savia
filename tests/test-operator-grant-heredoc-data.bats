@@ -103,3 +103,109 @@ assert_block() {
   run guard $'cat > n.md <<\'EOF\'\ncp x config/*'
   assert_block
 }
+
+# --- Revisión de #1628: formas que la primera poda dejaba pasar -------------
+
+@test "block: heredoc sin comillas delante del entrecomillado en la misma línea" {
+  run guard $'cat <<EOF <<\'X\'\n$(sed -i s/a/b/ config/*)\nEOF\nX'
+  assert_block
+}
+
+@test "block: cat escribe un .py y python3 lo ejecuta después" {
+  run guard $'cat > s.py <<\'EOF\'\nimport os; g = "config/*"; os.system("tee " + g + " < x")\nEOF\npython3 s.py'
+  assert_block
+}
+
+@test "block: cat escribe un .js y node lo ejecuta después" {
+  run guard $'cat > s.js <<\'EOF\'\nconst g = "config/*"; require("child_process").execSync("tee " + g + " < x")\nEOF\nnode s.js'
+  assert_block
+}
+
+@test "block: cat escribe un script y se ejecuta por su ruta" {
+  run guard $'cat > s <<\'EOF\'\ncp x config/*\nEOF\n./s'
+  assert_block
+}
+
+@test "block: perl ya no es lector de datos (operador glob <config/*>)" {
+  run guard $'perl - <<\'PL\'\nfor (<config/*>) { open F, ">$_" }\nPL'
+  assert_block
+}
+
+@test "block: ruby ya no es lector de datos (%x)" {
+  run guard $'ruby - <<\'RB\'\n%x(tee config/* < x)\nRB'
+  assert_block
+}
+
+@test "block: python llega a os.system por getattr y __import__" {
+  run guard $'python3 - <<\'PY\'\ng = "config/*"; getattr(__import__("o"+"s"), "sys"+"tem")("tee " + g + " < x")\nPY'
+  assert_block
+}
+
+@test "block: python importa un módulo fuera de la lista cerrada" {
+  run guard $'python3 - <<\'PY\'\nimport tarfile\nprint("config/*")\nPY'
+  assert_block
+}
+
+@test "block: python3 con un script como argumento no lee el cuerpo como dato" {
+  run guard $'python3 run.py <<\'PY\'\nconfig/*\nPY'
+  assert_block
+}
+
+@test "block: lector suplantado por ruta (./cat)" {
+  run guard $'./cat > n.md <<\'EOF\'\ncp x config/*\nEOF'
+  assert_block
+}
+
+@test "block: lector suplantado con PATH delante" {
+  run guard $'PATH=.:$PATH cat > n.md <<\'EOF\'\ncp x config/*\nEOF'
+  assert_block
+}
+
+@test "block: python3 por ruta absoluta no es el lector desnudo" {
+  run guard $'/tmp/x/python3 - <<\'PY\'\nprint("config/*")\nPY'
+  assert_block
+}
+
+@test "allow: python3 con import de la lista cerrada y comodín como dato" {
+  run guard $'python3 - <<\'PY\'\nimport json\nprint(json.dumps({"g": "config/*"}))\nPY'
+  [ "$status" -eq 0 ]
+}
+
+# --- Medición: el código de motivo no depende del texto del mensaje ---------
+
+last_reason() {
+  tail -n1 "$REPO/output/guard-decisions/operator-grant.jsonl" | jq -r '.verdict + " " + .reason'
+}
+
+raw_guard() {
+  printf '%s' "$1" | bash "$REPO/scripts/operator-grant.sh" guard
+}
+
+@test "medición: cada decisión registra su código de motivo" {
+  run guard $'cat > n.md <<\'EOF\'\nconfig/*\nEOF'
+  [ "$status" -eq 0 ]
+  [ "$(last_reason)" = "allow bash-heredoc-dato" ]
+  run guard 'ls scripts'
+  [ "$status" -eq 0 ]
+  [ "$(last_reason)" = "allow bash-sin-firmantes" ]
+  run guard 'cp x config/*'
+  assert_block
+  [ "$(last_reason)" = "block firmantes-destino" ]
+  run raw_guard 'no json'
+  [ "$status" -eq 2 ]
+  [ "$(last_reason)" = "block evento-no-evaluable" ]
+  run raw_guard '{"tool_name":"Write","tool_input":{"file_path":"n.md"}}'
+  [ "$status" -eq 0 ]
+  [ "$(last_reason)" = "allow fichero-ajeno" ]
+  run raw_guard '{"tool_name":"Read","tool_input":{"file_path":"n.md"}}'
+  [ "$status" -eq 0 ]
+  [ "$(last_reason)" = "allow herramienta-sin-ruta" ]
+  [ "$(wc -l < "$REPO/output/guard-decisions/operator-grant.jsonl")" -eq 6 ]
+}
+
+@test "medición: el código de motivo no sale por stdout del hook" {
+  run bash -c 'printf "%s" "$1" | bash "$2" guard 2>/dev/null' _ \
+    '{"tool_name":"Bash","tool_input":{"command":"ls"}}' "$REPO/scripts/operator-grant.sh"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
