@@ -43,9 +43,14 @@ make_skill() {
 
 audit() { SAVIA_SKILLS_DIR="$SK" run bash "$REPO/$SCRIPT" "$@"; }
 
+# El generador congela --apply si existe <raiz>/data/.cache-session-active (SE-371), y ese
+# marcador lo crea el hook de una sesion viva en el repo real: la suite fallaba dentro de
+# una sesion de Claude y pasaba en CI. Se ejecuta una copia en una raiz sintetica sin marcador.
 gen() {
+  mkdir -p "$WORK/fakeroot/scripts"
+  cp "$REPO/$GENERATOR" "$WORK/fakeroot/scripts/skills-md-generate.sh"
   PROJECT_ROOT="$WORK" SKILLS_DIR="$SK" SKILLS_MD="$WORK/SKILLS.md" \
-    SKILLS_MANIFEST="$WORK/manifest.json" run bash "$REPO/$GENERATOR" "$@"
+    SKILLS_MANIFEST="$WORK/manifest.json" run bash "$WORK/fakeroot/scripts/skills-md-generate.sh" "$@"
 }
 
 # ── Seguridad del objetivo ───────────────────────────────────────────────────
@@ -270,6 +275,23 @@ gen() {
   [ ! -e "$WORK/SKILLS.md" ]
 }
 
+@test "generator: el marcador de sesion activa (SE-371) bloquea --apply y no escribe nada" {
+  make_skill marcador 'description: "Usar cuando hay marcador de sesion."'
+  mkdir -p "$WORK/fakeroot/data"
+  : > "$WORK/fakeroot/data/.cache-session-active"
+  gen --apply
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"sesión activa"* ]]
+  [ ! -e "$WORK/SKILLS.md" ]
+}
+
+@test "generator: sin marcador ni variable --apply escribe SKILLS.md (negativo del bloqueo)" {
+  make_skill libre 'description: "Usar cuando no hay sesion activa."'
+  gen --apply
+  [ "$status" -eq 0 ]
+  [ -f "$WORK/SKILLS.md" ]
+}
+
 # ── G14: pre-push invoca al auditor sobre las skills modificadas ─────────────
 
 make_fixture_repo() {
@@ -392,4 +414,192 @@ make_fixture_repo() {
   gen --check --manifest
   [ "$status" -eq 1 ]
   [[ "$output" == *"drift detected in skills-manifest.json"* ]]
+}
+
+# ── SE-376 S03 grupo 7: mutantes del auditor que sobrevivían ─────────────────
+
+# raw_skill <name> <contenido-SKILL.md>: SKILL.md literal + DOMAIN.md valido
+raw_skill() {
+  mkdir -p "$SK/$1"
+  printf '%s\n' "$2" > "$SK/$1/SKILL.md"
+  printf '# Dominio\n\nPor que existe.\nConceptos.\nLimites.\n' > "$SK/$1/DOMAIN.md"
+}
+
+# padded_skill <name> <total-lines>: SKILL.md valido con exactamente N lineas
+padded_skill() {
+  make_skill "$1" 'description: "Usar cuando se prueba el limite de lineas."' 0
+  while [ "$(wc -l < "$SK/$1/SKILL.md")" -lt "$2" ]; do echo "relleno" >> "$SK/$1/SKILL.md"; done
+}
+
+@test "auditor: unknown flag is a usage error with exit 1 and a message" {
+  run bash -c 'SAVIA_SKILLS_DIR="$1" bash "$2/$3" --nope' _ "$SK" "$REPO" "$SCRIPT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Unknown flag: --nope"* ]]
+}
+
+@test "auditor: description of exactly 20 characters does not warn, 19 does" {
+  make_skill veinte 'description: "Usar cuando abcdefgh"'
+  audit --skill veinte
+  [[ "$output" != *"< 20 chars"* ]]
+  make_skill diecinueve 'description: "Usar cuando abcdefg"'
+  audit --skill diecinueve
+  [[ "$output" == *"< 20 chars"* ]]
+}
+
+@test "auditor: description key in the body does not count as frontmatter description" {
+  raw_skill sindesc "$(printf -- '---\nname: sindesc\n---\n\n# Skill\n\ndescription: texto en el cuerpo, no en el frontmatter\nLee scripts/ejemplo.sh y mas contenido.')"
+  audit --skill sindesc
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"missing frontmatter 'description'"* ]]
+}
+
+@test "auditor: empty name reports only the name, not a phantom missing description" {
+  make_skill soloname 'description: "Usar cuando solo falta el nombre del frontmatter."'
+  sed -i 's/^name: soloname$/name:/' "$SK/soloname/SKILL.md"
+  audit --skill soloname
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"missing frontmatter 'name'"* ]]
+  [[ "$output" != *"missing frontmatter 'description'"* ]]
+}
+
+@test "auditor: SKILL.md of exactly 100 lines is OK, 150 is WARN, 151 is FAIL" {
+  padded_skill l100 100
+  audit --skill l100
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"l100"*" OK "* ]]
+  padded_skill l150 150
+  audit --skill l150
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"l150"*" WARN "*"> 100"* ]]
+  padded_skill l151 151
+  audit --skill l151
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"l151"*" FAIL "*"> 150"* ]]
+}
+
+@test "auditor: skill without any file path reference warns but exits 0" {
+  raw_skill sinruta "$(printf -- '---\nname: sinruta\ndescription: "Usar cuando no hay ninguna referencia a ficheros."\n---\n\n# Skill\n\nTexto largo sin ninguna ruta de fichero en todo el cuerpo.')"
+  audit --skill sinruta
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"sinruta"*" WARN "*"no file path reference"* ]]
+}
+
+@test "auditor: a FAIL is never downgraded to WARN by a later warning" {
+  raw_skill falla "$(printf -- '---\nname:\ndescription: "Usar cuando falla y ademas no hay ruta alguna."\n---\n\n# Skill\n\nTexto largo sin ninguna ruta de fichero en todo el cuerpo.')"
+  audit --skill falla
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"falla"*" FAIL "* ]]
+  [[ "$output" == *"no file path reference"* ]]
+}
+
+@test "auditor: empty consumes/produces in frontmatter fail (4 variants)" {
+  local k
+  for k in 'consumes: []' 'produces: []' 'consumes: ""' 'produces: ""'; do
+    raw_skill vacio "$(printf -- '---\nname: vacio\ndescription: "Usar cuando se declara una lista vacia."\n%s\n---\n\n# Skill\n\nLee scripts/ejemplo.sh y mas contenido.' "$k")"
+    audit --skill vacio
+    [ "$status" -eq 1 ] || { echo "no fallo con: $k"; false; }
+    [[ "$output" == *"${k%%:*} is empty"* ]]
+  done
+}
+
+@test "auditor: empty savia.consumes/savia.produces strings fail" {
+  local k
+  for k in consumes produces; do
+    raw_skill vacio "$(printf -- '---\nname: vacio\ndescription: "Usar cuando se declara una lista vacia."\nmetadata:\n  savia.%s: ""\n---\n\n# Skill\n\nLee scripts/ejemplo.sh y mas contenido.' "$k")"
+    audit --skill vacio
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"savia.$k is empty string"* ]]
+  done
+}
+
+@test "auditor: non-empty consumes passes, and consumes in the body is not frontmatter" {
+  raw_skill lleno "$(printf -- '---\nname: lleno\ndescription: "Usar cuando se declara una lista con datos."\nconsumes: [spec]\n---\n\n# Skill\n\nconsumes: []\nproduces: ""\nLee scripts/ejemplo.sh y mas contenido.')"
+  audit --skill lleno
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"is empty"* ]]
+}
+
+@test "auditor: consumes at file line 41 is read, at line 42 is ignored (cap of 40+1 lines)" {
+  local pad
+  pad="$(printf 'x%s: a\n' $(seq 1 37))"
+  raw_skill l41 "$(printf -- '---\nname: l41\ndescription: "Usar cuando se prueba el limite del frontmatter."\n%s\nconsumes: []\n---\n\n# Skill\n\nLee scripts/ejemplo.sh y mas contenido.' "$pad")"
+  [ "$(grep -n '^consumes' "$SK/l41/SKILL.md" | cut -d: -f1)" -eq 41 ]
+  audit --skill l41
+  [ "$status" -eq 1 ]
+  raw_skill l42 "$(printf -- '---\nname: l42\ndescription: "Usar cuando se prueba el limite del frontmatter."\n%s\nxx: a\nconsumes: []\n---\n\n# Skill\n\nLee scripts/ejemplo.sh y mas contenido.' "$pad")"
+  [ "$(grep -n '^consumes' "$SK/l42/SKILL.md" | cut -d: -f1)" -eq 42 ]
+  audit --skill l42
+  [ "$status" -eq 0 ]
+}
+
+@test "auditor: body of exactly 20 non-whitespace characters passes, 19 fails" {
+  raw_skill b20 "$(printf -- '---\nname: b20\ndescription: "Usar cuando se prueba el cuerpo minimo."\n---\n\nabcdefghij abcde/fghi')"
+  audit --skill b20
+  [[ "$output" != *"body too short"* ]]
+  raw_skill b19 "$(printf -- '---\nname: b19\ndescription: "Usar cuando se prueba el cuerpo minimo."\n---\n\nabcdefghij abcde/fgh')"
+  audit --skill b19
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"body too short"* ]]
+}
+
+@test "auditor: DOMAIN.md of 3 lines fails, 4 lines passes" {
+  make_skill dom3 'description: "Usar cuando se prueba el dominio minimo."'
+  printf 'a\nb\nc\n' > "$SK/dom3/DOMAIN.md"
+  audit --skill dom3
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"empty or too short (3 lines, min 4)"* ]]
+  printf 'a\nb\nc\nd\n' > "$SK/dom3/DOMAIN.md"
+  audit --skill dom3
+  [ "$status" -eq 0 ]
+}
+
+@test "auditor: a clean skill shows '-' as reason and the summary counts each state" {
+  make_skill ok 'description: "Usar cuando todo esta correcto en la skill."'
+  audit --skill ok
+  [[ "$output" =~ ok[[:space:]]+OK[[:space:]]+-($|$'\n') ]]
+  make_skill aviso 'description: "Usar cuando hay un aviso de longitud."' 110
+  make_skill roto 'description: "Usar cuando esta roto."'
+  mv "$SK/roto/DOMAIN.md" "$WORK/roto-domain.md"
+  audit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"PASS: 1 | WARN: 1 | FAIL: 1 | TOTAL: 3"* ]]
+}
+
+# ── SE-376 S03 grupo 7: mutantes del generador que sobrevivían ───────────────
+
+@test "generator: manifest of two skills without name/maturity is valid JSON with fallbacks" {
+  local d
+  for d in alfa beta; do
+    mkdir -p "$SK/$d"
+    printf -- '---\ndescription: "Usar cuando falta el nombre en %s."\n---\n\n# Skill\n' "$d" > "$SK/$d/SKILL.md"
+  done
+  gen --apply --manifest
+  [ "$status" -eq 0 ]
+  run python3 -c '
+import json, sys
+m = json.load(open(sys.argv[1]))["skills"]
+assert sorted(m) == ["alfa", "beta"], sorted(m)
+assert all(v["maturity"] == "unknown" for v in m.values()), m
+'  "$WORK/manifest.json"
+  [ "$status" -eq 0 ]
+}
+
+@test "generator: --apply into a missing directory fails with exit 1 and writes nothing" {
+  make_skill uno 'description: "Usar cuando el destino no existe."'
+  mkdir -p "$WORK/fakeroot/scripts"
+  cp "$REPO/$GENERATOR" "$WORK/fakeroot/scripts/skills-md-generate.sh"
+  SKILLS_MD="$WORK/nodir/SKILLS.md" PROJECT_ROOT="$WORK" SKILLS_DIR="$SK" \
+    run bash "$WORK/fakeroot/scripts/skills-md-generate.sh" --apply
+  [ "$status" -eq 1 ]
+  [ ! -e "$WORK/nodir" ]
+}
+
+@test "generator: unwritable manifest destination fails with exit 1 after SKILLS.md" {
+  make_skill uno 'description: "Usar cuando el manifiesto no se puede escribir."'
+  mkdir -p "$WORK/fakeroot/scripts"
+  cp "$REPO/$GENERATOR" "$WORK/fakeroot/scripts/skills-md-generate.sh"
+  PROJECT_ROOT="$WORK" SKILLS_DIR="$SK" SKILLS_MD="$WORK/SKILLS.md" SKILLS_MANIFEST="$WORK/nodir/m.json" \
+    run bash "$WORK/fakeroot/scripts/skills-md-generate.sh" --apply --manifest
+  [ "$status" -eq 1 ]
+  [ ! -e "$WORK/nodir" ]
 }
