@@ -75,3 +75,21 @@ Verificación completa: las cuatro suites `test-merge-sprint*.bats` ejecutan
 no hay commits; no certifica los cambios locales sin versionar.
 El cierre `validate-ci-local.sh --clean-state` devuelve 1: 15 comprobaciones
 pasan y tres fallan (dos de derivados y cobertura L4 no evaluable).
+
+## Implementación (encargo ms-hold-impl)
+
+Cambio en `scripts/merge-sprint.sh`, sin tocar los tests de Codex ni el formato de `reviews.jsonl`.
+Nueva función `hold_blocks <pr> <sha_usado> <cabeza_actual>`, que se consulta en tres puntos:
+el plan (tras elegir la revisión usada), la entrada de run (antes de re-sincronizar) y `try_merge`
+(justo antes de `merge_at`, sobre la cabeza que se va a fusionar).
+
+Regla: retiene un HOLD de la PR sobre la cabeza actual o sobre el sha usado, y cualquier otro HOLD de la
+PR que no tenga detrás, en el orden del registro, un APPROVE íntegro del mismo rol sobre el sha usado.
+Si el registro da error, también retiene.
+
+Discrepancias y decisiones:
+- La regla no exige que el sha del HOLD sea equivalente a la cabeza. `head_equivalent` devuelve 1 tanto si
+  hay error como si no hay equivalencia, y usarla aquí abriría el gate ante un error. Consecuencia: un HOLD
+  tardío sobre una cabeza vieja y no equivalente también retiene, hasta que se registre un APPROVE nuevo.
+- Con los tests de Codex, quitar la comprobación de entrada de run no hace caer ningún test, porque
+  `try_merge` la cubre. El test `HOLD-impl run entrada` lo separa: la PR retenida no se re-sincroniza.
