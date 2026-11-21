@@ -27,7 +27,7 @@ src/federation/a2a-client.ts        28
 src/federation/audit-logger.ts      28
 src/federation/cache.ts             26
 src/federation/circuit-breaker.ts   39
-src/federation/hash-verify.ts       17
+src/federation/hash-verify.ts       17   (retirado 2026-11-20, SE-287 AC-4.5)
 src/federation/registry.ts          46
 src/federation/search.ts            60
 src/federation/types.ts             19
