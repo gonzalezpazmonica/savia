@@ -597,7 +597,10 @@ def epoch_warnings(ctx):
     if not checks:
         w.append("EPOCH_CHECK_NOT_REQUIRED")
     elif not any(c.get("integration_id") == ACTIONS_APP_ID for c in checks):
-        # Solo por nombre, otro workflow de una PR puede publicar un job verde con el mismo nombre.
+        # Sin integration_id, cualquier app con permiso de checks puede publicar un verde con ese nombre. Fijar la app
+        # de GitHub Actions lo reduce a workflows de Actions, pero NO impide que un workflow `on: pull_request` nuevo o
+        # modificado de la propia PR publique un job con el mismo nombre: eso lo frena solo que tocar
+        # .github/workflows/ sea tier 4 (fusión manual). Este aviso no es garantía de origen del check.
         w.append("EPOCH_CHECK_SOURCE_UNPINNED")
     return w
 
@@ -750,20 +753,32 @@ def known_indeterminate(ctx):
     Los descarga un reconcile posterior que los clasifique como resueltos (en cualquier ámbito: la clase de un efecto
     no depende del ámbito desde el que se mira) o un resume que los acepte expresamente. Renovar una parada (nuevo
     stop_seq) o levantar otra no aporta evidencia sobre el efecto y no lo descarga.
+
+    La aceptación es por ámbito: aceptar e1 al reanudar executor:a no lo descarga de principal:p si ese ámbito también
+    lo dejó incierto. Se lleva el par (efecto, ámbito) y el efecto cuenta mientras le quede algún ámbito.
     """
-    pending = set()
+    pending = {}
     for r in ctx.journal or []:
         if r.get("op") == "reconcile":
             for c in r.get("scopes", []):
                 if not isinstance(c, dict):
                     continue
-                pending -= {x for x in c.get("resolved", []) if isinstance(x, str)}
+                for x in c.get("resolved", []):
+                    if isinstance(x, str):
+                        pending.pop(x, None)
             for c in r.get("scopes", []):
                 if isinstance(c, dict):
-                    pending |= {x for x in c.get("indeterminate", []) if isinstance(x, str)}
-        elif r.get("op") == "resume":
-            pending -= {a.get("effect_id") for a in r.get("accepted", []) if isinstance(a, dict)}
-    return pending
+                    sc = c.get("scope") if isinstance(c.get("scope"), str) else "?"
+                    for x in c.get("indeterminate", []):
+                        if isinstance(x, str):
+                            pending.setdefault(x, set()).add(sc)
+        elif r.get("op") == "resume" and isinstance(r.get("scope"), str):
+            for a in r.get("accepted", []):
+                if isinstance(a, dict) and a.get("effect_id") in pending:
+                    pending[a["effect_id"]].discard(r["scope"])
+                    if not pending[a["effect_id"]]:
+                        del pending[a["effect_id"]]
+    return set(pending)
 
 
 def covers(scope, rec):
@@ -1181,7 +1196,10 @@ def parser():
     rs = sub.add_parser("resume")
     rs.add_argument("--scope")
     rs.add_argument("--via-pr", action="store_true")
-    sub.add_parser("publish-epoch")
+    sub.add_parser("publish-epoch", description=(
+        "Prepara la rama agent/control-epoch-<N> y abre la PR. Sus git se ejecutan sin GIT_CONFIG_GLOBAL ni "
+        "GIT_CONFIG_SYSTEM (se descartan al arrancar): identidad, credential helper o safe.directory deben estar en "
+        "~/.gitconfig o en el config del repo, no en un fichero apuntado por esas variables."))
     return p
 
 

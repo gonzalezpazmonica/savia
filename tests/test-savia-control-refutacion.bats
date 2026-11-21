@@ -330,6 +330,31 @@ seq_of() { jget "$SAVIA_CONTROL_DIR/state.json" "d['stops']['$1']['stop_seq']"; 
   run sc reconcile; echo "$output"; [ "$status" -eq 0 ]
 }
 
+@test "d82d4d5 correctness P2-1: aceptar un incierto al reanudar un ámbito no lo descarga del otro ámbito parado" {
+  ledger '{"effect_id":"e1","executor":"a","principal":"p","state":"DISPATCHED"}'
+  operator_setup
+  sc pause --scope executor:a --reason x; sc pause --scope principal:p --reason y
+  run sc reconcile; [ "$status" -eq 5 ]
+  approve executor:a 0 "$(seq_of executor:a)" '["e1"]'
+  run sc resume --scope executor:a --via-pr; echo "$output"; [ "$status" -eq 0 ]
+  mv "$SAVIA_EFFECT_LEDGER" "$T/ledger.guardado"
+  run sc reconcile; echo "$output"; [ "$status" -eq 2 ]; [[ "$output" == *LEDGER_UNREADABLE* ]]; [[ "$output" == *e1* ]]
+}
+
+@test "d82d4d5 correctness P2-1 (negativo): aceptado en los dos ámbitos, la pérdida del ledger ya no bloquea" {
+  ledger '{"effect_id":"e1","executor":"a","principal":"p","state":"DISPATCHED"}'
+  operator_setup
+  sc pause --scope executor:a --reason x; sc pause --scope principal:p --reason y
+  run sc reconcile; [ "$status" -eq 5 ]
+  approve executor:a 0 "$(seq_of executor:a)" '["e1"]'
+  run sc resume --scope executor:a --via-pr; [ "$status" -eq 0 ]
+  approve principal:p 0 "$(seq_of principal:p)" '["e1"]'
+  run sc resume --scope principal:p --via-pr; echo "$output"; [ "$status" -eq 0 ]
+  mv "$SAVIA_EFFECT_LEDGER" "$T/ledger.guardado"
+  sc pause --scope executor:a --reason otra
+  run sc reconcile; echo "$output"; [ "$status" -eq 0 ]
+}
+
 @test "refutación P1-3: un ejecutor null posterior no saca el efecto del ámbito" {
   ledger '{"effect_id":"e1","executor":"a","principal":"p","state":"DISPATCHED"}'
   sc pause --scope executor:a --reason x
