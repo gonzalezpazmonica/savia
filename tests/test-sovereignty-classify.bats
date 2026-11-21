@@ -104,7 +104,12 @@ setup() {
 @test "missing prompt file → ambiguous with error, never a weaker fallback prompt" {
   rm -f "$CLAUDE_PROJECT_DIR/config/classifier/prompt-v3.txt"
   printf '%s' "texto de mas de cincuenta caracteres que obligaria a consultar al modelo local" > "$TEST_INPUT"
-  run bash scripts/sovereignty-classify.sh --no-cache < "$TEST_INPUT"
+  # El script comprueba antes que Ollama responde; sin un Ollama local el resultado sería
+  # ollama_unavailable y no se llegaría a la rama que se prueba. Un curl falso lo simula alcanzable.
+  mkdir -p "$BATS_TEST_TMPDIR/fakebin"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$BATS_TEST_TMPDIR/fakebin/curl"
+  chmod +x "$BATS_TEST_TMPDIR/fakebin/curl"
+  PATH="$BATS_TEST_TMPDIR/fakebin:$PATH" run bash scripts/sovereignty-classify.sh --no-cache < "$TEST_INPUT"
   [ "$status" -eq 0 ]
   [ "$(echo "$output" | jq -r .label)" = "ambiguous" ]
   [ "$(echo "$output" | jq -r .error)" = "prompt_missing" ]

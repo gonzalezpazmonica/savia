@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# nightly: serial (comprueba que no modifica nada del árbol; otra suite escribiendo a la vez lo falsea)
 # Ref: SE-028/041/056 + unified runner
 SCRIPT="scripts/security-audit-all.sh"
 

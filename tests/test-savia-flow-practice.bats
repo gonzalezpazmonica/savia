@@ -204,11 +204,18 @@ use_clone() {
       mkdir -p "$TMPDIR_TEST/h-$c-$i/.pm-workspace"
       cp "$TMPDIR_TEST/cfg-$c" "$TMPDIR_TEST/h-$c-$i/.pm-workspace/company-repo"
       cp "$HOME/.gitconfig" "$TMPDIR_TEST/h-$c-$i/.gitconfig"
-      HOME="$TMPDIR_TEST/h-$c-$i" bash "$ROOT/$SCRIPT" log alice "T-$c$i" 1 n >/dev/null 2>&1 &
+      HOME="$TMPDIR_TEST/h-$c-$i" bash "$ROOT/$SCRIPT" log alice "T-$c$i" 1 n >/dev/null 2>"$TMPDIR_TEST/err-$c$i" &
       pids+=("$!")
     done
   done
-  for p in "${pids[@]}"; do wait "$p"; done
+  # Cada proceso conserva su stderr: si uno falla, la causa sale en el informe del test
+  # (en el runner de CI fallaba sin dejar rastro).
+  local failed=0
+  for p in "${pids[@]}"; do wait "$p" || failed=$((failed + 1)); done
+  if [ "$failed" -ne 0 ]; then
+    for f in "$TMPDIR_TEST"/err-*; do [ -s "$f" ] && { echo "== $(basename "$f")"; cat "$f"; } >&3; done
+  fi
+  [ "$failed" -eq 0 ]
   run show user/alice "flow/timesheet/$MONTH.md"
   local n; n=$(echo "$output" | grep -E "\| T-[ab][123] \|" | cut -d'|' -f2 | sort -u | wc -l)
   [ "$n" -eq 6 ]
