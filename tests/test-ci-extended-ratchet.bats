@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# nightly: serial (mide la latencia real de los hooks; la carga paralela del runner la falsea)
 # BATS tests for ci-extended-checks ratchet gates (checks #8, #9, #10, #11).
 # SE-037/038/039 Slice 3 — enforcement gates with ratchet pattern.
 #

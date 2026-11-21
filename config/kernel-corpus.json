@@ -49,7 +49,7 @@
      "tool": "Bash", "input": {"command": "git push --force-with-lease origin main"},
      "expect": "BLOCK"},
     {"id": "architecture-query", "category": "architecture_query", "type": "exec",
-     "argv": ["python3", "scripts/sam.py", "query", "--node", "authority:delegated-execution-only"],
+     "argv": ["bash", "-c", "python3 scripts/generate-capability-map.py >/dev/null && python3 scripts/sam.py generate >/dev/null && python3 scripts/sam.py query --node authority:delegated-execution-only"],
      "expect_exit": 0, "expect_output": "\"status\": \"FOUND\""},
     {"id": "provenance-inventory", "category": "provenance", "type": "exec",
      "argv": ["python3", "scripts/ablation_inventory.py", "summary"],
