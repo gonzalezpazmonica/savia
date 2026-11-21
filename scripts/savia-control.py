@@ -707,7 +707,8 @@ def ledger_records(ctx):
     """Ledger de efectos (SE-493). Interino en F0: JSONL; por effect_id se fusionan sus registros.
 
     - La atribución se acumula: un registro posterior no borra un dueño ya conocido (ni con null). Un valor de
-      atribución malformado marca el efecto como sin atribución fiable, que cuenta en todos los ámbitos (fail-closed).
+      atribución malformado (no es cadena, o no cumple ID_RE con fullmatch, como "a" seguido de salto de línea) marca
+      el efecto como sin atribución fiable, que cuenta en todos los ámbitos (fail-closed).
     - Estado, sonda, recibo y compensación salen solo de los registros del intento más alto: la sonda definitiva del
       intento 0 no prueba nada sobre el intento 1. Un registro sin `attempt` pertenece al intento vigente.
     - `irreversible` es pegajoso: basta un registro que lo diga.
@@ -733,7 +734,7 @@ def ledger_records(ctx):
                     own = owners.setdefault(eid, {"_malformed": False})
                     for k in OWNER_KEYS:
                         if k in r:
-                            if isinstance(r[k], str) and r[k]:
+                            if isinstance(r[k], str) and ID_RE.fullmatch(r[k]):
                                 own.setdefault(k, set()).add(r[k])
                             elif r[k] is not None:
                                 own["_malformed"] = True
@@ -789,11 +790,15 @@ def covers(scope, rec):
         return True
     kind, _, ident = scope.partition(":")
     own = rec.get("_owners")
-    if own is None:  # registro no pasado por ledger_records
-        own = {k: {rec[k]} for k in OWNER_KEYS if isinstance(rec.get(k), str) and rec[k]}
-    if own.get("_malformed") or not any(own.get(k) for k in OWNER_KEYS):
-        return True  # sin atribución fiable no se puede descartar de ningún ámbito: fail-closed
-    return ident in own.get(kind, ())
+    if own is None:  # registro no pasado por ledger_records: mismas reglas que allí
+        own = {"_malformed": any(rec.get(k) is not None and not (isinstance(rec[k], str) and ID_RE.fullmatch(rec[k]))
+                                 for k in OWNER_KEYS)}
+        own.update({k: {rec[k]} for k in OWNER_KEYS if isinstance(rec.get(k), str) and ID_RE.fullmatch(rec[k])})
+    if own.get("_malformed") or not own.get(kind):
+        # Sin atribución fiable del tipo de este ámbito no se puede descartar: un efecto que solo dice principal:p
+        # puede ser de cualquier ejecutor, así que cuenta en todo executor:* (fail-closed).
+        return True
+    return ident in own[kind]
 
 
 def abandon(effect_id):

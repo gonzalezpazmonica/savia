@@ -467,3 +467,33 @@ fake_replace() {
   fake_replace
   GIT_NO_REPLACE_OBJECTS= run sc epoch; [ "${lines[0]}" = 3 ]
 }
+
+# ── refutación sobre fb2597ac4: atribución malformada o incompleta ─────────
+
+@test "fb2597a refutación P1-2: un ejecutor que no cumple ID_RE (\"a\\n\") no saca el efecto de executor:a" {
+  operator_setup
+  sc pause --scope executor:a --reason x
+  ledger '{"effect_id":"e1","state":"DISPATCHED","executor":"a\n"}'
+  run sc reconcile --scope executor:a; echo "$output"; [ "$status" -eq 5 ]; [[ "$output" == *"INDETERMINATE e1 [executor:a]"* ]]
+  approve executor:a 0 "$(seq_of executor:a)" '[]'
+  run sc resume --scope executor:a --via-pr; echo "$output"; [ "$status" -eq 5 ]; [[ "$output" == *ACCEPT_MISMATCH* ]]
+  run sc check --executor a; [ "$status" -eq 6 ]
+}
+
+@test "fb2597a refutación P1-2: un principal con caracteres fuera de ID_RE también es atribución no fiable" {
+  sc pause --scope executor:a --reason x
+  ledger '{"effect_id":"e1","state":"DISPATCHED","executor":"b","principal":"p q"}'
+  run sc reconcile --scope executor:a; echo "$output"; [ "$status" -eq 5 ]; [[ "$output" == *"INDETERMINATE e1"* ]]
+}
+
+@test "fb2597a refutación P1-2: un efecto con solo principal:p cuenta en executor:a (ejecutor desconocido)" {
+  sc pause --scope executor:a --reason x
+  ledger '{"effect_id":"e1","state":"DISPATCHED","principal":"p"}'
+  run sc reconcile --scope executor:a; echo "$output"; [ "$status" -eq 5 ]; [[ "$output" == *"INDETERMINATE e1 [executor:a]"* ]]
+}
+
+@test "fb2597a refutación P1-2 (negativo): con ejecutor válido de otro ejecutor sigue fuera de executor:a" {
+  sc pause --scope executor:a --reason x
+  ledger '{"effect_id":"e1","state":"DISPATCHED","executor":"b","principal":"p"}'
+  run sc reconcile --scope executor:a; echo "$output"; [ "$status" -eq 0 ]; [[ "$output" != *e1* ]]
+}
