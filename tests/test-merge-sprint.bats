@@ -1376,3 +1376,166 @@ EOF
   grep -q '"reason":"blob_f5"' "$MERGE_SPRINT_HOME/ledger.jsonl"
   [ ! -e "$FAKE/merged" ]
 }
+
+# HOLD entre cabezas equivalentes (SE-433, regresión del incidente #1642).
+# Estrategia: commits reales A -> B -> C que solo integran main, registro público
+# review-register y gh falso. No se simula head_equivalent ni se modifica producción.
+# El orden de registro es explícito; no depende de sleeps ni de timestamps distintos.
+ms_hold_head() { G rev-parse "origin/pr-$1"; }
+
+ms_hold_review_at() {  # <pr> <sha> <APPROVE|HOLD> [role] [p1]
+  local f="$TMPDIR_T/hold-$1-$2-$3-${4:-correctness}.md"
+  printf 'VERDICT: %s pr=%s sha=%s role=%s tier=2 reviewer=independent-reviewer author=impl-agent p0=0 p1=%s p2=0 p2_blocking=0\n' \
+    "$3" "$1" "$2" "${4:-correctness}" "${5:-0}" > "$f"
+  run bash "$SCRIPT" review-register "$1" "$f"
+  [ "$status" -eq 0 ]
+}
+
+ms_hold_excluded() {  # <pr>: exclusión estructural y motivo explícito, no solo ausencia en stdout
+  python3 - "$MERGE_SPRINT_HOME/manifest.json" "$1" <<'PY'
+import json, sys
+assert int(sys.argv[2]) not in [p["pr"] for p in json.load(open(sys.argv[1]))["prs"]]
+PY
+  local reason
+  reason=$(printf '%s\n' "$output" | grep "excluida PR $1:")
+  [[ "${reason^^}" == *HOLD* ]]
+}
+
+ms_hold_parked() {  # <pr>: aparcado por revisión, sin siquiera intentar el merge
+  [ ! -s "$FAKE/merged" ]
+  run grep -E "^pr merge $1 " "$FAKE/calls"
+  [ "$status" -eq 1 ]
+  python3 - "$MERGE_SPRINT_HOME/ledger.jsonl" "$1" <<'PY'
+import json, sys
+events = [json.loads(line) for line in open(sys.argv[1])]
+assert any(e.get("event") == "PARK" and e.get("pr") == sys.argv[2]
+           and e.get("reason") == "revision" for e in events)
+assert not any(e.get("event") == "MERGED" and e.get("pr") == sys.argv[2] for e in events)
+PY
+}
+
+@test "HOLD-head plan block: HOLD P1 en B excluye aunque A aprobada sea equivalente" {
+  v2_repo; v2_pr 230 feature.txt contenido
+  main_moves main-1.txt avance; pr_absorbs_main 230
+  ms_hold_review_at 230 "$(ms_hold_head 230)" HOLD correctness 1
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  ms_hold_excluded 230
+}
+
+@test "HOLD-head plan block: HOLD en B intermedia manda sobre APPROVE A aunque C no tenga revisión" {
+  v2_repo; v2_pr 231 feature.txt contenido
+  main_moves main-1.txt avance; pr_absorbs_main 231
+  local held; held=$(ms_hold_head 231)
+  ms_hold_review_at 231 "$held" HOLD correctness 1
+  main_moves main-2.txt otro-avance; pr_absorbs_main 231
+  [ "$(ms_hold_head 231)" != "$held" ]
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  ms_hold_excluded 231
+}
+
+@test "HOLD-head run block: HOLD B posterior al grant aparca aunque el manifiesto use APPROVE A" {
+  v2_repo; v2_pr 232 feature.txt contenido
+  local approved; approved=$(ms_hold_head 232)
+  main_moves main-1.txt avance; pr_absorbs_main 232
+  plan_and_grant
+  grep -q "\"head\":\"$approved\"" "$MERGE_SPRINT_HOME/manifest.json"
+  ms_hold_review_at 232 "$(ms_hold_head 232)" HOLD correctness 1
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output"
+  [[ "$output" == *"aparcado #232: revision"* ]]
+  ms_hold_parked 232
+}
+
+@test "HOLD-head run block: B aparece tras el grant y su HOLD impide fusionarla" {
+  v2_repo; v2_pr 233 feature.txt contenido
+  plan_and_grant
+  main_moves main-1.txt avance; pr_absorbs_main 233
+  ms_hold_review_at 233 "$(ms_hold_head 233)" HOLD correctness 1
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output"
+  [[ "$output" == *"aparcado #233: revision"* ]]
+  ms_hold_parked 233
+}
+
+@test "HOLD-head negativo: APPROVE A y B equivalente sin HOLD conservan el merge de B" {
+  v2_repo; v2_pr 234 feature.txt contenido
+  local approved current; approved=$(ms_hold_head 234)
+  main_moves main-1.txt avance; pr_absorbs_main 234
+  current=$(ms_hold_head 234); [ "$current" != "$approved" ]
+  plan_and_grant
+  grep -q "\"head\":\"$approved\"" "$MERGE_SPRINT_HOME/manifest.json"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 234 "$FAKE/merged"
+  grep -q "^pr merge 234 .*--match-head-commit $current$" "$FAKE/calls"
+}
+
+@test "HOLD-head negativo: HOLD antiguo en A seguido de arreglo y APPROVE B permite B" {
+  v2_repo; v2_pr 235 feature.txt contenido
+  ms_hold_review_at 235 "$(ms_hold_head 235)" HOLD correctness 1
+  G switch -q pr-235
+  echo corregido > "$MERGE_SPRINT_GIT_ROOT/feature.txt"
+  G commit -qam arreglo; G push -q origin pr-235; G switch -q main
+  ms_hold_review_at 235 "$(ms_hold_head 235)" APPROVE
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 235 "$FAKE/merged"
+}
+
+@test "HOLD-head negativo: HOLD B anterior a APPROVE C no bloquea D equivalente a C" {
+  v2_repo; v2_pr 236 feature.txt contenido
+  main_moves main-1.txt avance; pr_absorbs_main 236
+  ms_hold_review_at 236 "$(ms_hold_head 236)" HOLD correctness 1
+  main_moves main-2.txt otro-avance; pr_absorbs_main 236
+  local approved; approved=$(ms_hold_head 236)
+  ms_hold_review_at 236 "$approved" APPROVE
+  main_moves main-3.txt tercer-avance; pr_absorbs_main 236
+  plan_and_grant
+  grep -q "\"head\":\"$approved\"" "$MERGE_SPRINT_HOME/manifest.json"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 236 "$FAKE/merged"
+}
+
+@test "HOLD-head negativo: HOLD de otra PR sobre el mismo SHA no veta esta PR" {
+  v2_repo; v2_pr 237 feature.txt contenido
+  main_moves main-1.txt avance; pr_absorbs_main 237
+  ms_hold_review_at 999 "$(ms_hold_head 237)" HOLD correctness 1
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 237 "$FAKE/merged"
+}
+
+@test "HOLD-head boundary: HOLD tras el grant sobre el mismo head aprobado ya aparca hoy" {
+  v2_repo; v2_pr 238 feature.txt contenido
+  plan_and_grant
+  ms_hold_review_at 238 "$(ms_hold_head 238)" HOLD correctness 1
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"aparcado #238: revision"* ]]
+  ms_hold_parked 238
+}
+
+@test "HOLD-head invalid: error=sin-revision en VERDICT se rechaza sin registrar una retención real" {
+  v2_repo; v2_pr 239 feature.txt contenido
+  main_moves main-1.txt avance; pr_absorbs_main 239
+  local before current; before=$(sha256sum < "$MERGE_SPRINT_HOME/reviews.jsonl")
+  current=$(ms_hold_head 239)
+  # Contrato ACTUAL: parse_verdict exige fullmatch; no admite el campo error.
+  printf 'VERDICT: HOLD pr=239 sha=%s role=correctness tier=2 reviewer=independent-reviewer author=impl-agent p0=0 p1=0 p2=0 p2_blocking=0 error=sin-revision\n' \
+    "$current" > "$TMPDIR_T/sin-revision.md"
+  run bash "$SCRIPT" review-register 239 "$TMPDIR_T/sin-revision.md"
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"primera línea sin gramática VERDICT válida"* ]]
+  [ "$(sha256sum < "$MERGE_SPRINT_HOME/reviews.jsonl")" = "$before" ]
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 239 "$FAKE/merged"
+}
