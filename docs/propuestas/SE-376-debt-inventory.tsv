@@ -68,7 +68,7 @@ mutation-audit	Calibrated	134	CALIBRATED	2026-11-14: contada Calibrated por el a
 network-recon	Incomplete	97	REFACTOR	2026-11-16: test de comportamiento certificado (>=80, 25 casos), mutación verificada (11 mutantes caen); falta solo savia.maturity: stable (edita .claude/, pendiente de la operadora)
 nuclei-scanning	Incomplete	116	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 obscura-browser	Stub	101	DELETE	stub sin cuerpo ni DOMAIN: candidata a eliminación (propuesta, requiere revisión)
-onboarding-dev	Incomplete	136	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+onboarding-dev	Incomplete	136	REFACTOR	2026-11-21: test de comportamiento de setup-memory.sh certificado (85, 41 casos), mutantes del script caen salvo 2 equivalentes documentados; falta savia.maturity: stable (hoy beta; edita .claude/, pendiente de la operadora)
 orgchart-import	Incomplete	148	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 org-meeting-capture	Incomplete	60	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 org-political-landscape	Incomplete	59	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
