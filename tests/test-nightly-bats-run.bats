@@ -14,6 +14,11 @@ setup() {
 #!/bin/bash
 echo "\$1" >> "$T/order.log"
 echo "\${NIGHTLY_OUT-unset}" >> "$T/env.log"
+echo "\${NIGHTLY_RC-unset}" >> "$T/envrc.log"
+# forge <suite>: la suite escribe un 0 falso para otra suite en la ruta predecible \$OUT/rc.txt.
+f=\$(sed -n 's/^forge //p' "\$1"); [[ -n "\$f" ]] && echo "0 \$f" >> "$T/out/rc.txt"
+# guess <suite>: la suite adivina el registro privado (todo fichero de \$T/tmpd, su TMPDIR) y lo falsea.
+g=\$(sed -n 's/^guess //p' "\$1"); [[ -n "\$g" ]] && for r in "$T"/tmpd/*; do echo "0 \$g" >> "\$r"; done
 grep -q '^kill-runner' "\$1" && kill -KILL "\$(ps -o ppid= -p \$PPID | tr -d ' ')"
 exit "\$(sed -n 's/^rc=//p' "\$1")"
 EOF
@@ -21,10 +26,12 @@ EOF
   export NIGHTLY_BATS_BIN="$T/fakebats" NIGHTLY_TIMEOUT_S=30
 }
 
-suite() {  # suite <nombre> <rc> [serial|kill]
+suite() {  # suite <nombre> <rc> [serial|kill|forge:<ruta>]
   local f="$T/suites/$1"
   { [[ "${3:-}" == serial ]] && echo '# nightly: serial'
     [[ "${3:-}" == kill ]] && echo 'kill-runner'
+    [[ "${3:-}" == forge:* ]] && echo "forge ${3#forge:}"
+    [[ "${3:-}" == guess:* ]] && echo "guess ${3#guess:}"
     echo "rc=$2"; } > "$f"
   printf '%s' "$f"
 }
@@ -122,6 +129,59 @@ suite() {  # suite <nombre> <rc> [serial|kill]
   run bash "$SCRIPT" "$OUT" "$a"
   [ "$status" -eq 0 ]
   [ "$(cat "$T/env.log")" = "unset" ]
+}
+
+@test "si falla la tabla del resumen (awk) sale 3 sin contadores" {
+  bats_require_minimum_version 1.5.0
+  a=$(suite ko.bats 1)
+  # awk falso que falla solo al construir la tabla: el cómputo de fallidas funciona.
+  mkdir -p "$T/bin"
+  printf '#!/bin/bash\n[[ "$1" == *"e=\\$1"* ]] && exit 42\nexec %s "$@"\n' "$(command -v awk)" > "$T/bin/awk"
+  chmod +x "$T/bin/awk"
+  PATH="$T/bin:$PATH" run --separate-stderr bash "$SCRIPT" "$OUT" "$a"
+  [ "$status" -eq 3 ]
+  [[ "$output" != *total=* && "$output" != *failed=* ]]
+  [[ "$stderr" == *summary.md* ]]
+}
+
+@test "una suite que escribe un 0 falso para otra en OUT/rc.txt no tapa su missing" {
+  bats_require_minimum_version 1.5.0
+  k=$(suite killed.bats 0 kill)
+  f=$(suite forger.bats 0 "forge:$k")
+  NIGHTLY_JOBS=1 run --separate-stderr bash "$SCRIPT" "$OUT" "$f" "$k"
+  [ "$status" -eq 0 ]
+  [ "$output" = $'total=2\nfailed=1' ]
+  grep -qxF "missing $k" "$OUT/failed.txt"
+  [ "$(grep -c -- "$k" "$OUT/rc.txt")" -eq 1 ]
+}
+
+@test "si una suite adivina el registro privado y duplica una línea, sale 3 sin contadores" {
+  bats_require_minimum_version 1.5.0
+  b=$(suite ko.bats 1)
+  g=$(suite guesser.bats 0 "guess:$b")
+  mkdir -p "$T/tmpd"
+  NIGHTLY_JOBS=1 TMPDIR="$T/tmpd" run --separate-stderr bash "$SCRIPT" "$OUT" "$b" "$g"
+  [ "$status" -eq 3 ]
+  [[ "$output" != *total=* && "$output" != *failed=* ]]
+  [[ "$stderr" == *"una línea por suite"* ]]
+}
+
+@test "la suite no recibe la ruta del registro privado" {
+  a=$(suite ok.bats 0)
+  run bash "$SCRIPT" "$OUT" "$a"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$T/envrc.log")" = "unset" ]
+}
+
+@test "si no puede escribir all.txt sale 3 (no 2, «sin suites») y sin contadores" {
+  bats_require_minimum_version 1.5.0
+  a=$(suite ok.bats 0)
+  # Enlace roto: la redirección falla y all.txt no existe (-s falso): antes salía 2, «sin suites».
+  mkdir -p "$OUT"; ln -s "$T/no-existe/all.txt" "$OUT/all.txt"
+  run --separate-stderr bash "$SCRIPT" "$OUT" "$a"
+  [ "$status" -eq 3 ]
+  [[ "$output" != *total=* ]]
+  [[ "$stderr" == *all.txt* ]]
 }
 
 @test "sin suites: sale 2 y no imprime contadores (fail-closed)" {
