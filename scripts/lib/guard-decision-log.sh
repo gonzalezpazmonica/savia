@@ -23,6 +23,8 @@ guard_decision_log() {
   dir="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)}/output/guard-decisions"
   file="$dir/$guard.jsonl"
   mkdir -p "$dir" 2>/dev/null || return 0
+  # Ni el directorio ni el fichero pueden ser enlaces: no se añade a otro fichero (revisión #1628).
+  [[ -L "$dir" || -L "$file" ]] && return 0
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null) || return 0
   printf '{"ts":"%s","guard":"%s","verdict":"%s","reason":"%s"}\n' \
     "$ts" "$guard" "$verdict" "$reason" >> "$file" 2>/dev/null || true

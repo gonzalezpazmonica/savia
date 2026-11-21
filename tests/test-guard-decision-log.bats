@@ -58,9 +58,33 @@ gdl() { bash -c 'source "$1"; shift; guard_decision_log "$@"' _ "$LIB" "$@"; }
 }
 
 @test "fallo de escritura devuelve 0 y no escribe" {
+  [[ "$(id -u)" -ne 0 ]] || skip "como root chmod a-w no impide escribir"
   mkdir -p "$LOG"
   chmod a-w "$LOG"
   run gdl g allow x
   [ "$status" -eq 0 ]
   [ ! -e "$LOG/g.jsonl" ]
+}
+
+@test "un fichero de log que es enlace simbólico no se sigue" {
+  mkdir -p "$LOG"
+  : > "$CASE_ROOT/ajeno"
+  ln -s "$CASE_ROOT/ajeno" "$LOG/g.jsonl"
+  run gdl g allow x
+  [ "$status" -eq 0 ]
+  [ ! -s "$CASE_ROOT/ajeno" ]
+}
+
+@test "un directorio de log que es enlace simbólico no se sigue" {
+  mkdir -p "$CASE_ROOT/output" "$CASE_ROOT/otro"
+  ln -s "$CASE_ROOT/otro" "$LOG"
+  run gdl g allow x
+  [ "$status" -eq 0 ]
+  [ ! -e "$CASE_ROOT/otro/g.jsonl" ]
+}
+
+@test "control: sin enlaces sí se escribe (los dos tests de enlaces pueden fallar)" {
+  run gdl g allow x
+  [ "$status" -eq 0 ]
+  [ -s "$LOG/g.jsonl" ]
 }
