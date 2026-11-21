@@ -21,7 +21,7 @@ caveman	Incomplete	62	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 client-profile-manager	Incomplete	140	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 codebase-map	Incomplete	74	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 code-comprehension-report	Incomplete	143	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-codegraph	Incomplete	129	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+codegraph	Incomplete	129	REFACTOR	2026-11-21: test de comportamiento certificado (13 casos) sobre la elección de backend de blast-radius.sh y la activación MCP de savia-setup; 14 mutantes caen (1 equivalente); falta savia.maturity: stable (edita .claude/, pendiente de la operadora)
 code-improvement-loop	Incomplete	150	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 company-messaging	Incomplete	147	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 consensus-validation	Incomplete	146	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
@@ -50,7 +50,7 @@ epistemic-humility	Incomplete	132	REFACTOR	completar tests/DOMAIN para calibrar 
 evaluations-framework	Incomplete	111	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 evidence-first-development	Incomplete	96	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 executive-reporting	Incomplete	122	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-feasibility-probe	Incomplete	85	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+feasibility-probe	Incomplete	85	REFACTOR	2026-11-21: test de comportamiento de scripts/speculative/feasibility-probe.sh certificado (20 casos), 21 mutantes caen; 2 huecos corregidos en el script (ruta de la base sin expandir y evaluación con fuga); falta savia.maturity: stable (edita .claude/, pendiente de la operadora)
 git-secret-scanner	Calibrated	101	CALIBRATED	2026-10-02: test de comportamiento certificado (>=80) y maturity stable con OK de la operadora
 governance-enterprise	Calibrated	89	CALIBRATED	2026-10-20: test de comportamiento certificado (>=80), lock del audit trail corregido (O_EXCL) y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
 grill-me	Incomplete	65	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
