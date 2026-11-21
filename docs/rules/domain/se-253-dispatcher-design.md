@@ -1,3 +1,4 @@
+<!-- context_tier: L2 token_budget: 1400 -->
 # Despachador PreToolUse: contrato de fallo cerrado
 
 > SE-253 S4 (diseño) y SE-510 D3 (contrato). El despachador `hooks/dispatchers/dispatch-pretooluse.sh` lee `hooks/routing-pretooluse.tsv`, que se GENERA desde `.claude/settings.json` con `python3 scripts/dispatch-table.py write`. `check` (y un test) falla si difieren.
