@@ -71,6 +71,15 @@ assert d['tier'] == 4, f'tier={d[\"tier\"]}'
   done
 }
 
+@test "#1628: la librería de medición que carga el guard de firmantes → tier 4; otra lib → tier 2" {
+  run python3 "$TIER" --diff scripts/lib/guard-decision-log.sh --json
+  [[ "$status" -eq 0 ]]
+  [[ "$(echo "$output" | python3 -c 'import sys,json; print(json.load(sys.stdin)["tier"])')" == 4 ]]
+  run python3 "$TIER" --diff scripts/lib/otra-lib.sh --json
+  [[ "$status" -eq 0 ]]
+  [[ "$(echo "$output" | python3 -c 'import sys,json; print(json.load(sys.stdin)["tier"])')" == 2 ]]
+}
+
 @test "infra → tier 4" {
   run python3 "$TIER" --diff "infra/main.tf" --json
   echo "$output" | python3 -c "

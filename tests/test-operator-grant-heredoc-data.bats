@@ -209,3 +209,36 @@ raw_guard() {
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+# Revisión de seguridad #1628, P1-1: la medición no puede cambiar la decisión,
+# ni con un `exit` al cargar la librería ni con uno dentro de su función.
+@test "block: una librería de medición que hace exit 0 al cargarse no convierte el bloqueo en allow" {
+  printf 'exit 0\n' > "$REPO/scripts/lib/guard-decision-log.sh"
+  run guard 'cp x config/*'
+  assert_block
+}
+
+@test "block: una función de medición que hace exit 0 no convierte el bloqueo en allow" {
+  printf 'guard_decision_log() { exit 0; }\n' > "$REPO/scripts/lib/guard-decision-log.sh"
+  run guard 'cp x config/*'
+  assert_block
+}
+
+@test "allow: una función de medición que hace exit 2 no convierte el allow en bloqueo" {
+  printf 'guard_decision_log() { exit 2; }\n' > "$REPO/scripts/lib/guard-decision-log.sh"
+  run guard 'ls config'
+  [ "$status" -eq 0 ]
+}
+
+@test "allow: la medición no escribe nada en la salida del guard" {
+  printf 'guard_decision_log() { echo FUGA; echo FUGA >&2; }\n' > "$REPO/scripts/lib/guard-decision-log.sh"
+  run guard 'ls config'
+  [ "$status" -eq 0 ]
+  [[ "$output" != *FUGA* ]]
+}
+
+@test "medición: una orden Bash vacía tiene su código de motivo, no sin-motivo" {
+  run guard ''
+  [ "$status" -eq 0 ]
+  [ "$(last_reason)" = "allow bash-sin-firmantes" ]
+}

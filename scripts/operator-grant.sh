@@ -692,16 +692,24 @@ except BaseException as e:
     block("error al evaluar el evento (%s); sin evaluar no se deja pasar" % type(e).__name__, "error-interno")
 '
 
+# Medición aislada (revisión de seguridad #1628, P1-1): la librería se carga en un
+# subshell DESPUÉS de decidir, así que ni un `exit` al cargarla ni su función pueden
+# cambiar el código de salida del guard. La librería es además de gobernanza
+# (scripts/risk-tier.py, GOVERNANCE_EXACT): cambiarla exige a la operadora.
+_grant_measure() {
+  ( # shellcheck source=/dev/null
+    source "$REPO_ROOT/scripts/lib/guard-decision-log.sh" && guard_decision_log operator-grant "$1" "$2"
+  ) </dev/null >/dev/null 2>&1 || true
+}
+
 guard_main() {
   local input="" rc=0 reason=""
   # Medición (G4): una línea por decisión en output/guard-decisions/operator-grant.jsonl,
   # con un código de motivo, nunca la orden. Sin la librería, no se mide (la decisión no cambia).
-  # shellcheck source=/dev/null
-  source "$REPO_ROOT/scripts/lib/guard-decision-log.sh" 2>/dev/null || guard_decision_log() { :; }
   if [[ ! -t 0 ]]; then input=$(timeout 3 cat 2>/dev/null) || true; fi
   if [[ -z "$input" ]]; then
     echo "BLOQUEADO [operator-grant-guard]: sin entrada del hook" >&2
-    guard_decision_log operator-grant block sin-entrada
+    _grant_measure block sin-entrada
     return 2
   fi
   # stdout del guard Python: una línea con el código de motivo; stderr pasa tal cual.
@@ -714,10 +722,10 @@ guard_main() {
       echo "BLOQUEADO [operator-grant-guard]: el guard falló (exit $rc); sin evaluar no se deja pasar" >&2
       reason="fallo-cerrado"
     fi
-    guard_decision_log operator-grant block "${reason:-fallo-cerrado}"
+    _grant_measure block "${reason:-fallo-cerrado}"
     return 2
   fi
-  guard_decision_log operator-grant allow "${reason:-sin-motivo}"
+  _grant_measure allow "${reason:-sin-motivo}"
   return 0
 }
 [[ "${1:-}" == "guard" ]] && { guard_main; exit $?; }
