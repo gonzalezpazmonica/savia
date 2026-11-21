@@ -236,9 +236,14 @@ hook_json() { printf '%s' "$1" | bash "$SCRIPT"; }
   for t in bash git python3 cat date mkdir dirname timeout tr; do
     ln -sf "$(command -v "$t")" "$bin/$t"
   done
-  run env PATH="$bin" bash -c 'cd "$1" && printf "{}" | bash "$2"' _ "$REPO" "$PWD/$SCRIPT"
+  # El arnés lee la decisión de stdout: se parsea solo stdout y, si falla, el TAP enseña
+  # stdout, stderr y lo que ve git (en la suite nocturna falló sin dejar rastro).
+  bats_require_minimum_version 1.5.0
+  run --separate-stderr env PATH="$bin" bash -c 'cd "$1" && printf "{}" | bash "$2"' _ "$REPO" "$PWD/$SCRIPT"
+  echo "status=$status stdout=[$output] stderr=[$stderr]"
+  echo "git: $(git -C "$REPO" branch --show-current 2>&1)"
   [ "$status" -eq 0 ]
-  echo "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["decision"]=="block" and "(main)" in d["reason"], d'
+  printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["decision"]=="block" and "(main)" in d["reason"], d'
 }
 
 @test "registro con marca de tiempo UTC ISO-8601" {

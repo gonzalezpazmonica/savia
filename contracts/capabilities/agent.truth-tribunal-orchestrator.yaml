@@ -1,0 +1,25 @@
+id: agent.truth-tribunal-orchestrator
+version: 1
+description: "Convoca 7 jueces sobre un informe, aplica vetos absolutos y escribe .truth.crc (PUBLISHABLE|CONDITIONAL|ITERATE|ESCALATE|NOT_EVALUABLE)"
+input:
+  type: object
+  properties: {}
+safety:
+  effect: mutation
+  visibility: visible
+  reversibility: reversible
+  destructive: false
+  external_side_effect: false
+  human_gate: policy
+  scope: [workspace]
+execution:
+  handler: "agent truth-tribunal-orchestrator"
+laws:
+  - LAW-HUMAN-001
+  - LAW-EXEC-002
+enforcement:
+    - truth-tribunal-veto
+negative_tests:
+    - truth-tribunal-orchestrator-l4.bats
+receipt:
+  - .truth.crc

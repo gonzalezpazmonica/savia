@@ -115,8 +115,10 @@ _prop() { ls "$SCL_PROPOSALS_DIR"/*.md | head -1; }
 
 @test "cualquier valor distinto de 'on' apaga la captura" {
   for v in off 0 ON; do
-    printf '%s' '{"tool_name":"Task","tool_response":"se reconoce el error: apagado","tool_input":{"agent":"t"}}' \
-      | SAVIA_LEARNING_CAPTURE="$v" SCL_PROPOSALS_DIR="$SCL_PROPOSALS_DIR" SCL_GRAPH_INDEX="$SCL_GRAPH_INDEX" bash "$HOOK"
+    # Entrada por here-string y no por tubería: con la captura apagada el hook sale sin leer
+    # stdin y el printf de una tubería moría por SIGPIPE según el reparto de tiempos (solo en CI).
+    SAVIA_LEARNING_CAPTURE="$v" SCL_PROPOSALS_DIR="$SCL_PROPOSALS_DIR" SCL_GRAPH_INDEX="$SCL_GRAPH_INDEX" bash "$HOOK" \
+      <<< '{"tool_name":"Task","tool_response":"se reconoce el error: apagado","tool_input":{"agent":"t"}}'
   done
   [ "$(_props)" = "0" ]
 }

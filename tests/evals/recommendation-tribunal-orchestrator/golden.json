@@ -1,0 +1,52 @@
+{
+  "scenario": "golden",
+  "agent": "recommendation-tribunal-orchestrator",
+  "cases": [
+    {
+      "id": "golden-convenes-four-judges",
+      "input": "borrador con risk_class medium o superior",
+      "expected": "se convocan exactamente los 4 jueces rapidos, en paralelo, y la agregacion la hace el script determinista",
+      "checks": [
+        {"id": "judge-memory-conflict", "target": "agent", "must_match": "^   - memory-conflict-judge$"},
+        {"id": "judge-rule-violation", "target": "agent", "must_match": "^   - rule-violation-judge$"},
+        {"id": "judge-hallucination-fast", "target": "agent", "must_match": "^   - hallucination-fast-judge$"},
+        {"id": "judge-expertise-asymmetry", "target": "agent", "must_match": "^   - expertise-asymmetry-judge$"},
+        {"id": "parallel-single-message", "target": "agent", "must_match": "4 judges run \\*\\*in parallel\\*\\* \\(single message, 4 Task calls\\), never sequential"},
+        {"id": "aggregation-is-script", "target": "agent", "must_match": "scripts/recommendation-tribunal/aggregate\\.sh`? \\(deterministic, no LLM\\)"},
+        {"id": "aggregate-script-exists", "target": "scripts/recommendation-tribunal/aggregate.sh", "must_match": "^# aggregate\\.sh"},
+        {"id": "judge-file-memory-conflict", "target": ".claude/agents/memory-conflict-judge.md", "must_match": "^name: memory-conflict-judge$"},
+        {"id": "judge-file-rule-violation", "target": ".claude/agents/rule-violation-judge.md", "must_match": "^name: rule-violation-judge$"},
+        {"id": "judge-file-hallucination-fast", "target": ".claude/agents/hallucination-fast-judge.md", "must_match": "^name: hallucination-fast-judge$"},
+        {"id": "judge-file-expertise-asymmetry", "target": ".claude/agents/expertise-asymmetry-judge.md", "must_match": "^name: expertise-asymmetry-judge$"}
+      ]
+    },
+    {
+      "id": "golden-aggregate-pass",
+      "input": "cuatro veredictos sin veto, puntuaciones 90/90/90",
+      "expected": "PASS con consensus_score 90",
+      "aggregate": {
+        "judges": [
+          {"judge": "memory-conflict", "score": 90, "veto": false, "confidence": 0.9},
+          {"judge": "rule-violation", "score": 90, "veto": false, "confidence": 0.9},
+          {"judge": "hallucination-fast", "score": 90, "veto": false, "confidence": 0.9},
+          {"judge": "expertise-asymmetry", "score": 90, "veto": false, "confidence": 0.9}
+        ],
+        "expect": {"exit": 0, "verdict": "PASS", "consensus_score": 90, "veto_triggered": false}
+      }
+    },
+    {
+      "id": "golden-aggregate-veto",
+      "input": "rule-violation veta con confianza 0.95",
+      "expected": "VETO y el juez queda en veto_judges",
+      "aggregate": {
+        "judges": [
+          {"judge": "memory-conflict", "score": 95, "veto": false, "confidence": 0.9},
+          {"judge": "rule-violation", "score": 10, "veto": true, "confidence": 0.95},
+          {"judge": "hallucination-fast", "score": 95, "veto": false, "confidence": 0.9},
+          {"judge": "expertise-asymmetry", "score": 95, "veto": false, "confidence": 0.9}
+        ],
+        "expect": {"exit": 0, "verdict": "VETO", "veto_triggered": true, "veto_judges": ["rule-violation"]}
+      }
+    }
+  ]
+}

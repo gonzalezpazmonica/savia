@@ -1,0 +1,31 @@
+{
+  "id": "SE-442",
+  "status": "IMPLEMENTED",
+  "priority": "P0",
+  "title": "Cadena de suministro de la CI: acciones fijadas por SHA, Dependabot, CodeQL, Scorecard y divulgación coordinada",
+  "note": "20 de 51 referencias uses: sin SHA (medido en main a15eae38f); sin dependabot.yml, CodeQL ni Scorecard. Esfuerzo S, sin dependencias. Delta 2026-10-20: S5 requisitos de Python con hashes (el único fichero real es scripts/requirements-memory.txt, 0 hashes). 2026-10-23 conciliación: AC cubiertos en main salvo AC5 (Scorecard no corrió en el PR; la operadora decide) (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora.",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1639 (docs/evidence/graduacion-s27/SE-442.md). Entrega: PR #1332.",
+  "phase": "A",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "completion": {
+    "merge_pr": 1332,
+    "acceptance_evidence": [
+      {
+        "criterion": "AC (revisión de graduación S27, PR #1639)",
+        "file": "docs/specs/SE-442-ci-supply-chain-hardening.spec.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "tests/test-ci-actions-pinned.bats"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "tests/test-requirements-hashed.bats"
+      }
+    ],
+    "human_review": {
+      "status": "APPROVED",
+      "evidence": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27). Evidencia de revisión: PR #1639."
+    }
+  }
+}

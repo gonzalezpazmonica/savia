@@ -1,11 +1,11 @@
 ---
 context_tier: L3
-token_budget: 9513
+token_budget: 9673
 ---
 
 # INDEX
 
-Auto-generated. 321 files / 39 cats. Regen: `bash scripts/rules-domain-index.sh`. CI check: `--check`. SPEC-115.
+Auto-generated. 326 files / 39 cats. Regen: `bash scripts/rules-domain-index.sh`. CI check: `--check`. SPEC-115.
 
 | Cat | File | Description |
 |---|---|---|
@@ -13,6 +13,7 @@ Auto-generated. 321 files / 39 cats. Regen: `bash scripts/rules-domain-index.sh`
 | AI Governance | [`ai-exposure-metrics.md`](./ai-exposure-metrics.md) | AI Exposure Metrics — Métricas de Exposición Laboral a la IA |
 | AI Governance | [`ai-governance.md`](./ai-governance.md) | Gobernanza de IA — Reglas de Dominio |
 | Accessibility | [`accessibility-output.md`](./accessibility-output.md) | Regla de Adaptación de Output por Accesibilidad |
+| Agent Operation | [`agent-catalog-schema.md`](./agent-catalog-schema.md) | Catálogo de agentes: esquema de cabecera y referencias comprobadas (SE-532 S1) |
 | Agent Operation | [`agent-context-budget.md`](./agent-context-budget.md) | Agent Context Budget Protocol |
 | Agent Operation | [`agent-dispatch-checklist.md`](./agent-dispatch-checklist.md) | Regla: Checklist de Dispatch a Agentes |
 | Agent Operation | [`agent-handoff-protocol.md`](./agent-handoff-protocol.md) | Agent Handoff Protocol — SPEC-121 |
@@ -98,7 +99,7 @@ Auto-generated. 321 files / 39 cats. Regen: `bash scripts/rules-domain-index.sh`
 | Memory | [`session-memory-protocol.md`](./session-memory-protocol.md) | Session Memory Protocol [SPEC-013 + SPEC-016 + SPEC-041] |
 | Memory | [`verified-memory-axiom.md`](./verified-memory-axiom.md) | <!-- context_tier: L2 token_budget: 1200 --> |
 | Meta Rules | [`code-review-rules.md`](./code-review-rules.md) | Reglas para el hook de code review pre-commit y `/pr-review`. Cada proyecto puede override en `proje |
-| Meta Rules | [`critical-rules-extended.md`](./critical-rules-extended.md) | Reglas Criticas — Referencia Extendida (9-25) |
+| Meta Rules | [`critical-rules-extended.md`](./critical-rules-extended.md) | Reglas Criticas — Referencia Extendida (9-26) |
 | Meta Rules | [`dormant-rules-review-2026-Q2.md`](./dormant-rules-review-2026-Q2.md) | Dormant Rules Review — Q2 2026 |
 | Meta Rules | [`pre-output-rules.md`](./pre-output-rules.md) | Pre-Output Rules — TTSR-inspired validator (SE-150) |
 | Orchestration | [`orchestration-protocol.md`](./orchestration-protocol.md) | Orchestration Protocol — SE-205 |
@@ -173,6 +174,7 @@ Auto-generated. 321 files / 39 cats. Regen: `bash scripts/rules-domain-index.sh`
 | Other | [`guided-work-protocol.md`](./guided-work-protocol.md) | Protocolo de Trabajo Guiado |
 | Other | [`hashline-edit-protocol.md`](./hashline-edit-protocol.md) | Hashline Edit Protocol — Stale-File Protection for L3 Agents (SE-149) |
 | Other | [`hcm-maps.md`](./hcm-maps.md) | Human Code Maps (.hcm) — Lucha activa contra la deuda cognitiva |
+| Other | [`hecho-verificado.md`](./hecho-verificado.md) | Hecho verificado — declarado, verificado, refutado |
 | Other | [`http-query-method.md`](./http-query-method.md) | HTTP QUERY Method (RFC 10008) |
 | Other | [`iac-cloud-patterns.md`](./iac-cloud-patterns.md) | Anexo: IaC — Patrones Multi-Cloud Detallados |
 | Other | [`image-relevance-filter.md`](./image-relevance-filter.md) | Image Relevance Filter — deterministic-first triage pre-Vision |
@@ -217,6 +219,7 @@ Auto-generated. 321 files / 39 cats. Regen: `bash scripts/rules-domain-index.sh`
 | Other | [`pre-commit-bats.md`](./pre-commit-bats.md) | Regla: BATS Antes de Commit |
 | Other | [`priority-canonical-formula.md`](./priority-canonical-formula.md) | Regla: Fórmula Canónica de Priorización V×U/E |
 | Other | [`priority-persistence.md`](./priority-persistence.md) | Regla: Persistencia de los 4 Campos de Priorización |
+| Other | [`procedencia-entornos-profesionales.md`](./procedencia-entornos-profesionales.md) | Regla: Procedencia — separación de entornos profesionales ajenos |
 | Other | [`professional-domain-disclaimer.md`](./professional-domain-disclaimer.md) | Disclaimers de Dominio Profesional |
 | Other | [`project-privacy-protection.md`](./project-privacy-protection.md) | Regla: Protección de Privacidad de Proyectos |
 | Other | [`project-twin-as-code.md`](./project-twin-as-code.md) | Project Twin as Code — Regla canónica |
@@ -241,6 +244,7 @@ Auto-generated. 321 files / 39 cats. Regen: `bash scripts/rules-domain-index.sh`
 | Other | [`scl-001-learning-loop.md`](./scl-001-learning-loop.md) | Savia Continuous Learning — bucle de aprendizaje (SCL-001) |
 | Other | [`scoring-curves.md`](./scoring-curves.md) | Scoring Curves — Piecewise Linear Normalization |
 | Other | [`sdlc-gates.md`](./sdlc-gates.md) | Regla: Configuración de Puertas SDLC |
+| Other | [`se-253-dispatcher-design.md`](./se-253-dispatcher-design.md) | Despachador PreToolUse: contrato de fallo cerrado |
 | Other | [`secret-redaction-policy.md`](./secret-redaction-policy.md) | Secret Redaction Policy — SPEC-142 |
 | Other | [`self-improvement.md`](./self-improvement.md) | Self-Improvement Loop (Rule #21) |
 | Other | [`semantic-hub-index.md`](./semantic-hub-index.md) | Savia conoce su propia topología. Este índice mapea las conexiones. |
@@ -289,6 +293,7 @@ Auto-generated. 321 files / 39 cats. Regen: `bash scripts/rules-domain-index.sh`
 | Risk | [`risk-escalation.md`](./risk-escalation.md) | Rule: Risk-Based Escalation |
 | Risk | [`risk-tiering.md`](./risk-tiering.md) | Risk Tiering — Gradación de riesgo para auto-merge (SE-362) |
 | Savia Core | [`opencode-savia-bridge.md`](./opencode-savia-bridge.md) | Regla: OpenCode ↔ Savia bridge |
+| Savia Core | [`savia-core.md`](./savia-core.md) | Savia — núcleo de arranque |
 | Savia Core | [`savia-dual.md`](./savia-dual.md) | Savia Dual — Inference Sovereignty Layer |
 | Savia Core | [`savia-ethical-principles.md`](./savia-ethical-principles.md) | Principios Éticos de Savia |
 | Savia Core | [`savia-foundational-principles.md`](./savia-foundational-principles.md) | Principios Fundacionales de Savia — INMUTABLES |

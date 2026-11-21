@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# nightly: serial (ejecuta ci-extended-checks.sh entero, cuyo check #9 mide la latencia real de los hooks)
 # BATS tests for ci-extended-checks.sh check #7 (SCM Freshness)
 # Ref: docs/propuestas/SE-031-query-library-nl.md (freshness gate pattern)
 # SPEC-055 quality gate (score >= 80)
@@ -16,8 +17,11 @@ setup_file() {
   export CHECK_OUT="$BATS_FILE_TMPDIR/check.out"
   export SCM_BEFORE="$BATS_FILE_TMPDIR/scm.before"
   git status --porcelain -- .scm > "$SCM_BEFORE"
-  bash "$CHECK" > "$CHECK_OUT" 2>&1
-  echo "$?" > "$BATS_FILE_TMPDIR/check.rc"
+  # El código se guarda y lo afirma la prueba «all checks green»; si setup_file abortara aquí,
+  # se perderían la salida del check y las otras 18 pruebas (nocturna 44621725564).
+  local rc=0
+  bash "$CHECK" > "$CHECK_OUT" 2>&1 || rc=$?
+  echo "$rc" > "$BATS_FILE_TMPDIR/check.rc"
 }
 
 setup() {
@@ -56,8 +60,11 @@ teardown() {
 }
 
 @test "check #7 mentions remediation command in error message" {
-  run grep -c "generate-capability-map.py.*commit" "$CHECK"
+  # SE-501: .scm ya no se versiona; la remediación es regenerar con derived.sh, no commitear.
+  run grep -c "stale — run 'bash scripts/derived.sh ensure'" "$CHECK"
   [[ "$output" -ge 1 ]]
+  run grep -c "generate-capability-map.py.*commit" "$CHECK"
+  [[ "$output" -eq 0 ]]
 }
 
 # ── Behaviour of the full check (single run in setup_file) ──────────────────
@@ -68,7 +75,8 @@ teardown() {
 }
 
 @test "all checks green: passed equals total, 0 failed" {
-  [ "$(cat "$BATS_FILE_TMPDIR/check.rc")" -eq 0 ]
+  local rc; rc="$(cat "$BATS_FILE_TMPDIR/check.rc")"
+  if [ "$rc" -ne 0 ]; then echo "ci-extended-checks.sh salió $rc:"; grep -nE "FAIL|failed|✗|❌" "$CHECK_OUT" | head -20; tail -15 "$CHECK_OUT"; false; fi
   run cat "$CHECK_OUT"
   [[ "$output" =~ Results:[[:space:]]+([0-9]+)[[:space:]]passed,[[:space:]]+0[[:space:]]failed[[:space:]]\(([0-9]+)[[:space:]]total ]]
   [[ "${BASH_REMATCH[1]}" == "${BASH_REMATCH[2]}" ]]

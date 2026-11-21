@@ -1,0 +1,27 @@
+{
+  "id": "SE-481",
+  "status": "IMPLEMENTED",
+  "priority": "P0",
+  "title": "Vaults: clasificación con cierre seguro y polaridad en la búsqueda léxica",
+  "note": "H1 y H2 confirmados contra HEAD: confidentiality explícita rota se servía como sin nivel; negaciones eliminadas como stopwords.",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1637 (docs/evidence/graduacion-s27/SE-481.md). Entrega: PR #1419.",
+  "phase": "D",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "completion": {
+    "merge_pr": 1419,
+    "acceptance_evidence": [
+      {
+        "criterion": "AC (revisión de graduación S27, PR #1637)",
+        "file": "docs/specs/SE-481-vaults-classification-fail-closed.spec.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "projects/savia-vaults/tests/e2e/se481-quarantine.test.ts"
+      }
+    ],
+    "human_review": {
+      "status": "APPROVED",
+      "evidence": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27). Evidencia de revisión: PR #1637."
+    }
+  }
+}

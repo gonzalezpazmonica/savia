@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# nightly: serial (compara el estado del árbol antes y después; otra suite escribiendo a la vez lo falsea)
 # SE-511 S1 — medición del contexto fijo por turno (AC-1, AC-2, AC-4, AC-11).
 # Ref: docs/specs/SE-511-contexto-fijo-por-turno-a-la-mitad.spec.md
 

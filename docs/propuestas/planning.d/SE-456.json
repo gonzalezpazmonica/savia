@@ -1,0 +1,27 @@
+{
+  "id": "SE-456",
+  "status": "IMPLEMENTED",
+  "priority": "P1",
+  "title": "Tests que no pueden fallar: detector de vacuidad y criterio de evidencia de REA en la QA",
+  "note": "Graduada con resto; el resto queda en la cola S27. RESTO-456-a: reparar las cuatro aserciones de setup() (aserción real o borrado) y decidir si el detector se extiende a setup() con un caso que lo marque; contador 4 antes, 0 después. Registrar la respuesta de la operadora a D1 en la spec.",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1638 (docs/evidence/graduacion-s27/SE-456.md). Entrega: PR #1350. Con resto: RESTO-456-a: reparar las cuatro aserciones de setup() (aserción real o borrado) y decidir si el detector se extiende a setup() con un caso que lo marque; contador 4 antes, 0 después. Registrar la respuesta de la operadora a D1 en la spec.",
+  "phase": "D",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "completion": {
+    "merge_pr": 1350,
+    "acceptance_evidence": [
+      {
+        "criterion": "AC (revisión de graduación S27, PR #1638)",
+        "file": "docs/specs/SE-456-test-vacuity-evidence-criteria.spec.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "tests/bats/test-se-456-test-vacuity.bats"
+      }
+    ],
+    "human_review": {
+      "status": "APPROVED",
+      "evidence": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27). Evidencia de revisión: PR #1638."
+    }
+  }
+}
