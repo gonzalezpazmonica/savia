@@ -473,3 +473,13 @@ EOF
   run env PATH="$P" bash -c "jq -n --arg c 'git -C $WT status' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
   [ "$status" -eq 0 ]
 }
+
+@test "vbg sin python3: un ejecutable variable seguido de commit bloquea (paridad con el guard TS)" {
+  # Codex P1-2 en #1596: \"\$x\" -C \$WT commit (x=git) pasaba sin resolvedor.
+  P=$(no_python_path)
+  run env PATH="$P" bash -c "jq -n --arg c '\"\$x\" -C $WT commit -m x' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
+  blocked_unsure_vbg
+  # negativo: el mismo ejecutable variable con status no bloquea
+  run env PATH="$P" bash -c "jq -n --arg c '\"\$x\" -C $WT status' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
+  [ "$status" -eq 0 ]
+}

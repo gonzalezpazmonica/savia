@@ -124,9 +124,10 @@ if [[ -n "$_HAS_GIT" ]] || echo "$_PLAIN" | grep -iqE '(^|[^[:alnum:]_-])commit(
         guard_main_target "$GIT_DIR_TARGET"
       fi
     done <<< "$OP_TARGETS"
-  elif [[ -n "$_HAS_GIT" && -n "$_HAS_OP" ]]; then
-    # Sin Python, timeout o fallo del resolvedor: fail-closed (solo lo que dice
-    # git y commit|add; el prefiltro amplio dejaría sin servicio `git status`).
+  elif [[ -n "$_HAS_GIT" && -n "$_HAS_OP" ]] \
+       || echo "$_PLAIN" | grep -iqE '(^|[^[:alnum:]_-])commit(-tree)?([^[:alnum:]_-]|$)'; then
+    # Sin Python, timeout o fallo del resolvedor: fail-closed con git y commit|add|stage,
+    # o con `commit` solo (`"$x" -C … commit`, x=git). `git status` sigue pasando.
     echo "BLOQUEADO: resolvedor de destino no disponible para git commit/add (fail-closed). Forma admitida: git -C <ruta> commit …" >&2
     exit 2
   fi
