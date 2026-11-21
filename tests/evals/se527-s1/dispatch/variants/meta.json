@@ -1,0 +1,19 @@
+{
+ "A": {
+  "ref": "e61539b02",
+  "files": [
+   ".opencode/agents/configurator.md"
+  ],
+  "bytes": 3130,
+  "sha256": "7812d9c60b59e34153033ed89e9953c7f91336d641d84ae95a2886538010c72a"
+ },
+ "B": {
+  "ref": "worktree",
+  "files": [
+   "docs/RESOLVER.md",
+   "docs/rules/domain/resolver-protocol.md"
+  ],
+  "bytes": 39103,
+  "sha256": "349179d0429545fe85bcb9198ffed665b512f01838690d156cf4aaaa39555ad5"
+ }
+}

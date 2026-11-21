@@ -58,7 +58,8 @@ Hooks de logging y memoria corren independientemente del perfil:
 # Ver perfil activo
 bash scripts/hook-profile.sh get
 
-# Cambiar perfil (dura la sesión actual y persiste en ~/.savia/hook-profile)
+# Validar el nombre e imprimir cómo fijarlo (no escribe ningún fichero;
+# el perfil solo se lee de la variable SAVIA_HOOK_PROFILE)
 bash scripts/hook-profile.sh set minimal
 bash scripts/hook-profile.sh set standard   # ← default
 bash scripts/hook-profile.sh set strict

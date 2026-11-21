@@ -18,10 +18,9 @@ Manage the active Savia hook profile. Hook profiles control which of the 22+ hoo
 /hook-profile             # show active profile
 /hook-profile get         # same as above
 /hook-profile list        # list all profiles with descriptions
-/hook-profile set minimal # switch to minimal (security-only)
-/hook-profile set standard # switch to standard (default)
-/hook-profile set strict  # switch to strict (extra scrutiny)
-/hook-profile set ci      # switch to CI mode (non-interactive)
+/hook-profile set minimal # validate and show how to export minimal (security-only)
+/hook-profile set strict  # same for strict (extra scrutiny)
+/hook-profile set ci      # same for CI mode (non-interactive)
 ```
 
 ## Execution
@@ -49,4 +48,4 @@ bash scripts/hook-profile.sh list
 
 ## Note
 
-The profile persists to `~/.savia/hook-profile`. To override for one command only, use the env var: `SAVIA_HOOK_PROFILE=ci bash scripts/pr-plan.sh`
+`set` writes nothing: the profile is read only from the `SAVIA_HOOK_PROFILE` environment variable, and `~/.savia/hook-profile` is ignored (a file an agent could write would let it lower the guards). Export the variable yourself, or for one command only: `SAVIA_HOOK_PROFILE=ci bash scripts/pr-plan.sh`

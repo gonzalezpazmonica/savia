@@ -233,3 +233,7 @@ APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva +
 > No cambia el estado ni el alcance de esta spec. Vale como anexo cuando la operadora apruebe SE-520.
 
 - Formato de las guardas simples como reglas markdown evaluadas por un solo motor determinista, manejador del despachador de D3: `docs/specs/SE-520-reglas-de-guarda-en-texto.spec.md`. Inventario: de 43 guardas bloqueantes, 7 caben enteras como regla, 8 en parte y 28 no. Sus fases dependen de S1, S3 y S4 de esta spec.
+
+## Enmienda 2026-11-20 — perfil de hooks (K11-a)
+
+Retirada/enmienda 2026-11-20 por decisión de la operadora (pregunta interactiva). `scripts/hook-profile.sh set` ya no guarda el perfil en un fichero de la carpeta personal: valida el nombre e indica cómo exportar `SAVIA_HOOK_PROFILE`, que es lo único que leen los hooks. Un fichero que los hooks leyeran permitiría a un agente bajar las protecciones escribiéndolo. No cambia el estado de esta spec. Queda fuera: que `minimal` conserve los bloqueos de `sudo` y del commit en `main` (K11-b, toca `.claude/hooks/`).
