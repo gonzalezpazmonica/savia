@@ -497,3 +497,22 @@ fake_replace() {
   ledger '{"effect_id":"e1","state":"DISPATCHED","executor":"b","principal":"p"}'
   run sc reconcile --scope executor:a; echo "$output"; [ "$status" -eq 0 ]; [[ "$output" != *e1* ]]
 }
+
+@test "fb2597a correctness P2-b: si una segunda PR cambia la aprobación, cuenta esa PR y su blob nuevo" {
+  operator_setup
+  sc pause --scope executor:a --reason x; sc reconcile --scope executor:a
+  approve executor:a 0 "$(seq_of executor:a)" '[]'
+  old_blob="$APPROVAL_BLOB"
+  origin_put "$APPROVAL_PATH" "{\"epoch\":0,\"stop_seq\":$(seq_of executor:a),\"scope\":\"executor:a\",\"reason\":\"otra\",\"accept\":[]}"
+  sha=$(git -C "$R" rev-parse HEAD); new_blob=$(git -C "$R" rev-parse "HEAD:$APPROVAL_PATH")
+  [ "$old_blob" != "$new_blob" ]
+  gh_api "repos_owner_repo_commits_${sha}_pulls" '[{"number":777,"merged_at":"2026-11-17T00:00:00Z"}]'
+  gh_api repos_owner_repo_pulls_777 '{"number":777,"merged_by":{"login":"operadora"}}'
+  # La PR 777 declara el blob anterior: no contiene la aprobación vigente.
+  gh_api repos_owner_repo_pulls_777_files "[{\"filename\":\"$APPROVAL_PATH\",\"sha\":\"$old_blob\"}]"
+  run sc resume --scope executor:a --via-pr; echo "$output"; [ "$status" -eq 4 ]; [[ "$output" == *APPROVAL_NOT_IN_PR* ]]
+  run sc check --executor a; [ "$status" -eq 6 ]
+  gh_api repos_owner_repo_pulls_777_files "[{\"filename\":\"$APPROVAL_PATH\",\"sha\":\"$new_blob\"}]"
+  run sc resume --scope executor:a --via-pr; echo "$output"; [ "$status" -eq 0 ]
+  grep '"op":"resume"' "$SAVIA_CONTROL_DIR/control.jsonl" | grep -q '"pr":777'
+}
