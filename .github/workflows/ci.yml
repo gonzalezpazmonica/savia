@@ -363,13 +363,14 @@ jobs:
         run: python3 -m unittest discover -s tests/dual-cli -v
 
       # SE-436 S5: el guard de cúpulas y su paridad hook bash ↔ savia-gates corren siempre, no solo en modo
-      # FULL (ci-select-bats solo elige tests/bats/).
+      # FULL (ci-select-bats solo elige tests/bats/). SE-462 S1: la marca de sesión de lecturas N2+, en las dos
+      # implementaciones.
       - name: Dome guard parity (SE-436 S5)
         env:
           SAVIA_REQUIRE_TS: "1"
         run: |
           python3 -m unittest tests/python/test_dome_guard.py
-          bats tests/hooks/test-dome-guard.bats tests/hooks/test-dome-guard-parity.bats
+          bats tests/hooks/test-dome-guard.bats tests/hooks/test-dome-guard-parity.bats tests/hooks/test-dome-read-marks.bats
 
       # SE-508 S1: guard de efectos MCP/WebFetch/WebSearch, su paridad hook bash ↔ savia-gates y el binding de
       # OpenCode. Sus suites viven fuera de tests/bats/ (ci-select-bats no las elige); SAVIA_REQUIRE_TS=1 hace
