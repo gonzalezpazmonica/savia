@@ -43,9 +43,14 @@ make_skill() {
 
 audit() { SAVIA_SKILLS_DIR="$SK" run bash "$REPO/$SCRIPT" "$@"; }
 
+# El generador congela --apply si existe <raiz>/data/.cache-session-active (SE-371), y ese
+# marcador lo crea el hook de una sesion viva en el repo real: la suite fallaba dentro de
+# una sesion de Claude y pasaba en CI. Se ejecuta una copia en una raiz sintetica sin marcador.
 gen() {
+  mkdir -p "$WORK/fakeroot/scripts"
+  cp "$REPO/$GENERATOR" "$WORK/fakeroot/scripts/skills-md-generate.sh"
   PROJECT_ROOT="$WORK" SKILLS_DIR="$SK" SKILLS_MD="$WORK/SKILLS.md" \
-    SKILLS_MANIFEST="$WORK/manifest.json" run bash "$REPO/$GENERATOR" "$@"
+    SKILLS_MANIFEST="$WORK/manifest.json" run bash "$WORK/fakeroot/scripts/skills-md-generate.sh" "$@"
 }
 
 # ── Seguridad del objetivo ───────────────────────────────────────────────────
@@ -268,6 +273,23 @@ gen() {
     run bash "$REPO/$GENERATOR" --apply
   [ "$status" -eq 3 ]
   [ ! -e "$WORK/SKILLS.md" ]
+}
+
+@test "generator: el marcador de sesion activa (SE-371) bloquea --apply y no escribe nada" {
+  make_skill marcador 'description: "Usar cuando hay marcador de sesion."'
+  mkdir -p "$WORK/fakeroot/data"
+  : > "$WORK/fakeroot/data/.cache-session-active"
+  gen --apply
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"sesión activa"* ]]
+  [ ! -e "$WORK/SKILLS.md" ]
+}
+
+@test "generator: sin marcador ni variable --apply escribe SKILLS.md (negativo del bloqueo)" {
+  make_skill libre 'description: "Usar cuando no hay sesion activa."'
+  gen --apply
+  [ "$status" -eq 0 ]
+  [ -f "$WORK/SKILLS.md" ]
 }
 
 # ── G14: pre-push invoca al auditor sobre las skills modificadas ─────────────
