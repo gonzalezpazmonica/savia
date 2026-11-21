@@ -38,13 +38,20 @@ EOF
 case "$1" in
   --version) echo "ollama version is $STUB_OLLAMA_VERSION" ;;
   list) echo "NAME ID SIZE MODIFIED"; while read -r m; do [[ -n "$m" ]] && echo "$m abc 4.7 GB 1 day ago"; done < "$STUB_DIR/models" ;;
-  pull) echo "$2" >> "$STUB_DIR/pulls"; echo "$2" >> "$STUB_DIR/models" ;;
+  pull) [[ "${STUB_PULL_FAIL:-0}" == 1 ]] && exit 1; echo "$2" >> "$STUB_DIR/pulls"; echo "$2" >> "$STUB_DIR/models" ;;
   serve) exit 0 ;;
 esac
 EOF
   cat > "$TMP/bin/uname" <<'EOF'
 #!/usr/bin/env bash
 case "$1" in -s) echo Linux ;; -m) echo x86_64 ;; *) echo Linux ;; esac
+EOF
+  # nvidia-smi: stub determinista (la maquina real puede tener el binario sin driver)
+  cat > "$TMP/bin/nvidia-smi" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${STUB_GPU:-ok}" == "ok" ]]; then echo "NVIDIA RTX Test, 512 MiB, 8192 MiB"; exit 0; fi
+echo "NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver." >&2
+exit 9
 EOF
   chmod +x "$TMP/bin/"*
   export PATH="$TMP/bin:$PATH"
@@ -195,6 +202,7 @@ EOF
   run bash "$REPO_ROOT/$STATUS"
   [ "$status" -eq 1 ]
   [[ "$output" != *"listo"* ]]
+  [[ "$output" == *"1 problema(s)"* ]]
 }
 
 @test "status: fail si falta un modelo al que apunta un alias" {
@@ -203,6 +211,7 @@ EOF
   run bash "$REPO_ROOT/$STATUS"
   [ "$status" -eq 1 ]
   [[ "$output" == *"qwen2.5:3b"* ]]
+  [[ "$output" == *"1 problema(s)"* ]]
 }
 
 @test "status: fail sin fichero env (setup nunca ejecutado)" {
@@ -218,6 +227,7 @@ EOF
   run bash "$REPO_ROOT/$STATUS"
   [ "$status" -eq 1 ]
   [[ "$output" == *"0.20.0"* ]]
+  [[ "$output" == *"1 problema(s)"* ]]
 }
 
 @test "status: invalid base URL con /v1 final en modo activo (pediria /v1/v1/messages)" {
@@ -226,6 +236,7 @@ EOF
   run bash "$REPO_ROOT/$STATUS"
   [ "$status" -eq 1 ]
   [[ "$output" == *"/v1/v1/messages"* ]]
+  [[ "$output" == *"1 problema(s)"* ]]
 }
 
 @test "status: modo activo sin ANTHROPIC_AUTH_TOKEN es un problema" {
@@ -234,6 +245,7 @@ EOF
   run bash "$REPO_ROOT/$STATUS"
   [ "$status" -eq 1 ]
   [[ "$output" == *"ANTHROPIC_AUTH_TOKEN"* ]]
+  [[ "$output" == *"1 problema(s)"* ]]
 }
 
 @test "status: empty meminfo (macOS sin /proc) no rompe el script" {
@@ -250,4 +262,200 @@ EOF
   PATH="$TMP/bin:/usr/bin:/bin" run bash "$REPO_ROOT/$STATUS"
   [ "$status" -eq 1 ]
   [[ "$output" == *"NO instalado"* ]]
+  [[ "$output" == *"problema(s)"* ]]
+}
+
+@test "status: nvidia-smi instalado pero sin driver no aborta el informe (regresion exit 9)" {
+  ready_env
+  export STUB_GPU=broken
+  run bash "$REPO_ROOT/$STATUS"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"listo"* ]]
+  [[ "$output" != *"GPU:"* ]]
+}
+
+@test "status: nvidia-smi funcional muestra la GPU y sigue hasta el resumen" {
+  ready_env
+  run bash "$REPO_ROOT/$STATUS"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"GPU:"*"NVIDIA RTX Test"* ]]
+  [[ "$output" == *"listo"* ]]
+}
+
+@test "status: sin driver y con otro problema sigue contando el problema (exit 1, no 9)" {
+  ready_env
+  export STUB_GPU=broken
+  : > "$TMP/models"
+  run bash "$REPO_ROOT/$STATUS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"problema(s)"* ]]
+}
+
+@test "status: dos problemas distintos se suman (2 problema(s), no uno)" {
+  ready_env
+  export STUB_SERVER=0 PM_EMERGENCY_MODE=active ANTHROPIC_BASE_URL="http://localhost:11434"
+  run bash "$REPO_ROOT/$STATUS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"2 problema(s)"* ]]
+}
+
+@test "status: modo activo correcto no suma problemas ni dice problema(s)" {
+  ready_env
+  export PM_EMERGENCY_MODE=active ANTHROPIC_BASE_URL="http://localhost:11434" ANTHROPIC_AUTH_TOKEN=ollama
+  run bash "$REPO_ROOT/$STATUS"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ACTIVO"* ]]
+  [[ "$output" != *"problema(s)"* ]]
+}
+
+@test "status: version de Ollama ilegible es un problema, no un pase" {
+  ready_env
+  export STUB_OLLAMA_VERSION=""
+  run bash "$REPO_ROOT/$STATUS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"version ilegible"* ]]
+  [[ "$output" == *"1 problema(s)"* ]]
+}
+
+@test "status: sin ningun modelo descargado suma el aviso y los dos modelos configurados (3)" {
+  ready_env
+  : > "$TMP/models"
+  run bash "$REPO_ROOT/$STATUS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"No hay modelos descargados"* ]]
+  [[ "$output" == *"3 problema(s)"* ]]
+}
+
+@test "status: version 0.9.0 se rechaza (comparacion numerica, no alfabetica)" {
+  ready_env
+  export STUB_OLLAMA_VERSION="0.9.0"
+  run bash "$REPO_ROOT/$STATUS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no sirve /v1/messages"* ]]
+}
+
+@test "status: version exacta 0.20.0 se acepta (limite inclusivo)" {
+  ready_env
+  export STUB_OLLAMA_VERSION="0.20.0"
+  run bash "$REPO_ROOT/$STATUS"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"listo"* ]]
+}
+
+@test "status: version 0.19.9 se rechaza (justo bajo el limite)" {
+  ready_env
+  export STUB_OLLAMA_VERSION="0.19.9"
+  run bash "$REPO_ROOT/$STATUS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"0.19.9"* ]]
+}
+
+@test "status: un modelo instalado con sufijo no satisface al configurado (match exacto)" {
+  ready_env
+  printf 'qwen2.5:7b-instruct\nqwen2.5:3b\n' > "$TMP/models"
+  run bash "$REPO_ROOT/$STATUS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no descargado: qwen2.5:7b"* ]]
+}
+
+@test "status: base URL con /v1/ final tambien se rechaza" {
+  ready_env
+  export PM_EMERGENCY_MODE=active ANTHROPIC_BASE_URL="http://localhost:11434/v1/" ANTHROPIC_AUTH_TOKEN=ollama
+  run bash "$REPO_ROOT/$STATUS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"/v1/v1/messages"* ]]
+}
+
+# ── emergency-setup.sh: umbrales de RAM, version, cache y fallos (SE-376 S03 grupo 7) ──
+
+@test "setup: 32 GiB redondeados (33030144 kB, limite inclusivo) usa el tramo de 32 GB con modelo 14b" {
+  printf 'MemTotal:       33030144 kB\n' > "$EMERGENCY_MEMINFO"
+  run bash "$REPO_ROOT/$SCRIPT"
+  [ "$status" -eq 0 ]
+  grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL="qwen2.5:14b"' "$(envfile)"
+  grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL="qwen2.5:7b"' "$(envfile)"
+  grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL="qwen2.5:3b"' "$(envfile)"
+}
+
+@test "setup: un kB bajo el redondeo a 32 GiB sigue en el tramo de 16 GB sin modelo 14b" {
+  printf 'MemTotal:       33030143 kB\n' > "$EMERGENCY_MEMINFO"
+  run bash "$REPO_ROOT/$SCRIPT"
+  [ "$status" -eq 0 ]
+  grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL="qwen2.5:7b"' "$(envfile)"
+  ! grep -q 'qwen2.5:14b' "$(envfile)"
+}
+
+@test "setup: menos de 8 GB avisa de RAM insuficiente; 8 GB no avisa" {
+  printf 'MemTotal:        6000000 kB\n' > "$EMERGENCY_MEMINFO"
+  run bash "$REPO_ROOT/$SCRIPT"
+  [[ "$output" == *"RAM < 8GB"* ]]
+  printf 'MemTotal:        8030000 kB\n' > "$EMERGENCY_MEMINFO"
+  run bash "$REPO_ROOT/$SCRIPT"
+  [[ "$output" != *"RAM < 8GB"* ]]
+  printf 'MemTotal:        7340032 kB\n' > "$EMERGENCY_MEMINFO"
+  run bash "$REPO_ROOT/$SCRIPT"
+  [[ "$output" == *"RAM < 8GB"* ]]
+}
+
+@test "setup: Ollama 0.9.0 se rechaza (comparacion numerica) y no escribe el env" {
+  export STUB_OLLAMA_VERSION="0.9.0"
+  run bash "$REPO_ROOT/$SCRIPT"
+  [ "$status" -eq 1 ]
+  [ ! -f "$(envfile)" ]
+}
+
+@test "setup: Ollama exactamente 0.20.0 se acepta" {
+  export STUB_OLLAMA_VERSION="0.20.0"
+  run bash "$REPO_ROOT/$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ -f "$(envfile)" ]
+}
+
+@test "setup: offline con un modelo ajeno cacheado lo usa tambien para el alias haiku" {
+  export STUB_NET=0
+  mkdir -p "$HOME/.pm-workspace-emergency"
+  touch "$HOME/.pm-workspace-emergency/.plan-executed"
+  echo "llama3:8b" > "$TMP/models"
+  run bash "$REPO_ROOT/$SCRIPT"
+  [ "$status" -eq 0 ]
+  for v in OPUS SONNET HAIKU; do grep -q "ANTHROPIC_DEFAULT_${v}_MODEL=\"llama3:8b\"" "$(envfile)"; done
+  grep -q 'CLAUDE_CODE_SUBAGENT_MODEL="llama3:8b"' "$(envfile)"
+  [ ! -s "$TMP/pulls" ]
+}
+
+@test "setup: offline sin directorio de cache se rechaza con exit 1 y sin env" {
+  export STUB_NET=0
+  run bash "$REPO_ROOT/$SCRIPT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Sin caché"* ]]
+  [ ! -f "$(envfile)" ]
+}
+
+@test "setup: offline con cache pero sin marca .plan-executed tambien se rechaza" {
+  export STUB_NET=0
+  mkdir -p "$HOME/.pm-workspace-emergency"
+  echo "qwen2.5:3b" > "$TMP/models"
+  run bash "$REPO_ROOT/$SCRIPT"
+  [ "$status" -eq 1 ]
+  [ ! -f "$(envfile)" ]
+}
+
+@test "setup: fallo al descargar un modelo aborta con exit 1 y sin env" {
+  export STUB_PULL_FAIL=1
+  run bash "$REPO_ROOT/$SCRIPT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Fallo al descargar"* ]]
+  [ ! -f "$(envfile)" ]
+}
+
+@test "setup: offline solo reemplaza los alias cuyo modelo falta; el cacheado se conserva" {
+  export STUB_NET=0
+  mkdir -p "$HOME/.pm-workspace-emergency"
+  touch "$HOME/.pm-workspace-emergency/.plan-executed"
+  printf 'llama3:8b\nqwen2.5:3b\n' > "$TMP/models"
+  run bash "$REPO_ROOT/$SCRIPT"
+  [ "$status" -eq 0 ]
+  grep -q 'ANTHROPIC_DEFAULT_OPUS_MODEL="llama3:8b"' "$(envfile)"
+  grep -q 'ANTHROPIC_DEFAULT_SONNET_MODEL="llama3:8b"' "$(envfile)"
+  grep -q 'ANTHROPIC_DEFAULT_HAIKU_MODEL="qwen2.5:3b"' "$(envfile)"
 }
