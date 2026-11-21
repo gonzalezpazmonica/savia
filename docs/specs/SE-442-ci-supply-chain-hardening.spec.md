@@ -15,6 +15,14 @@ resource: https://github.com/InditexTech/gh-actions
 
 # SE-442 — Cadena de suministro de la CI: acciones fijadas por SHA, Dependabot, CodeQL, Scorecard y divulgación coordinada
 
+## Estado: IMPLEMENTED con resto
+
+Graduada el 2026-11-21 (PR #1642) con tres condiciones de `docs/evidence/graduacion-s27/SE-442.md` que no se cumplieron; la revisión de seguridad de #1642 las marcó P1. El estado es IMPLEMENTED con resto, y el resto está en la cola S27 de `planning-state.json`:
+
+- **RESTO-442-a** (S): enmendar AC5. Scorecard no corre en el PR: la acción publica solo desde la rama por defecto. Texto nuevo: «CodeQL en el PR; Scorecard en main (push y semanal)».
+- **RESTO-442-b** (S): enmendar AC9. Quedan tres `pip install` sin hash: `evals-ci.yaml:60` y `:62`, y `templates/pr-agent-review.yml:96`. Registrarlos como excepción con motivo o fijarlos con hash.
+- **RESTO-442-c** (decisión de la operadora): triaje de las alertas abiertas de code scanning (59 al corte: 1 crítica y 19 altas). Cada una, corregida con causa raíz o descartada con motivo. La spec lo exigía y no consta.
+
 ## Problema
 
 La CI ejecuta código de terceros con el token del repositorio. Medido sobre `main` (a15eae38f):
