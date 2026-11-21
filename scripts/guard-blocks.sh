@@ -33,7 +33,12 @@ fi
 # con entradas grandes, que con pipefail cambiaría el código que se reenvía.
 inp=$(mktemp) && err=$(mktemp) || { echo "BLOQUEADO [$guard]: sin fichero temporal para el hook" >&2; exit 2; }
 trap 'rm -f "$inp" "$err"' EXIT
-[[ -t 0 ]] || cat >"$inp"
+# Si la copia falla (disco lleno, límite de tamaño), el hook vería una entrada vacía o
+# truncada y podría dejar pasar lo que bloquea: fallo cerrado antes de ejecutarlo.
+if [[ ! -t 0 ]] && ! cat >"$inp"; then
+  echo "BLOQUEADO [$guard]: no se pudo copiar la entrada del hook; no se ejecuta con una entrada incompleta" >&2
+  exit 2
+fi
 "$@" <"$inp" 2>"$err"
 rc=$?
 cat "$err" >&2

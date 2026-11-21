@@ -46,11 +46,18 @@ if os.path.exists(plugin_path):
     # SE-510 AC-7: la lista BEFORE_GUARDS vive en lib/before-guards.ts, que el
     # plugin importa; sus guards cuentan igual que los importados directamente.
     before_guards_path = os.path.join(os.path.dirname(plugin_path), "lib", "before-guards.ts")
+    import_re = r'import\s*\{\s*([\w]+)\s*\}\s*from\s*["\']\.{1,2}\/guards\/([\w\-]+)\.ts["\']'
+    imports = list(re.finditer(import_re, ts_src))
     if re.search(r'from\s*["\']\./lib/before-guards\.ts["\']', ts_src) and os.path.exists(before_guards_path):
         with open(before_guards_path) as f:
-            ts_src += "\n" + f.read()
+            bg_src = f.read()
+        # Solo cuenta lo que está DENTRO de la lista: un guard importado pero quitado del
+        # array no se ejecuta y no da cobertura (revisión de seguridad c9eaee1 P2-1).
+        arr = re.search(r'BEFORE_GUARDS\s*=\s*\[(.*?)\]', bg_src, re.S)
+        listed = set(re.findall(r'\b\w+\b', re.sub(r'//[^\n]*', '', arr.group(1)))) if arr else set()
+        imports += [m for m in re.finditer(import_re, bg_src) if m.group(1) in listed]
     # Match: import { SomeName } from "./guards/some-name.ts" (o "../guards/" desde lib/)
-    for m in re.finditer(r'import\s*\{\s*([\w]+)\s*\}\s*from\s*["\']\.{1,2}\/guards\/([\w\-]+)\.ts["\']', ts_src):
+    for m in imports:
         ts_name = m.group(1)
         guard_file = m.group(2)
         # Map guard filename to likely bash script name (e.g. auto-redact-credentials → auto-redact-credentials.sh)

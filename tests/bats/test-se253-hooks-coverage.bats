@@ -170,6 +170,16 @@ JSON
   grep -q '| PreToolUse | fake-guard.sh | si | TS_GUARD | bloqueante | fakeGuard |' "$t/docs/hooks-coverage-matrix.md"
 }
 
+@test "SE-510 negativo (seguridad c9eaee1 P2-1): guard importado pero fuera de BEFORE_GUARDS no da cobertura" {
+  t="$BATS_TEST_TMPDIR/tree"
+  _mk_tree "$t" 'import { BEFORE_GUARDS } from "./lib/before-guards.ts";'
+  printf 'import { fakeGuard } from "../guards/fake-guard.ts";\nexport const BEFORE_GUARDS = [\n  // fakeGuard,\n  otherGuard,\n];\n' \
+    > "$t/.opencode/plugins/lib/before-guards.ts"
+  run bash "$t/scripts/hooks-coverage-matrix.sh"
+  [ "$status" -eq 0 ]
+  grep -q '| PreToolUse | fake-guard.sh | no | NONE | bloqueante |' "$t/docs/hooks-coverage-matrix.md"
+}
+
 @test "SE-510 negativo: lib/before-guards.ts que el plugin no importa no da cobertura" {
   t="$BATS_TEST_TMPDIR/tree"
   _mk_tree "$t" '// sin import de la lista'

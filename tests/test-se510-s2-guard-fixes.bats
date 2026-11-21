@@ -491,3 +491,78 @@ print(r["guard"], r["reason"], r["hmac"], len(r["cmd_hmac"]), "input" in r)'
   [ "$status" -ne 0 ]
   [ ! -s "$TMP/destino" ]
 }
+
+# ── Revisión de c9eaee1 (Codex P1 ×3, correctness/seguridad P2) ─────────────
+resolve_in() {  # resolve_in <cwd> <orden>
+  run bash -c "jq -nc --arg c \"\$1\" --arg d \"\$2\" '{tool_input:{command:\$c},cwd:\$d}' | python3 scripts/lib/pr_summary_root.py /" _ "$2" "$1"
+}
+
+@test "SE-510 F3 negativo (Codex c9eaee1 P1-1): c\$'d', env -S/--split-string, \$x como orden y source → exit 2" {
+  git init -q "$TMP/a" && git init -q "$TMP/b"
+  cmds=("c\$'d' $TMP/b && gh pr create" "c\$\"d\" $TMP/b && gh pr create"
+        "env --split-string='--chdir=$TMP/b gh pr create'" "env -S'-C $TMP/b' gh pr create"
+        "x=c; \${x}d $TMP/b && gh pr create" "\$(printf c)d $TMP/b && gh pr create"
+        "bash -c 'x=c; \${x}d $TMP/b && gh pr create'" "source $TMP/s.sh && gh pr create"
+        ". $TMP/s.sh && gh pr create" "true; . $TMP/s.sh; gh pr create"
+        "cd $TMP/b && echo \$'\\'' & echo \$'\\''; gh pr create")
+  for cmd in "${cmds[@]}"; do
+    resolve_in "$TMP/a" "$cmd"
+    [ "$status" -eq 2 ] || { echo "no bloqueó: $cmd → $output"; false; }
+  done
+}
+
+@test "SE-510 F3 (Codex c9eaee1 P1-1) negativo: expansiones tras gh, un punto como argumento y env -u no bloquean" {
+  git init -q "$TMP/a" && git init -q "$TMP/b"
+  top=$(git -C "$TMP/b" rev-parse --show-toplevel)
+  for cmd in "cd $TMP/b && gh pr create --title \"\$T\" --body \"\$(cat x)\"" \
+             "cd $TMP/b && ls . && gh pr create" "cd $TMP/b && env -u GH_HOST gh pr create"; do
+    resolve_in "$TMP/a" "$cmd"
+    [ "$status" -eq 0 ] && [ "$output" = "$top" ] || { echo "falso bloqueo: $cmd → $output"; false; }
+  done
+}
+
+@test "SE-510 F3 (correctness c9eaee1 P2-2): env -uCI y popd en un texto previo bloquean (falso bloqueo aceptado)" {
+  git init -q "$TMP/a"
+  for cmd in "env -uCI gh pr create" "echo popd; gh pr create"; do
+    resolve_in "$TMP/a" "$cmd"
+    [ "$status" -eq 2 ] || { echo "no bloqueó: $cmd"; false; }
+  done
+}
+
+@test "SE-510 AC-4 negativo (Codex c9eaee1 P1-2): si wrap no puede copiar stdin, sale 2 sin ejecutar el hook" {
+  printf '#!/usr/bin/env bash\ntouch "%s/ran"\nexit 0\n' "$TMP" >"$TMP/allow.sh"
+  run bash -c "printf '%s' '{\"tool_input\":{\"command\":\"x\"}}' | (ulimit -f 0; bash scripts/guard-blocks.sh wrap --guard g -- bash '$TMP/allow.sh')"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no se pudo copiar la entrada"* ]]
+  [ ! -e "$TMP/ran" ]
+  # Negativo: con la copia sana el hook corre y su 0 pasa tal cual.
+  run bash -c "printf '%s' '{}' | bash scripts/guard-blocks.sh wrap --guard g -- bash '$TMP/allow.sh'"
+  [ "$status" -eq 0 ]
+  [ -e "$TMP/ran" ]
+}
+
+@test "SE-510 AC-4 (Codex c9eaee1 P1-3): la redacción tapa la palabra de shell entera, no su primer trozo" {
+  # Muestras armadas en tiempo de ejecución (el guard de credenciales mira el texto de las órdenes).
+  run python3 -c '
+import sys; sys.path.insert(0, "scripts"); import guard_blocks as g
+o = "-" + "p"; s = "abcdefghijk"
+cases = [f"docker login {o} \"\"{s}", f"x {o} a\"b {s}\"d", "x --pass" + f"word=\"\"{s}",
+         "x pass" + f"word=q\"{s}", f"x {o} ab\\ {s}", f"x {o} \"{s}"]
+for c in cases:
+    r = g.redact(c)
+    print("FUGA" if s in r or "REDACTED" not in r else "ok", repr(r))
+# Negativo: lo que no es credencial queda intacto.
+print(g.redact("git status && echo hola"))'
+  echo "$output"
+  [[ "$output" != *FUGA* ]]
+  [ "$(grep -c '^ok' <<<"$output")" -eq 6 ]
+  [[ "$output" == *$'\n'"git status && echo hola" ]]
+}
+
+@test "SE-510 AC-4 (seguridad c9eaee1 P2-2): un log previo con 0644 queda en 0600 al registrar" {
+  : >"$SAVIA_GUARD_BLOCKS_LOG" && chmod 644 "$SAVIA_GUARD_BLOCKS_LOG"
+  run python3 scripts/guard_blocks.py record --guard g --event PreToolUse --tool Bash --engine bash --reason x </dev/null
+  [ "$status" -eq 0 ]
+  [ "$(stat -c %a "$SAVIA_GUARD_BLOCKS_LOG")" = "600" ]
+  [ "$(wc -l <"$SAVIA_GUARD_BLOCKS_LOG")" -eq 1 ]
+}

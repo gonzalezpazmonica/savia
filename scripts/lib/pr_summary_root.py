@@ -21,15 +21,22 @@ JSON malformado, directorio que no es un repo git, `&` entre el `cd` y gh (el `c
 queda en segundo plano), `cd` cuyo destino no se puede saber sin ejecutar nada (`$VAR`,
 `$(…)`, `` ` ``, `~usuario`, `cd -`, `cd` a secas), más de un `cd` (habría que
 encadenarlos), un `cd` dentro de un subshell que se cierra antes de gh (`(cd X); gh …`),
-`pushd`/`popd` en cualquier posición (`builtin pushd`) o `env -C` en cualquier grafía
-(`-C<ruta>`, `-iC`, `--chdir`), un `gh pr create` disfrazado (`\\gh`, `"gh"`) que no se
-puede situar en la orden, o un directorio que no existe.
+`pushd`/`popd` en cualquier posición (`builtin pushd`), `source` o `.` (ejecutan otro
+fichero en este shell), `env -C` en cualquier grafía (`-C<ruta>`, `-iC`, `--chdir`,
+`--chdir=`) o `env -S`/`--split-string`, cualquier expansión antes de gh (`$x`, `${x}d`,
+`$(…)`, `` `…` ``, `$'…'`, `$"…"`: puede formar un `cd` y `$'…'` no se analiza), un
+`gh pr create` disfrazado (`\\gh`, `"gh"`) que no se puede situar en la orden, o un
+directorio que no existe. Es deliberadamente amplio: `env -uCI` o un `popd` dentro de un
+texto previo también bloquean.
 Un `&` o un `cd` dentro de una cadena: `&` entre comillas es texto y no se toma por
 segundo plano; `cd` entre comillas sí bloquea (`"cd" X` es un `cd` real y sin un
 analizador de shell no se distingue de `printf 'cd'`): bloqueo falso, nunca permiso falso.
 No hay `-C` en gh: el `-C` de la spec es el de `git -C` y el de `cd`.
 Límite conocido: `gh -R <repo> --head <rama>` abre la PR en otro remoto u otra rama;
 el resumen que se evalúa sigue siendo el del árbol donde corre gh, no el de esa rama.
+Límite conocido: un gh que no se nombra (`$(which gh) pr create`) no lo ve GH_RE y se
+resuelve el cwd; tampoco lo ve el grep del gate, que no llega a llamar a este resolvedor
+(hueco previo a SE-510, igual en main).
 """
 from __future__ import annotations
 
@@ -52,8 +59,14 @@ UNSAFE = re.compile(r"[$`]|^~[^/]|^-$")
 # Otras formas de cambiar de directorio que no se siguen: fallo cerrado.
 # Se busca en el texto sin comillas ni barras y en cualquier posición (`builtin pushd`,
 # `env -C/ruta`, `env -iC ruta`): ante la duda, se bloquea.
-OTHER_CHDIR = re.compile(r"(?<![\w./-])(?:pushd|popd)(?![\w./-])"
-                         r"|\benv\b[^;&|()]*\s(?:-[A-Za-z]*C|--chdir)")
+# `source`/`.` ejecutan otro fichero en ESTE shell (puede hacer `cd`); `env -S`/`--split-string`
+# parte un texto en argumentos (`env -S'-C /B gh pr create'`), y `--chdir=` no lleva espacio.
+OTHER_CHDIR = re.compile(r"(?<![\w./-])(?:pushd|popd|source)(?![\w./-])"
+                         r"|(?:^|[;&|({])\s*\.\s"
+                         r"|\benv\b[^;&|()]*[\s=](?:-[A-Za-z]*[CS]|--chdir|--split-string)")
+# Una expansión (`$x`, `$(…)`, `` `…` ``, `$'…'`, `$"…"`) antes de gh puede ser el propio `cd`
+# (`c$'d' /B`, `x=cd; $x /B`) y el texto entre `$'…'` no se analiza: fallo cerrado.
+EXPANSION = re.compile(r"[$`]")
 # `&` suelto (no `&&`, `>&`, `&>`, `<&`, `|&`): la lista anterior va a un subshell de fondo y su
 # `cd` no llega a gh (`cd X && true & gh pr create`).
 BACKGROUND = re.compile(r"(?<![&>|<])&(?![&>])")
@@ -119,6 +132,12 @@ def parse_input(raw: str) -> tuple[str, str | None]:
     return (cmd if isinstance(cmd, str) else ""), (cwd if isinstance(cwd, str) and cwd else None)
 
 
+def rest_after_prefix(head: str) -> str:
+    """Lo que hay antes de gh sin el `cd` inicial (su destino ya lo valida UNSAFE)."""
+    pre = CD_PREFIX.match(head)
+    return head[pre.end():] if pre else head
+
+
 def cd_target(command: str) -> str | None:
     """Destino del `cd` que precede a `gh pr create`. None si no hay ningún `cd`.
 
@@ -136,6 +155,9 @@ def cd_target(command: str) -> str | None:
     head = command[: gh.start() + 1]
     if OTHER_CHDIR.search(plain(head)):
         raise Unresolved("pushd/popd o env -C antes de gh pr create: no se siguen")
+    if EXPANSION.search(plain(rest_after_prefix(head))):
+        raise Unresolved("expansión (`$…`, `` `…` ``, `$'…'`) antes de gh pr create: puede ser un `cd` "
+                         "que no se ve sin ejecutarla")
     pre = CD_PREFIX.match(head)
     rest = head[pre.end():] if pre else head
     if CD_WORD.search(plain(rest)):

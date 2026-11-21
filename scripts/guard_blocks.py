@@ -37,6 +37,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 LABELS = ("false-positive", "true-positive")
 ID_RE = re.compile(r"^[0-9a-f]{12}$")
+# Valor = una palabra entera de shell: bash concatena trozos con y sin comillas
+# (`""abc`, `a"b c"d`, `a\ b`), así que se tapa la palabra completa y no solo su primer
+# trozo. Una comilla sin cerrar tapa hasta el final (ante la duda, se tapa).
+SHELL_WORD = r"""(?:\\.|"(?:\\.|[^"\\])*"|'[^']*'|["'].*|[^\s'"\\;&|])+"""
 # Redacción del opt-in (docs/rules/domain/secret-redaction-policy.md): ante la duda, se tapa.
 SECRET_RES = [
     re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"),
@@ -44,21 +48,21 @@ SECRET_RES = [
     re.compile(r"AKIA[0-9A-Z]{16}"),
     re.compile(r"(?:ghp|ghs|ghu|ghr|gho)_[A-Za-z0-9]{20,}"),
     re.compile(r"xox[abprs]-[A-Za-z0-9-]{10,}"),
-    re.compile(r"(?i)(authorization:\s*(?:bearer|basic|token)\s+)\S+"),
-    re.compile(r"(?i)((?:password|passwd|pwd|token|secret|api[_-]?key|pat)\s*[=:]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s'\";&|]+)"),
+    re.compile(r"(?i)(authorization:\s*(?:bearer|basic|token)\s+)" + SHELL_WORD),
+    re.compile(r"(?i)((?:password|passwd|pwd|token|secret|api[_-]?key|pat)\s*[=:]\s*)" + SHELL_WORD),
     # Opciones de línea de órdenes: `--password x`, `--token=x`, `-p x` (valor con o sin comillas).
-    re.compile(r"(?i)(\s--?(?:password|passwd|pwd|token|secret|api[_-]?key|pat|p)(?:=|\s+))(?:\"[^\"]*\"|'[^']*'|[^\s'\";&|]+)"),
+    re.compile(r"(?i)(\s--?(?:password|passwd|pwd|token|secret|api[_-]?key|pat|p)(?:=|\s+))" + SHELL_WORD),
     re.compile(r"(?i)(://[^/\s:@]+:)[^@\s]+(?=@)"),
     # Lo que reconoce el guard de credenciales (.opencode/plugins/lib/credential-patterns.ts)
     # y el genérico de abajo no tapa porque un punto o un `;` parte el token.
     re.compile(r"(?:hvs\.[A-Za-z0-9_-]{24,}|\bs\.[A-Za-z0-9]{24,})"),  # HashiCorp Vault
     re.compile(r"AIza[0-9A-Za-z_-]{35}"),  # Google API
-    re.compile(r"(?i)((?:AccountKey|SharedAccessKey|sig)=)[^;&\s'\"]+"),  # Azure y SAS
+    re.compile(r"(?i)((?:AccountKey|SharedAccessKey|sig)=)" + SHELL_WORD),  # Azure y SAS
     re.compile(r"eyJ[A-Za-z0-9_-]{10,}(?:\.[A-Za-z0-9_-]+){0,2}"),  # JWT / token de k8s
     # Bloque de clave privada PEM (la clase [E] evita que los escáneres tomen la regex por una clave).
     re.compile(r"-----BEGIN[^-\n]*PRIVAT[E] KEY-----[\s\S]*?(?:-----END[^-\n]*PRIVAT[E] KEY-----|$)"),
     re.compile(r"(?i)((?:bearer|auth[_-]?token|privat[e][_-]?key|connection[_-]?string|client[_-]?secret)"
-               r"\s*[=:]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s'\";&|]+)"),
+               r"\s*[=:]\s*)" + SHELL_WORD),
     re.compile(r"[A-Za-z0-9+/_=-]{32,}"),  # tokens largos (también los PAT de grano fino)
 ]
 
@@ -149,6 +153,14 @@ def record(guard: str, reason: str, raw: str, event: str, tool: str, engine: str
 def append_private(path: Path, line: str) -> None:
     """Añade al log creándolo 0600 (no con el umask): solo la persona dueña lo lee."""
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    # El 0600 de os.open solo vale al crear: un log previo con 0644 se cierra aquí, y uno
+    # ajeno no se toca (revisión de seguridad c9eaee1 P2-2).
+    st = os.fstat(fd)
+    if st.st_uid != os.getuid() or not stat.S_ISREG(st.st_mode):
+        os.close(fd)
+        raise PermissionError(f"{path}: el log no es un fichero de esta persona")
+    if st.st_mode & 0o077:
+        os.fchmod(fd, 0o600)
     with os.fdopen(fd, "a", encoding="utf-8") as fh:
         fh.write(line)
 
