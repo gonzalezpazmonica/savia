@@ -284,3 +284,195 @@ exec $real_cat \"\$@\""
   run git -C "$REPO_ROOT" check-ignore -q "projects/mi-api/onboarding/ana-plan-30-60-90.md"
   [ "$status" -eq 0 ]
 }
+
+# ── SE-376 S03 grupo 6: huecos que la mutación dejó vivos ────────────────────
+# Mutación (grupo 6): 55 mutantes de scripts/setup-memory.sh, uno por condición, umbral,
+# código de salida o mensaje. La suite previa mataba 35. Los 20 vivos se resuelven así:
+# 18 los matan los tests de abajo (mutante entre paréntesis en cada test) y 2 son
+# equivalentes, documentados al final del bloque.
+
+# Ejecuta el script con locale UTF-8 para que `wc -m` y `wc -c` difieran con multibyte.
+run_utf8() { run env LC_ALL=C.utf8 bash "$TARGET" "$@"; }
+
+@test "bidi: U+200E (LRM) se rechaza (mutante: rango \\x8e\\x8f sin 200E)" {
+  run_utf8 "a"$'\xe2\x80\x8e'"b"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"controles bidi"* ]]
+  [ -z "$(all_files)" ]
+}
+
+@test "bidi: U+202A (LRE) se rechaza (mutante: inicio de rango 202A desplazado)" {
+  run_utf8 "a"$'\xe2\x80\xaa'"b"
+  [ "$status" -eq 2 ]
+  [ -z "$(all_files)" ]
+}
+
+@test "bidi: U+2066 y U+2069 (extremos del bloque de aislamiento) se rechazan" {
+  run_utf8 "a"$'\xe2\x81\xa6'"b"
+  [ "$status" -eq 2 ]
+  run_utf8 "a"$'\xe2\x81\xa9'"b"
+  [ "$status" -eq 2 ]
+  [ -z "$(all_files)" ]
+}
+
+@test "bidi frontera: los caracteres vecinos (U+200D, U+202F, U+2065, U+206A) NO se rechazan" {
+  for ch in $'\xe2\x80\x8d' $'\xe2\x80\xaf' $'\xe2\x81\xa5' $'\xe2\x81\xaa'; do
+    run_utf8 "a${ch}b"
+    [ "$status" -eq 0 ]
+    [ -f "$BASE/a${ch}b/memory/MEMORY.md" ]
+  done
+}
+
+@test "longitud: 255 bytes se acepta y 256 se rechaza (mutantes: -gt 256 y -ge 255)" {
+  n255="$(printf 'a%.0s' $(seq 1 255))"
+  run bash "$TARGET" "$n255"
+  [ "$status" -eq 0 ]
+  [ -f "$BASE/$n255/memory/MEMORY.md" ]
+  n256="$(printf 'b%.0s' $(seq 1 256))"
+  run bash "$TARGET" "$n256"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"demasiado largo"* ]]
+  [ ! -e "$BASE/$n256" ]
+}
+
+@test "longitud: el límite cuenta bytes, no caracteres (mutante: wc -m)" {
+  # 127 × 'é' (2 bytes) + 'a' = 255 bytes y 128 caracteres: cabe.
+  ok="$(printf 'é%.0s' $(seq 1 127))a"
+  run_utf8 "$ok"
+  [ "$status" -eq 0 ]
+  [ -f "$BASE/$ok/memory/MEMORY.md" ]
+  # 128 × 'é' = 256 bytes pero solo 128 caracteres: debe rechazarse.
+  big="$(printf 'é%.0s' $(seq 1 128))"
+  run_utf8 "$big"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"demasiado largo"* ]]
+  [ ! -e "$BASE/$big" ]
+}
+
+@test "mensajes: primera ejecución dice 'creado' para los 6 ficheros y la segunda 'ya existe' (mutantes: mensajes y rc de topics)" {
+  run bash "$TARGET" mi-api
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | grep -cE '^✅ [A-Za-z-]+\.md creado$')" -eq 6 ]
+  [ "$(echo "$output" | grep -c 'ya existe')" -eq 0 ]
+  run bash "$TARGET" mi-api
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | grep -cE '^⏭️  [A-Za-z-]+\.md ya existe$')" -eq 6 ]
+  [ "$(echo "$output" | grep -cE '^✅ .*\.md creado$')" -eq 0 ]
+}
+
+@test "mensajes: si falta un solo topic file, solo ese se crea y los otros 5 se respetan" {
+  run bash "$TARGET" mi-api
+  [ "$status" -eq 0 ]
+  unlink "$BASE/mi-api/memory/debugging.md"
+  echo "nota" >> "$BASE/mi-api/memory/architecture.md"
+  run bash "$TARGET" mi-api
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"✅ debugging.md creado"* ]]
+  [ "$(echo "$output" | grep -c 'ya existe')" -eq 5 ]
+  grep -qx "nota" "$BASE/mi-api/memory/architecture.md"
+}
+
+@test "plantilla: títulos exactos de los 5 topic files, cabecera de fecha exacta e índice completo en MEMORY.md (mutantes: sección, índice, cabecera)" {
+  run bash "$TARGET" mi-api
+  [ "$status" -eq 0 ]
+  d="$BASE/mi-api/memory"
+  [ "$(head -1 "$d/sprint-history.md")" = "# Sprint History — mi-api" ]
+  [ "$(head -1 "$d/architecture.md")" = "# Architecture — mi-api" ]
+  [ "$(head -1 "$d/debugging.md")" = "# Debugging — mi-api" ]
+  [ "$(head -1 "$d/team-patterns.md")" = "# Team Patterns — mi-api" ]
+  [ "$(head -1 "$d/devops-notes.md")" = "# Devops Notes — mi-api" ]
+  for t in sprint-history architecture debugging team-patterns devops-notes; do
+    grep -qx "> Actualizado: $TODAY" "$d/$t.md"
+    grep -qE "^- \`$t\.md\` — " "$d/MEMORY.md"
+  done
+  grep -qx '## Resumen' "$d/MEMORY.md"
+  grep -qx '## Topic Files' "$d/MEMORY.md"
+  grep -qx '## Insights Recientes' "$d/MEMORY.md"
+}
+
+@test "destino que es un fichero: aborta y no lo trata como carpeta existente (mutante: -e en vez de -d)" {
+  echo "contenido previo" > "$TMP/soy-un-fichero"
+  export SAVIA_MEMORY_DIR="$TMP/soy-un-fichero"
+  run bash "$TARGET" mi-api
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"Ya existe"* ]]
+  [[ "$output" != *"Auto Memory inicializada"* ]]
+  [ "$(cat "$TMP/soy-un-fichero")" = "contenido previo" ]
+}
+
+@test "interrupción: SIGINT durante la escritura aborta con exit != 0 y sin temporales (mutante: trap INT con exit 0)" {
+  real_cat="$(command -v cat)"
+  fake_bin cat "case \$(readlink /proc/\$\$/fd/1) in *.tmp.*) [ -e \"$TMP/killed\" ] || { touch \"$TMP/killed\"; kill -INT \$PPID; } ;; esac
+exec $real_cat \"\$@\""
+  run env PATH="$TMP/bin:$PATH" bash "$TARGET" mi-api
+  [ -e "$TMP/killed" ]
+  [ "$status" -ne 0 ]
+  [ -z "$(find "$BASE" -name '*.tmp.*')" ]
+  [ ! -e "$BASE/mi-api/memory/MEMORY.md" ]
+  [[ "$output" != *"Auto Memory inicializada"* ]]
+}
+
+@test "carrera con ln: otra ejecución publica el fichero entre medias; se respeta y se informa 'ya existe' (mutante: rc=0)" {
+  # El ln falso simula al ganador de la carrera: crea el destino con otro contenido y falla.
+  fake_bin ln 'for last; do :; done; echo concurrente > "$last"; exit 1'
+  run env PATH="$TMP/bin:$PATH" bash "$TARGET" mi-api
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"MEMORY.md ya existe"* ]]
+  [[ "$output" != *"MEMORY.md creado"* ]]
+  [ "$(cat "$BASE/mi-api/memory/MEMORY.md")" = "concurrente" ]
+  [ -z "$(find "$BASE" -name '*.tmp.*')" ]
+}
+
+@test "carrera con mv -n (sin hard links): el ganador no se pisa y se informa 'ya existe' (mutantes: mv -f y rc=0)" {
+  fake_bin ln "exit 1"
+  real_mv="$(command -v mv)"
+  # El mv falso publica el destino «concurrente» justo antes de que mv -n intente moverlo.
+  fake_bin mv "for last; do :; done; echo concurrente > \"\$last\"; exec $real_mv \"\$@\""
+  run env PATH="$TMP/bin:$PATH" bash "$TARGET" mi-api
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"MEMORY.md ya existe"* ]]
+  [[ "$output" != *"MEMORY.md creado"* ]]
+  [ "$(cat "$BASE/mi-api/memory/MEMORY.md")" = "concurrente" ]
+  [ -z "$(find "$BASE" -name '*.tmp.*')" ]
+}
+
+@test "carrera con ln: el ganador deja un symlink roto; cuenta como existente y no se pisa (mutante: sin -L en la línea 83)" {
+  fake_bin ln 'for last; do :; done; /bin/ln -s /nonexistent-race-target "$last"; exit 1'
+  run env PATH="$TMP/bin:$PATH" bash "$TARGET" mi-api
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"MEMORY.md ya existe"* ]]
+  [[ "$output" != *"MEMORY.md creado"* ]]
+  [ -L "$BASE/mi-api/memory/MEMORY.md" ]
+  [ ! -e /nonexistent-race-target ]
+  [ -z "$(find "$BASE" -name '*.tmp.*')" ]
+}
+
+@test "ni ln ni mv pueden publicar: aborta con exit 1 y 'Abortado', no declara 'creado' (mutantes: rc=0 y return 0)" {
+  fake_bin ln "exit 1"
+  fake_bin mv "exit 1"
+  run env PATH="$TMP/bin:$PATH" bash "$TARGET" mi-api
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"No se pudo crear"* ]]
+  [[ "$output" == *"Abortado"* ]]
+  [[ "$output" != *"MEMORY.md creado"* ]]
+  [[ "$output" != *"Auto Memory inicializada"* ]]
+  [ ! -e "$BASE/mi-api/memory/MEMORY.md" ]
+  [ -z "$(find "$BASE" -name '*.tmp.*')" ]
+}
+
+@test "destino colgante: un symlink roto en MEMORY.md no se sigue ni se pisa" {
+  mkdir -p "$BASE/mi-api/memory"
+  ln -s "$TMP/no-existe" "$BASE/mi-api/memory/MEMORY.md"
+  run bash "$TARGET" mi-api
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"MEMORY.md ya existe"* ]]
+  [ ! -e "$TMP/no-existe" ]
+  [ -L "$BASE/mi-api/memory/MEMORY.md" ]
+  [ -f "$BASE/mi-api/memory/architecture.md" ]
+}
+
+# Mutantes equivalentes (sin conducta observable distinta; documentados, no ocultos):
+#  - quitar `|| [ -L "$dst" ]` solo de la línea 70: la comprobación de la línea 83 devuelve
+#    el mismo rc=3 tras el ln fallido; el resultado es idéntico.
+#  - quitar `|| return 1` tras mktemp: tmp queda vacío, `cat >"$tmp"` falla y devuelve 1 por
+#    la rama «No se pudo escribir»; mismo exit 1 y mismo aborto, distinto texto de error.
