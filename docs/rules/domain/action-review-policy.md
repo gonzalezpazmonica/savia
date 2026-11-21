@@ -1,3 +1,7 @@
+---
+context_tier: L2
+token_budget: 1213
+---
 # Politica del revisor de acciones (SE-445 S3)
 
 > Opt-in. Hook PreToolUse sobre `Bash` (`.claude/hooks/action-review.sh`, logica en `scripts/action-review.py`).
