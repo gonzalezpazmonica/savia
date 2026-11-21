@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# nightly: serial (mide la latencia real de hooks contra el SLA de 20 ms; con otras suites en paralelo el camino rápido lo supera)
 # hook-bench-all.sh confirma con más muestras los críticos que superan el SLA,
 # y ci-extended-checks.sh nombra a los infractores (#1412: "6 > 5" sin nombres).
 

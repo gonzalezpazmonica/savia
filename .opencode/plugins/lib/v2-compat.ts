@@ -68,3 +68,11 @@ export function toV1After(event: any): { input: V1Input; output: V1Output } {
     output: { args, output: text, metadata },
   };
 }
+
+/** Quita de un body de petición las claves internas de Savia (`model_tier`, `x_savia_*`). */
+export function stripSaviaKeys(body: unknown): void {
+  if (!body || typeof body !== "object") return;
+  for (const key of Object.keys(body)) {
+    if (key === "model_tier" || key.startsWith("x_savia_")) delete (body as Record<string, unknown>)[key];
+  }
+}
