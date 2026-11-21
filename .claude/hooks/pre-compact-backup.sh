@@ -5,7 +5,9 @@ set -uo pipefail
 # (realpath dentro de ~/.claude/projects, fichero regular, dueño = quien ejecuta), se lee como máximo el
 # final (S0.5: 589824 B), solo turnos de texto de persona/asistente, redact_private (S5) y extracción.
 # Nunca bloquea la compactación (exit 0 siempre). Dice la verdad: si no pudo leer o guardar, lo dice.
-source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/savia-env.sh" 2>/dev/null || true
+SAVIA_ENV_FILE="$(dirname "${BASH_SOURCE[0]}")/../../scripts/savia-env.sh"
+# Opcional: sin el fichero el hook sigue (nunca bloquea la compactación); sin silenciar errores de un source real.
+[[ -f "$SAVIA_ENV_FILE" ]] && source "$SAVIA_ENV_FILE"
 export CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-${SAVIA_WORKSPACE_DIR:-$(pwd)}}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

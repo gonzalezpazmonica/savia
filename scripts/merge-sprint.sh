@@ -6,6 +6,7 @@
 #   grant <manifest-digest>          emite el grant (regla «ask»: la operadora lo aprueba desde el frontend)
 #   run                              ejecuta el sprint del grant vigente, en serie y en el orden del manifiesto (SE-500 S3)
 #   status | stop | revoke | report | verify-ledger
+#   policy-plan | policy-request | policy-verify   SE-512 S1: grant de política (scripts/merge-sprint-policy.py)
 #
 # Estado: ${MERGE_SPRINT_HOME:-$HOME/.savia/merge-sprint} (fuera del repo). Política: config/merge-sprint-policy.conf.
 # Nunca: rebase, force-push, revert automático, tier 4, reintento de CI.
@@ -1041,6 +1042,9 @@ case "${1:-}" in
   stop) touch "$STOPF"; ledger event=STOP_REQUEST; echo "STOP solicitado" ;;
   revoke) ( flock -x 7 && mv "$GRANT" "$HOME_MS/grant.revoked.$(date +%s)" 2>/dev/null ) 7>"$GRANT.lock"; ledger event=REVOKE; echo "grant revocado" ;;
   report) cmd_report ;;
+  # SE-512 S1: grant de política (plan, petición de aprobación SE-488 y verificación). Sin run ni fusiones.
+  policy-plan|policy-request|policy-verify) sub="${1#policy-}"; shift
+    MERGE_SPRINT_HOME="$HOME_MS" MERGE_SPRINT_GIT_ROOT="$GITROOT" GH="$GH" exec python3 "$ROOT/scripts/merge-sprint-policy.py" "$sub" "$@" ;;
   verify-ledger) verify_chain "$LEDGER" && verify_chain "$REG" && verify_chain "$JREG" && echo "íntegro" || die "cadena rota" 4 ;;
-  *) die "uso: merge-sprint.sh review-register|plan|grant|run|status|stop|revoke|report|verify-ledger" ;;
+  *) die "uso: merge-sprint.sh review-register|plan|grant|run|status|stop|revoke|report|verify-ledger|policy-plan|policy-request|policy-verify" ;;
 esac
