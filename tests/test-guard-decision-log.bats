@@ -83,6 +83,14 @@ gdl() { bash -c 'source "$1"; shift; guard_decision_log "$@"' _ "$LIB" "$@"; }
   [ ! -e "$CASE_ROOT/otro/g.jsonl" ]
 }
 
+@test "un output/ que es enlace simbólico no se sigue ni se crea nada dentro" {
+  mkdir -p "$CASE_ROOT/otro"
+  ln -s "$CASE_ROOT/otro" "$CASE_ROOT/output"
+  run gdl g allow x
+  [ "$status" -eq 0 ]
+  [ ! -e "$CASE_ROOT/otro/guard-decisions" ]
+}
+
 @test "control: sin enlaces sí se escribe (los dos tests de enlaces pueden fallar)" {
   run gdl g allow x
   [ "$status" -eq 0 ]
