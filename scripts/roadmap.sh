@@ -39,7 +39,7 @@ render_sessions() {
   echo "## Cola de sesiones (orden por gates, sin fechas)"
   echo
   jq -r '.route.session_plan[] |
-    "- **\(.id) · \(.priority) · fase \(.phase)** — \(.title)\n  Acción: \(.action)\n  Entrada: \(.prerequisites)\n  Salida: \(.done)\n  Necesidad: \(.necessity); urgencia: \(.urgency); valor: \(.value); desbloqueo: \(.dependency_value); esfuerzo: \(.effort).\n"' "$STATE"
+    "- **\(.id) · \(.priority) · fase \(.phase)** — \(.title)\n  Acción: \(.action)\n  Entrada: \(.prerequisites)\n\((.parked // []) | map("  Aparcado: \(.slices) — bloqueada por spec retirada (\(.blocked_by)); \(.reason)\n") | join(""))  Salida: \(.done)\n  Necesidad: \(.necessity); urgencia: \(.urgency); valor: \(.value); desbloqueo: \(.dependency_value); esfuerzo: \(.effort).\n"' "$STATE"
 }
 
 case "$CMD" in
@@ -171,22 +171,33 @@ case "$CMD" in
       done < <(find "$ROOT/docs/specs" -name 'SE-*.spec.md' | sort -V)
       [[ -n "$OMITTED" ]] && { echo "FAIL: specs omitidas de planning-state: $OMITTED"; ERR=1; }
     fi
-    # 6. Estado del spec en docs/specs vs state (YAML o Markdown legacy).
+    # 6. Estado del spec en docs/specs vs vista: igualdad estricta. La deriva heredada
+    #    (spec APPROVED con estado posterior) vive en status-drift-baseline.txt: solo puede
+    #    menguar. Una deriva nueva o una línea de la baseline ya corregida fallan.
+    DRIFT_BASE="$ROOT/docs/propuestas/status-drift-baseline.txt"
+    DRIFT_SEEN=""
     while IFS= read -r spec; do
       ID=$(basename "$spec" | grep -oP '^SE-\d+')
       [[ -z "$ID" ]] && continue
       SPEC_STATUS=$(grep -m1 -oP '^(?:status:\s*|\*\*Estado:\*\*\s*)\K[A-Z_]+' "$spec" 2>/dev/null || echo "")
       STATE_STATUS=$(jq -r --arg id "$ID" '.initiatives[] | select(.id==$id) | .status' "$STATE" 2>/dev/null | head -1)
       if [[ -n "$STATE_STATUS" && -n "$SPEC_STATUS" && "$SPEC_STATUS" != "$STATE_STATUS" ]]; then
-        COMPAT=0
-        [[ "$STATE_STATUS" == "IMPLEMENTED" && "$SPEC_STATUS" == "APPROVED" ]] && COMPAT=1
-        [[ "$STATE_STATUS" == "IMPLEMENTING" && "$SPEC_STATUS" == "APPROVED" ]] && COMPAT=1
-        if [[ $COMPAT -eq 0 ]]; then
+        DRIFT_SEEN="${DRIFT_SEEN}${ID} ${SPEC_STATUS} ${STATE_STATUS}"$'\n'
+        if ! grep -qxF "$ID $SPEC_STATUS $STATE_STATUS" "$DRIFT_BASE" 2>/dev/null; then
           echo "FAIL: $ID spec=$SPEC_STATUS vs state=$STATE_STATUS"
           ERR=1
         fi
       fi
     done < <(find "$ROOT/docs/specs" -name 'SE-*.spec.md' | sort)
+    if [[ -f "$DRIFT_BASE" ]]; then
+      while IFS= read -r line; do
+        [[ -z "$line" || "$line" == \#* ]] && continue
+        if ! grep -qxF "$line" <<<"$DRIFT_SEEN"; then
+          echo "FAIL: baseline de deriva obsoleta (ya no discrepa; quita la línea): $line"
+          ERR=1
+        fi
+      done < "$DRIFT_BASE"
+    fi
     # 7. Estado vigente de cada iniciativa trazada registrado en LOG.md (SE-378, append-only; vista SE-500).
     if [[ "$FLOOR" =~ ^[0-9]+$ ]]; then
       NOLOG=""
@@ -253,6 +264,31 @@ case "$CMD" in
           [[ -n "$STALE" ]] && { echo "FAIL: entrada de sesión pide aprobar una spec ya resuelta: ${STALE//$'\n'/ }"; ERR=1; }
         else
           echo "FAIL: check de aprobaciones obsoletas no evaluable (jq falló sobre $STATE)"; ERR=1
+        fi
+        # 12. Una entrada de la cola no puede depender de una spec RETIRED: ni en su lista de
+        # iniciativas ni citada en sus requisitos de entrada. Una spec retirada no se construye.
+        # Si jq falla, el check falla cerrado.
+        if RETD=$(jq -r '(.initiatives | map({(.id): .status}) | add) as $st
+          | .route.session_plan[]? | .id as $s
+          | ((.parked // []) | map(.blocked_by)) as $pk
+          | ( ((.initiatives // [])[] | select($st[.] == "RETIRED")),
+              ((.prerequisites // "") | scan("SE-[0-9]+") | select($st[.] == "RETIRED")) )
+          | select(. as $r | $pk | index($r) | not)
+          | "\($s):\(.)"' "$STATE" 2>/dev/null); then
+          [[ -n "$RETD" ]] && { echo "FAIL: la cola depende de una spec RETIRED: $(echo "$RETD" | sort -u | paste -sd, -)"; ERR=1; }
+        else
+          echo "FAIL: check de specs retiradas no evaluable (jq falló sobre $STATE)"; ERR=1
+        fi
+        # 12b. Una fase aparcada necesita motivo, el bloqueo debe ser una spec RETIRED y la
+        # operadora debe constar: un aparcado huérfano (spec ya no retirada) o sin motivo falla.
+        if PKB=$(jq -r '(.initiatives | map({(.id): .status}) | add) as $st
+          | .route.session_plan[]? | .id as $s | (.parked // [])[]
+          | select((.slices // "" | length) == 0 or (.reason // "" | length) == 0
+                   or ($st[.blocked_by // ""] != "RETIRED"))
+          | "\($s):\(.blocked_by // "?")"' "$STATE" 2>/dev/null); then
+          [[ -n "$PKB" ]] && { echo "FAIL: fase aparcada inválida (sin motivo o bloqueo no RETIRED): $(echo "$PKB" | sort -u | paste -sd, -)"; ERR=1; }
+        else
+          echo "FAIL: check de fases aparcadas no evaluable (jq falló sobre $STATE)"; ERR=1
         fi
       fi
     fi

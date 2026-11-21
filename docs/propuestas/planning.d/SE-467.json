@@ -1,0 +1,11 @@
+{
+  "id": "SE-467",
+  "status": "DEFERRED",
+  "priority": "P2",
+  "title": "El auditor de tests puntúa el idioma del nombre, no el caso probado",
+  "note": "D2 de SE-456 medida: certifican el 83 % de ficheros en inglés y el 43 % en español; en S03 con mutación >=90 %, 8 de 57 con el motor y 35 con léxico en español. Opciones: (a) motor, (b) renombrar 1483 tests.",
+  "evidence": "docs/specs/SE-467-auditor-language-bias.spec.md",
+  "phase": "aparcado",
+  "approval": "Operadora 2026-10-27: AskUserQuestion",
+  "deferral": "2026-11-18 (propuesta de la orquestadora, pendiente de confirmar por la operadora): aparcada. P2: el sesgo de idioma del auditor de tests está medido, pero la spec obliga a elegir entre cambiar el motor y renombrar 1483 tests (D1) y esa decisión no está tomada. Nada construido. Retoma al decidir D1; el trabajo de mutación de S03 sigue sin depender de ella."
+}

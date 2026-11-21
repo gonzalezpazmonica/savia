@@ -315,6 +315,7 @@ set_route() { # <wip> <phase-of-SE-375>
   jq '.initiatives[0].status="IMPLEMENTING"' "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
   mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
   printf '## 2026-09-26 SE-375 IMPLEMENTING\n' >> "$FIXTURE/docs/propuestas/LOG.md"
+  printf '%s\n' 'status: IMPLEMENTING' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
 
   run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
 
@@ -464,4 +465,172 @@ set_plan_filter() {
   [ "$status" -eq 0 ]
   run bash -c 'set -uo pipefail; . scripts/lib/planning-completion.sh; planning_pr_merged "$1" origin/main 9999' _ "$FIXTURE"
   [ "$status" -eq 1 ]
+}
+
+# Cola vs specs RETIRED: una entrada de la cola no puede depender de una spec retirada.
+add_retired_spec() { # <id> : registra SE-NNN como RETIRED (estado, spec y LOG coherentes)
+  jq --arg id "$1" '.initiatives += [{"id":$id,"status":"RETIRED","phase":"A"}]' \
+    "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  printf '%s\n' 'status: RETIRED' > "$FIXTURE/docs/specs/${1}-retired.spec.md"
+  printf '## 2026-09-06 %s RETIRED\n\nfixture\n' "$1" >> "$FIXTURE/docs/propuestas/LOG.md"
+}
+
+@test "retired: validate accepts a RETIRED spec that no queue entry uses" {
+  set_session_plan
+  add_retired_spec SE-376
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: planning state consistente"* ]]
+}
+
+@test "retired: validate rejects a queue entry listing a RETIRED initiative" {
+  set_session_plan
+  add_retired_spec SE-376
+  set_plan_filter '.route.session_plan[0].initiatives += ["SE-376"]'
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"la cola depende de una spec RETIRED: S01:SE-376"* ]]
+}
+
+@test "retired: validate rejects a queue entry citing a RETIRED spec in its prerequisites" {
+  set_session_plan
+  add_retired_spec SE-376
+  set_plan_filter '.route.session_plan[0].prerequisites = "SE-376 implementada en la ruta piloto"'
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"la cola depende de una spec RETIRED: S01:SE-376"* ]]
+}
+
+@test "retired: a non-RETIRED spec cited in prerequisites does not trip the check" {
+  set_session_plan
+  set_plan_filter '.route.session_plan[0].prerequisites = "SE-375 implementada en la ruta piloto"'
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"RETIRED"* ]]
+}
+
+@test "retired: mutating the RETIRED comparison lets the dependency through (the check is what fails)" {
+  set_session_plan
+  add_retired_spec SE-376
+  set_plan_filter '.route.session_plan[0].initiatives += ["SE-376"]'
+  local mut="$BATS_TEST_TMPDIR/mut/scripts" f
+  mkdir -p "$mut"
+  for f in scripts/*; do
+    [[ "$(basename "$f")" == roadmap.sh ]] || ln -s "$PWD/$f" "$mut/$(basename "$f")"
+  done
+  grep -q '== "RETIRED"' "$SCRIPT"
+  sed 's/== "RETIRED"/== "NO-EXISTE"/g' "$SCRIPT" > "$mut/roadmap.sh"
+  run env REPO_ROOT="$FIXTURE" bash "$mut/roadmap.sh" validate
+  [ "$status" -eq 0 ]
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+}
+
+# Fases aparcadas por spec retirada (decisión de la operadora): se aceptan con motivo; el resto sigue fallando.
+park_entry() { # <blocked_by> [reason] : añade un aparcado a S01
+  set_plan_filter ".route.session_plan[0].parked = [{\"slices\":\"SE-375 F3\",\"blocked_by\":\"$1\",\"reason\":\"${2-rediseñar a partir del 26-11}\"}]"
+}
+
+@test "parked: a phase parked for a RETIRED spec is accepted even if its prerequisites cite it" {
+  set_session_plan
+  add_retired_spec SE-376
+  set_plan_filter '.route.session_plan[0].prerequisites = "SE-376 implementada en la ruta piloto"'
+  park_entry SE-376
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: planning state consistente"* ]]
+}
+
+@test "parked: parking one RETIRED spec does not excuse a live dependency on another" {
+  set_session_plan
+  add_retired_spec SE-376
+  add_retired_spec SE-377
+  set_plan_filter '.route.session_plan[0].prerequisites = "SE-376 y SE-377 implementadas"'
+  park_entry SE-376
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"la cola depende de una spec RETIRED: S01:SE-377"* ]]
+  [[ "$output" != *"S01:SE-376"* ]]
+}
+
+@test "parked: an entry whose blocking spec is not RETIRED fails" {
+  set_session_plan
+  park_entry SE-375
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"fase aparcada inválida"* ]]
+}
+
+@test "parked: an entry without a reason fails" {
+  set_session_plan
+  add_retired_spec SE-376
+  park_entry SE-376 ""
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"fase aparcada inválida"* ]]
+}
+
+@test "parked: render shows the parked phase with its reason" {
+  set_session_plan
+  add_retired_spec SE-376
+  park_entry SE-376
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" current
+  [[ "$output" == *"Aparcado: SE-375 F3 — bloqueada por spec retirada (SE-376); rediseñar a partir del 26-11"* ]]
+}
+
+# Deriva frontmatter vs vista: igualdad estricta con baseline que solo puede menguar.
+
+@test "drift: spec y vista iguales pasan sin baseline" {
+  printf '%s\n' 'status: APPROVED' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"spec="* ]]
+}
+
+@test "drift: spec APPROVED con vista IMPLEMENTED falla si no está en la baseline" {
+  jq '.initiatives[0].status="IMPLEMENTED" | .initiatives[0].evidence="docs/specs/SE-375-example.spec.md"' \
+    "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  printf '## 2026-09-05 SE-375 IMPLEMENTED\n' >> "$FIXTURE/docs/propuestas/LOG.md"
+  printf '%s\n' 'status: APPROVED' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FAIL: SE-375 spec=APPROVED vs state=IMPLEMENTED"* ]]
+}
+
+@test "drift: la misma deriva declarada en la baseline pasa" {
+  jq '.initiatives[0].status="IMPLEMENTED" | .initiatives[0].evidence="docs/specs/SE-375-example.spec.md"' \
+    "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  printf '## 2026-09-05 SE-375 IMPLEMENTED\n' >> "$FIXTURE/docs/propuestas/LOG.md"
+  printf '%s\n' 'status: APPROVED' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
+  printf '%s\n' 'SE-375 APPROVED IMPLEMENTED' > "$FIXTURE/docs/propuestas/status-drift-baseline.txt"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [[ "$output" != *"spec="* ]]
+  [[ "$output" != *"baseline de deriva obsoleta"* ]]
+}
+
+@test "drift: mutación, una línea de baseline que ya no discrepa falla" {
+  printf '%s\n' 'status: APPROVED' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
+  printf '%s\n' 'SE-375 APPROVED IMPLEMENTED' > "$FIXTURE/docs/propuestas/status-drift-baseline.txt"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"baseline de deriva obsoleta"*"SE-375 APPROVED IMPLEMENTED"* ]]
+}
+
+@test "drift: una baseline con otro par de estados no cubre la deriva" {
+  jq '.initiatives[0].status="IMPLEMENTING"' "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  printf '## 2026-09-05 SE-375 IMPLEMENTING\n' >> "$FIXTURE/docs/propuestas/LOG.md"
+  printf '%s\n' 'status: APPROVED' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
+  printf '%s\n' 'SE-375 APPROVED IMPLEMENTED' > "$FIXTURE/docs/propuestas/status-drift-baseline.txt"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FAIL: SE-375 spec=APPROVED vs state=IMPLEMENTING"* ]]
+}
+
+@test "drift: la baseline real del repo no incluye SE-424, SE-488 ni SE-496" {
+  run grep -E '^SE-(424|488|496) ' docs/propuestas/status-drift-baseline.txt
+  [ "$status" -ne 0 ]
 }
