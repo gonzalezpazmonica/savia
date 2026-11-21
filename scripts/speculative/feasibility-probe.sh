@@ -79,16 +79,21 @@ if not Path(db_path).exists():
                       "reason": "No session data available"}))
     sys.exit(1)
 
-conn = sqlite3.connect(f"file://{db_path}?mode=ro", uri=True)
-cur = conn.cursor()
-
-# Extract tool-call sequences from recent sessions (all, not just target cmd)
-cur.execute("""SELECT p.session_id, p.time_created, p.data
-               FROM part p
-               WHERE p.data LIKE '%"type":"tool"%'
-               ORDER BY p.time_created ASC""")
-rows = cur.fetchall()
-conn.close()
+# as_uri() codifica ?, # y % de la ruta (FEASIBILITY_DB la fija el entorno) y resuelve rutas relativas
+try:
+    conn = sqlite3.connect(Path(db_path).resolve().as_uri() + "?mode=ro", uri=True)
+    cur = conn.cursor()
+    # Extract tool-call sequences from recent sessions (all, not just target cmd)
+    cur.execute("""SELECT p.session_id, p.time_created, p.data
+                   FROM part p
+                   WHERE p.data LIKE '%"type":"tool"%'
+                   ORDER BY p.time_created ASC""")
+    rows = cur.fetchall()
+    conn.close()
+except sqlite3.Error as e:
+    print(json.dumps({"error": f"DB unreadable: {e}", "decision": "ABORT",
+                      "reason": "Session database is corrupt or has no part table"}))
+    sys.exit(1)
 
 # Group by session
 from collections import defaultdict
@@ -158,10 +163,10 @@ for sample in eval_set:
     last_tool = sample['context'][-1]
     actual = sample['actual_next']
     counts = last_to_next[last_tool]
+    # restar y sumar sin borrar la clave: el orden de inserción (desempate) no cambia
     counts[actual] -= 1
-    if counts[actual] <= 0:
-        del counts[actual]
-    predicted = counts.most_common(1)[0][0] if counts else 'bash'
+    remaining = [(t, c) for t, c in counts.items() if c > 0]
+    predicted = max(remaining, key=lambda tc: tc[1])[0] if remaining else 'bash'
     counts[actual] += 1
     hit = predicted == actual
     if hit: correct += 1

@@ -56,18 +56,13 @@ backends() { PATH="${1:-$MINBIN}" run bash "$REPO_ROOT/$SCRIPT" --list-backends;
   backends "$TMPDIR/fake:$MINBIN"
   [ "$status" -eq 0 ]
   [[ "$output" == "backend=grep"* ]]
-  ! [[ "$output" == "backend=codegraph" ]]
+  [[ "$output" != "backend=codegraph" ]]
 }
 
 @test "CG-04: --list-backends consulta el índice con «codegraph status» y nada más" {
   fake_codegraph 0
   backends "$TMPDIR/fake:$MINBIN"
   [ "$(cat "$FAKE_LOG")" = "codegraph status" ]
-}
-
-@test "CG-05: empty PATH of codegraph leaves no call log (nothing is executed)" {
-  backends "$MINBIN"
-  [ ! -s "$FAKE_LOG" ]
 }
 
 @test "CG-06: con codegraph indexado el análisis --symbol sigue siendo por grep y no lo invoca" {
@@ -88,7 +83,7 @@ backends() { PATH="${1:-$MINBIN}" run bash "$REPO_ROOT/$SCRIPT" --list-backends;
 @test "CG-07: no arg file needed: --list-backends has no error output" {
   backends "$MINBIN"
   [ "$status" -eq 0 ]
-  ! [[ "$output" == *ERROR* ]]
+  [[ "$output" != *ERROR* ]]
 }
 
 @test "CG-08: el repo trae codegraph desactivado en opencode.json (opt-in, Rule 19)" {

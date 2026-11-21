@@ -54,7 +54,7 @@ cycle() { # n veces el ciclo read grep edit bash
   run_probe --runs 20
   [ "$status" -eq 0 ]
   echo "$output" | grep -q '"decision": "ABORT"'
-  ! echo "$output" | grep -q '"decision": "GO"'
+  [[ "$output" != *'"decision": "GO"'* ]]
 }
 
 @test "FP-03: tasa intermedia da DEFERRED" {
@@ -100,15 +100,15 @@ cycle() { # n veces el ciclo read grep edit bash
   [ "$status" -eq 1 ]
   echo "$output" | grep -q '"decision": "ABORT"'
   echo "$output" | grep -q 'DB not found'
-  ! ls "$OUT"/se220-feasibility-*.md 2>/dev/null
+  [ -z "$(ls "$OUT"/se220-feasibility-*.md 2>/dev/null)" ]
 }
 
 @test "FP-08: la ruta de la base usada es la configurada, no un literal sin expandir" {
   mkdb $(cycle 10)
   run_probe --runs 20
   [ "$status" -eq 0 ]
-  ! echo "$output" | grep -q 'DB not found'
-  ! echo "$output" | grep -q '\${'
+  [[ "$output" != *"DB not found"* ]]
+  [[ "$output" != *'${'* ]]
 }
 
 @test "FP-09: el informe lleva el comando objetivo y los umbrales" {
@@ -132,7 +132,7 @@ cycle() { # n veces el ciclo read grep edit bash
   [ "$status" -eq 2 ]
   run_probe --runs 0
   [ "$status" -eq 2 ]
-  ! ls "$OUT"/se220-feasibility-*.md 2>/dev/null
+  [ -z "$(ls "$OUT"/se220-feasibility-*.md 2>/dev/null)" ]
 }
 
 @test "FP-12: no arg shows usage and fails with exit 2" {
@@ -188,8 +188,11 @@ PY
 
 @test "FP-18: dos ejecuciones el mismo día sobrescriben el informe, no lo acumulan" {
   mkdb $(cycle 10)
+  local d1 d2; d1="$(date +%Y%m%d)"
   run_probe --runs 20
   run_probe --runs 20
+  d2="$(date +%Y%m%d)"
+  [ "$d1" = "$d2" ] || skip "la ejecución cruzó la medianoche: el nombre del informe cambia"
   [ "$(ls "$OUT"/se220-feasibility-*.md | wc -l)" -eq 1 ]
   [ "$(report | grep -c '^## Decision')" -eq 1 ]
 }
@@ -208,4 +211,46 @@ db.commit()
 PY
   run_probe --runs 20
   echo "$output" | grep -q '"total_dataset": 37'
+}
+
+@test "FP-21: ruta relativa de la base (FEASIBILITY_DB) se resuelve contra el cwd" {
+  mkdb $(cycle 10)
+  cd "$TMPDIR"
+  FEASIBILITY_DB="sessions.db" run_probe --runs 20
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q '"decision": "GO"'
+}
+
+@test "FP-22: ruta con ? # y % no altera la URI de SQLite" {
+  local odd="$TMPDIR/we?ird#na%me.db"
+  mkdb $(cycle 10)
+  mv "$FEASIBILITY_DB" "$odd"
+  FEASIBILITY_DB="$odd" run_probe --runs 20
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q '"decision": "GO"'
+}
+
+@test "FP-23: base corrupta da ABORT en JSON con exit 1, sin traceback ni informe" {
+  head -c 4096 /dev/urandom > "$FEASIBILITY_DB"
+  run_probe --runs 20
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q '"decision": "ABORT"'
+  [[ "$output" != *Traceback* ]]
+  [ -z "$(ls "$OUT"/se220-feasibility-*.md 2>/dev/null)" ]
+}
+
+@test "FP-24: base SQLite vacía (sin tabla part) da ABORT en JSON con exit 1, no traceback" {
+  python3 -c "import sqlite3,sys; sqlite3.connect(sys.argv[1]).execute('CREATE TABLE otra (x)').connection.commit()" "$FEASIBILITY_DB"
+  run_probe --runs 20
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q '"decision": "ABORT"'
+  [[ "$output" != *Traceback* ]]
+}
+
+@test "FP-25: el desempate del predictor es el orden de primera aparición, no el de reinserción" {
+  # con empates, borrar y reinsertar la clave en el leave-one-out cambiaba el resultado (2 aciertos)
+  mkdb a b c c b c c b a c b a a a
+  run_probe --runs 5
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q '"correct": 0'
 }
