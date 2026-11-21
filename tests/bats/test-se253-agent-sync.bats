@@ -63,20 +63,8 @@ CI_WORKFLOW="$REPO_ROOT/.github/workflows/ci.yml"
   grep -q "code-twin-agent" "$ALLOWLIST"
 }
 
-@test "AC-3.4: allowlist contains configurator (known single-side agent)" {
-  grep -q "configurator" "$ALLOWLIST"
-}
-
 @test "AC-3.4: allowlist contains criterion-simulation-judge (known single-side agent)" {
   grep -q "criterion-simulation-judge" "$ALLOWLIST"
-}
-
-@test "AC-3.4: allowlist contains fiction-framing-judge (known single-side agent)" {
-  grep -q "fiction-framing-judge" "$ALLOWLIST"
-}
-
-@test "AC-3.4: allowlist contains structural-framing-judge (known single-side agent)" {
-  grep -q "structural-framing-judge" "$ALLOWLIST"
 }
 
 @test "AC-3.4: allowlist has a table header with required columns" {

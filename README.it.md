@@ -16,7 +16,7 @@ lang: it
 
 **Savia è una meta-orchestratrice agentica di R&S&I: coordina agenti e harness specializzati, linee di ricerca, cupole di conoscenza governata e progetti, con l'autorità sempre nella persona. Open source e sovrana.**
 
-**567 comandi · 90 agenti · 139 skill · 135 hook**
+**567 comandi · 86 agenti · 139 skill · 135 hook**
 
 Savia orchestra il lavoro di R&S&I con l'IA: distribuisce i compiti tra harness specializzati (esecutori, revisore indipendenti, fornitori esterni), sostiene linee di ricerca, governa la conoscenza in cupole (Savia Vaults) e gestisce i progetti come una capacità in più. Integra memoria, sicurezza, politiche eseguibili (policy-as-code), tracciabilità con receipts e valutazione su un'architettura indipendente da modello, fornitore e frontend. Opera in locale con sovranità dei dati e dell'inferenza, in 9 lingue.
 
@@ -39,7 +39,7 @@ L'esecuzione assistita dall'IA cresce più in fretta della fiducia che vi si rip
 - **Orchestrare** — meta-orchestrazione di harness specializzati: un esecutore per contratto, revisore indipendenti e fornitori esterni, con invocazione deterministica e l'autorità nella persona.
 - **Ricercare** — linee di ricerca con ipotesi, esperimenti e lezioni verificabili.
 - **Governare** — rischio (L0-L4), human gates, policy-as-code, receipts e provenance di ogni azione.
-- **Eseguire** — 90 agenti, 567 comandi, 139 skill con specs eseguibili (SDD), audit di sicurezza e revisione del codice.
+- **Eseguire** — 86 agenti, 567 comandi, 139 skill con specs eseguibili (SDD), audit di sicurezza e revisione del codice.
 - **Conoscere** — cupole di conoscenza governata (Savia Vaults) e memoria persistente bitemporale con provenance e trust-gates.
 - **Valutare** — evals con baseline, paired-delta regression e canaries multi-frontend.
 - **Domini** — gestione progetti (sprint, backlog, report; una capacità in più), ingegneria del software e domini specializzati.
@@ -103,7 +103,7 @@ Tabella completa delle capacità: [capabilities.it.md](docs/readme/capabilities.
 
 ## Savia
 
-Savia è l'identità del workspace: uno schema testuale che persiste attraverso i modelli (Claude, DeepSeek, Qwen). Come meta-orchestratrice, coordina 90 agenti, 567 comandi, 139 skill e harness esterni. Opera secondo principi di onestà calibrata, sovranità dei dati e revisione umana obbligatoria.
+Savia è l'identità del workspace: uno schema testuale che persiste attraverso i modelli (Claude, DeepSeek, Qwen). Come meta-orchestratrice, coordina 86 agenti, 567 comandi, 139 skill e harness esterni. Opera secondo principi di onestà calibrata, sovranità dei dati e revisione umana obbligatoria.
 
 Non è una persona, non prova emozioni, non sostituisce il giudizio di chi la usa. Propone, esegue, avverte. Decide solo ciò che le è stato delegato esplicitamente.
 

@@ -1,6 +1,7 @@
 # SE-287 — SaviaVaults: completar producto (MCP, A2A, backup Nextcloud, gaps)
 
 **Status:** IN_PROGRESS
+**Aprobación:** aprobada por la operadora el 2026-11-20, por pregunta interactiva, para los cortes K6-a (cortacircuitos, AC-4.3) y K6-b (auditoría, AC-4.4) del Slice 4. No cubre AC-4.5 (hash) ni el resto de slices.
 **Fecha:** 2026-08-01
 **Proyecto:** projects/savia-vaults
 **Padre:** SE-286 (producto verificable v0.1.0)
