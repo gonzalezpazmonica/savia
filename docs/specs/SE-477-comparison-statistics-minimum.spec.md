@@ -54,8 +54,8 @@ infraestructura. Medido sobre `main` (7b434f9ae):
    (`worst_case`, `excluded_with_bound` o `rerun`). Si el informe afirma no inferioridad, lleva además
    `non_inferiority_margin` (δ, una tasa de tareas con pérdida; parámetro obligatorio fijado en el preregistro antes
    de ejecutar, nunca después de ver los datos) y `preregistration` (id del fichero de preregistro donde consta δ).
-   Lleva también `worst_loss_95`, `evidence` y `corpus_reused` cuando el informe afirma no inferioridad **o** hay 0
-   tareas con pérdida, sea cual sea k (ver enmienda 2026-11-21). Sin `ci95` o sin `censored`, el informe no es válido.
+   Lleva también `worst_loss_95`, `evidence` y `corpus_reused` cuando el informe afirma no inferioridad (con cualquier
+   k) o hay 0 tareas con pérdida (k=0), con o sin esa afirmación (ver enmienda 2026-11-21). Sin `ci95` o sin `censored`, el informe no es válido.
 3. **Política de censura por defecto: `worst_case`.** Una ejecución cortada cuenta como fallo del brazo que la cortó,
    y el informe muestra además el resultado excluyéndolas como análisis de sensibilidad. Cambiar la política exige
    declararlo antes de ejecutar.
@@ -143,11 +143,12 @@ S1 S, S2 S, S3 S.
 
 ## Enmienda propuesta 2026-11-21 (empate total no es certeza)
 
-> Origen: tesis externa TC-03 y su dictamen, ambos en Savia Labs (privado; no se enlazan aquí). La spec sigue en `PROPOSED`; el texto de AC1, AC3 y del contrato ya recoge esta enmienda en esta misma PR (vale cuando la operadora la fusione), y la implementación espera a su aprobación.
+> Origen: tesis externa TC-03 y su dictamen, ambos en Savia Labs (privado; no se enlazan aquí). La spec sigue en `PROPOSED`; el texto de AC1, AC3 y del contrato ya recoge esta enmienda en esta misma PR (la enmienda entra en vigor cuando la operadora fusione la PR), y la implementación espera a su aprobación.
 
 - **Problema comprobado.** El bootstrap por remuestreo de diferencias todas iguales a cero devuelve (0; 0) por construcción: no puede generar un fallo que no apareció. SE-511 D4b (Haiku, 10 casos trampa) y SE-527 S1 (Haiku `tabular`, 4 casos `trap`) dieron GO con ese intervalo. El disparador es «0 tareas con pérdida», no la varianza nula (que también aparece con diferencias constantes distintas de cero). Con 0 pérdidas en n tareas independientes, la cota superior unilateral al 95 % de la tasa de pérdida es `1 − 0,05^(1/n)`: 25,9 % con 10 tareas y 52,7 % con 4. El AC1 original («varianza nula da IC de ancho 0») convertía esa propiedad descriptiva en criterio de aceptación; queda sustituido arriba.
 - **Ámbito y «pérdida».** El mecanismo vale para resultados binarios por tarea con diseño `paired` o `clustered`. Una tarea tiene pérdida si B falla donde A acierta; una ejecución cortada cuenta como pérdida del brazo que la cortó (`worst_case`) y, con otra política, la declarada en `censoring_policy`. Con diseño `unpaired` o métricas continuas no existe pérdida por tarea: el informe puede describir la diferencia pero no afirmar no inferioridad con este mecanismo.
 - **Un solo campo para la cota.** `worst_loss_95` es la cota superior unilateral al 95 % de la tasa de tareas con pérdida para cualquier k: con k=0 es `1 − 0,05^(1/n)` (caso particular de Clopper-Pearson), con k>0 la de Clopper-Pearson. `evidence` es obligatorio siempre que el informe afirme no inferioridad o haya 0 pérdidas.
+- **δ mide pérdidas, no la diferencia de tasas.** δ acota la tasa de tareas con pérdida (B falla donde A acierta) e ignora las tareas en que B gana. Es una decisión de diseño conservadora, no la no inferioridad estándar sobre la diferencia de tasas: un informe que quiera esta última la declara aparte y no usa `worst_loss_95`.
 - **Unidad efectiva.** `n` es el número de tareas distintas. Las repeticiones de la misma tarea entran en `clustered_se`, nunca como unidades nuevas.
 - **Supuesto declarado.** La cota supone tareas independientes e intercambiables, es decir, una muestra de una población de tareas. Con tareas `trap` diseñadas a mano esa suposición es fuerte: el informe la declara como límite y la cota es orientativa, no una garantía.
 - **Dos salidas, sin sistema de estados nuevo.** El veredicto del informe sigue siendo el de la regla prerregistrada; se nombra `rule_verdict` (GO/REVERT) solo para distinguirlo del campo `evidence` (`sufficient` o `more_evidence`: `sufficient` solo si `worst_loss_95` ≤ `non_inferiority_margin`; sin δ, por ejemplo en un informe descriptivo con 0 pérdidas, es `more_evidence`). No sustituye ningún campo existente y no añade estados. La decisión de adoptar o revertir sigue siendo de la operadora y puede ser sensata con `more_evidence` si el cambio es reversible.
