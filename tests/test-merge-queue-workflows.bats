@@ -282,3 +282,55 @@ PY
   run check "$f" "Validate workspace|Lint Markdown|BATS Hook Tests"
   [ "$status" -eq 0 ] || { echo "$output"; return 1; }
 }
+
+# perms <yaml> → en merge_group el workflow corre con el token y los secretos del repo base (no los de un fork):
+# permisos de nivel superior solo `contents: read`, escritura por job solo en la lista permitida y ningún secreto
+# salvo GITHUB_TOKEN. Imprime los fallos.
+perms() {
+  python3 - "$1" <<'PY'
+import os, re, sys, yaml
+path = sys.argv[1]; base = os.path.basename(path)
+d = yaml.safe_load(open(path)); on = d.get(True, d.get("on")); errs = []
+WRITE_OK = {("pr-guardian.yml", "pr-guardian", "pull-requests")}   # comenta en la PR (pull_request)
+if isinstance(on, dict) and "merge_group" in on:
+    if d.get("permissions") != {"contents": "read"}:
+        errs.append("permisos de nivel superior distintos de contents: read: %r" % d.get("permissions"))
+    for jid, job in d["jobs"].items():
+        p = job.get("permissions")
+        if p is None: continue
+        if not isinstance(p, dict):
+            errs.append("job %s: permisos en bloque (%r)" % (jid, p)); continue
+        for k, v in p.items():
+            if v not in ("read", "none") and (base, jid, k) not in WRITE_OK:
+                errs.append("job %s: %s: %s fuera de la lista permitida" % (jid, k, v))
+    for s in sorted(set(re.findall(r"secrets\.([A-Za-z0-9_]+)", open(path).read())) - {"GITHUB_TOKEN"}):
+        errs.append("secreto %s en un workflow de la cola" % s)
+print("\n".join(errs)); sys.exit(1 if errs else 0)
+PY
+}
+
+@test "ci.yml y pr-guardian.yml: en la cola solo contents: read, escritura en la lista permitida y sin secretos" {
+  run perms "$CI"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+  run perms "$GUARD"
+  [ "$status" -eq 0 ] || { echo "$output"; return 1; }
+}
+
+@test "negativo: permisos de escritura nuevos o un secreto en un workflow de la cola se detectan" {
+  f="$BATS_TEST_TMPDIR/ci.yml"
+  python3 - "$CI" "$f" <<'PY'
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1]))
+d["permissions"] = {"contents": "write"}
+d["jobs"]["lint-markdown"]["permissions"] = "write-all"
+d["jobs"]["validate"]["permissions"] = {"pull-requests": "write"}
+d["jobs"]["validate"]["env"] = {"T": "${{ secrets.DEPLOY_KEY }}"}
+yaml.safe_dump(d, open(sys.argv[2], "w"))
+PY
+  run perms "$f"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"nivel superior"* ]]
+  [[ "$output" == *"job lint-markdown: permisos en bloque"* ]]
+  [[ "$output" == *"job validate: pull-requests: write"* ]]
+  [[ "$output" == *"secreto DEPLOY_KEY"* ]]
+}

@@ -713,6 +713,9 @@ merge_at() {  # merge_at <pr> <S> → 0 mergeado; 1 con FAIL=<motivo>. Pasos 7�
     # El método se comprobó al empezar, pero alguien puede cambiarlo durante el run: se relee antes de cada entrada.
     [[ "$(queue_method)" == SQUASH ]] || { queue_release "$pr"; anomaly cola_metodo_no_squash "$pr"; }
     id=$($GH pr view "$pr" -R "$REPO" --json id --jq .id 2>/dev/null) && [[ -n "$id" ]] || { queue_release "$pr"; FAIL=pr_ilegible; return 1; }
+    # Vigilada antes de emitir la mutación: una señal (SIGTERM) entre la aceptación de GitHub y la lectura de la
+    # respuesta deja la PR dentro de la cola, y el trap solo saca las que figuran en QUEUED.
+    queue_set "$pr::$s::"
     gql -f query='mutation($id:ID!,$h:GitObjectID!){enqueuePullRequest(input:{pullRequestId:$id,expectedHeadOid:$h}){mergeQueueEntry{id}}}' \
       -f id="$id" -f h="$s" >/dev/null 2>&1 && rc=0
     # Primero la cola y después el estado (como queue_drain): GitHub puede haberla fusionado antes de la primera
@@ -732,9 +735,9 @@ merge_at() {  # merge_at <pr> <S> → 0 mergeado; 1 con FAIL=<motivo>. Pasos 7�
       if [[ "$($GH pr view "$pr" -R "$REPO" --json state --jq .state 2>/dev/null)" == MERGED ]]; then
         ledger event=QUEUED pr="$pr" head="$s" respuesta=fusionada; return 0
       fi
-      queue_release "$pr"; FAIL=cola_rechazada; [[ "$q" == auto ]] && FAIL=auto_merge_pendiente; return 1
+      queue_forget "$pr"; queue_release "$pr"; FAIL=cola_rechazada; [[ "$q" == auto ]] && FAIL=auto_merge_pendiente; return 1
     fi
-    QUEUED="$QUEUED $pr::$s::"; anomaly dequeue_fallo "$pr"   # el trap vuelve a intentar sacarla
+    anomaly dequeue_fallo "$pr"   # sigue en QUEUED: el trap vuelve a intentar sacarla
   fi
   # Modo serie: manda el estado remoto, no la salida de gh. Con la cola de GitHub activa o un auto-merge habilitado,
   # gh encola en vez de fusionar, y puede salir con 0 o con error (respuesta perdida): en ambos casos la PR quedaría
@@ -742,21 +745,25 @@ merge_at() {  # merge_at <pr> <S> → 0 mergeado; 1 con FAIL=<motivo>. Pasos 7�
   # commit ilegible con MERGED lo para después record_merge, merge_commit_ilegible). Ambos pueden tardar en verse:
   # se relee una vez antes de decidir.
   local mrc=0 i q
+  # Vigilada mientras dura la orden: con la cola de GitHub activa gh puede encolarla, y una señal antes de decidir
+  # la dejaría dentro sin el ejecutor. Se olvida en cuanto se verifica la fusión.
+  queue_set "$pr::$s::"
   $GH pr merge "$pr" -R "$REPO" --squash --match-head-commit "$s" >/dev/null 2>&1 || mrc=1
   # Tras un error de gh solo cuenta el estado MERGED: el commit de fusión no se consulta sin una salida 0.
+  # La segunda lectura espera en los dos casos: con una respuesta perdida la fusión también tarda en verse.
   for i in 1 2; do
-    (( mrc == 0 )) && [[ "$($GH pr view "$pr" -R "$REPO" --json mergeCommit --jq .mergeCommit.oid 2>/dev/null)" =~ ^[0-9a-f]{40}$ ]] && return 0
-    [[ "$($GH pr view "$pr" -R "$REPO" --json state --jq .state 2>/dev/null)" == MERGED ]] && return 0
-    (( mrc == 0 && i == 1 )) && sleep "${MERGE_SPRINT_POLL_S:-30}"
+    (( mrc == 0 )) && [[ "$($GH pr view "$pr" -R "$REPO" --json mergeCommit --jq .mergeCommit.oid 2>/dev/null)" =~ ^[0-9a-f]{40}$ ]] && { queue_forget "$pr"; return 0; }
+    [[ "$($GH pr view "$pr" -R "$REPO" --json state --jq .state 2>/dev/null)" == MERGED ]] && { queue_forget "$pr"; return 0; }
+    (( i == 1 )) && sleep "${MERGE_SPRINT_POLL_S:-30}"
   done
-  (( mrc == 0 )) && { QUEUED="$QUEUED $pr::$s::"; anomaly merge_no_inmediato "$pr"; }
+  (( mrc == 0 )) && anomaly merge_no_inmediato "$pr"
   # gh falló y no hay fusión: solo es un rechazo si se verifica que la PR no quedó en la cola ni con auto-merge.
   q=$(in_queue "$pr")
   # Dentro o ilegible: se vigila (el trap la saca y verifica) y el run para; ilegible no se da por rechazo.
   case "$q" in
-    false) ;;
-    true|auto) QUEUED="$QUEUED $pr::$s::"; anomaly merge_no_inmediato "$pr" ;;
-    *) QUEUED="$QUEUED $pr::$s::"; anomaly merge_estado_ilegible "$pr" ;;
+    false) queue_forget "$pr" ;;
+    true|auto) anomaly merge_no_inmediato "$pr" ;;
+    *) anomaly merge_estado_ilegible "$pr" ;;
   esac
   FAIL="merge_rechazado:$($GH pr view "$pr" -R "$REPO" --json mergeStateStatus --jq .mergeStateStatus 2>/dev/null)"
   # Merge rechazado: la reserva no queda submitted, o un merge ajeno posterior pasaría por propio.
@@ -930,6 +937,8 @@ queue_release() {  # la reserva F5 no queda submitted: un merge posterior ajeno 
   if f5 release pr.merge "$1" >/dev/null; then rm -f "$(resv_head "$1")"; else ledger event=F5_RELEASE_FALLO pr="$1"; fi
 }
 queue_forget() { QUEUED=$(tr ' ' '\n' <<<"$QUEUED" | grep -v "^$1:" | paste -sd' ' -); }
+# queue_set <entrada> → sustituye (o añade) la entrada de su PR en una sola asignación: la PR nunca deja de figurar.
+queue_set() { QUEUED="$(tr ' ' '\n' <<<"$QUEUED" | grep -v "^${1%%:*}:" | paste -sd' ' -) $1"; }
 dequeue() {  # dequeue <pr> → 0 solo si se verifica que no está en la cola ni con auto-merge pendiente; 1 si no
   # La mutación puede fallar (red, permisos) o no hacer falta (ya salió): manda la lectura posterior, no su resultado.
   # Un auto-merge pendiente metería la PR en la cola al llegar la aprobación, después del STOP: también se desarma.
@@ -941,7 +950,11 @@ dequeue() {  # dequeue <pr> → 0 solo si se verifica que no está en la cola ni
       gql -f query='mutation($id:ID!){disablePullRequestAutoMerge(input:{pullRequestId:$id}){clientMutationId}}' -f id="$id" >/dev/null 2>&1
     fi
     q=$(in_queue "$1")
-    [[ "$q" == false ]] && { ledger event=DEQUEUE pr="$1"; return 0; }
+    if [[ "$q" == false ]]; then
+      # Una sola lectura «fuera» puede ser desfase de GitHub, también con las dos mutaciones fallidas: se confirma.
+      sleep "${MERGE_SPRINT_POLL_S:-30}"; q=$(in_queue "$1")
+      [[ "$q" == false ]] && { ledger event=DEQUEUE pr="$1"; return 0; }
+    fi
     (( i < 3 )) && sleep "${MERGE_SPRINT_POLL_S:-30}"
   done
   [[ "$q" == true || "$q" == auto ]] || q=ilegible
@@ -965,6 +978,20 @@ queue_abort() {  # al salir del run (STOP, anomalía, TTL, main no verde): ningu
   [[ -z "$fail" ]] || { halt dequeue_fallo; ledger event=STOP reason=dequeue_fallo; echo "STOP: dequeue_fallo"; return 1; }
 }
 on_exit() { local rc=0; queue_abort || rc=5; unlabel; (( rc == 0 )) || exit "$rc"; }
+queue_settle() {  # queue_settle <pr> <tier> <S> <eq> <jr> <motivo> [detalle] → retira la PR de la cola y la aparca;
+  # si GitHub la fusionó antes de la retirada (dequeue también da 0 entonces), se registra como fusión: contador,
+  # ledger, cabeza y CI de main. Liberar su reserva dejaría pasar una fusión sin contar.
+  local pr="$1" st h
+  dequeue "$pr" || anomaly dequeue_fallo "$pr"
+  st=$($GH pr view "$pr" -R "$REPO" --json state --jq .state 2>/dev/null) || st=""
+  if [[ "$st" == MERGED ]]; then
+    h=$($GH pr view "$pr" -R "$REPO" --json headRefOid --jq .headRefOid 2>/dev/null) || h=""
+    [[ "$h" == "$3" ]] || anomaly cola_head_distinto "$pr"
+    queue_forget "$pr"; record_merge "$pr" "$2" "$3" "$4" ${5:+"$5"}; return
+  fi
+  [[ "$st" == OPEN || "$st" == CLOSED ]] || anomaly cola_ilegible "$pr"   # no se sabe si se fusionó: no se libera
+  queue_forget "$pr"; queue_release "$pr"; park "$pr" "$6" ${7:+"$7"}
+}
 queue_drain() {  # espera, en orden de entrada, a que GitHub fusione o expulse cada PR encolada
   # Fail-closed: estado o cabeza ilegibles son anomalía; nunca se olvida una PR que podría seguir en la cola.
   local item pr tier s eq jr inq st h ok nf
@@ -985,33 +1012,27 @@ queue_drain() {  # espera, en orden de entrada, a que GitHub fusione o expulse c
       fi
       case "$st" in
         OPEN) ;;
-        CLOSED) dequeue "$pr" || anomaly dequeue_fallo "$pr"
-                queue_forget "$pr"; queue_release "$pr"; park "$pr" no_abierto; ok=1; break ;;
+        CLOSED) queue_settle "$pr" "$tier" "$s" "$eq" "$jr" no_abierto; ok=1; break ;;
         *) anomaly cola_ilegible "$pr" ;;   # vacío por error de API u otro valor: no se sabe si sigue en la cola
       esac
       [[ -n "$h" ]] || anomaly cola_ilegible "$pr"
-      if [[ "$h" != "$s" ]]; then
-        dequeue "$pr" || anomaly dequeue_fallo "$pr"
-        queue_forget "$pr"; queue_release "$pr"; park "$pr" head_movido; ok=1; break
-      fi
+      if [[ "$h" != "$s" ]]; then queue_settle "$pr" "$tier" "$s" "$eq" "$jr" head_movido; ok=1; break; fi
       case "$inq" in
         true) nf=""; sleep "${MERGE_SPRINT_POLL_S:-30}" ;;
         auto)
           # Fuera de la cola con auto-merge pendiente: no es una expulsión; entraría sola más tarde. Se desarma.
-          dequeue "$pr" || anomaly dequeue_fallo "$pr"
-          queue_forget "$pr"; queue_release "$pr"; park "$pr" auto_merge_pendiente; ok=1; break ;;
+          queue_settle "$pr" "$tier" "$s" "$eq" "$jr" auto_merge_pendiente; ok=1; break ;;
         false)
           # Una sola lectura «fuera de la cola» puede ser desfase de GitHub justo tras encolar: se confirma con otra.
           if [[ -z "$nf" ]]; then nf=1; sleep "${MERGE_SPRINT_POLL_S:-30}"; continue; fi
           local why; why=$(eject_reason "$pr")
           ledger event=QUEUE_EJECT pr="$pr" reason="$why"
           # Sin evento de expulsión no se da por buena la lectura: dequeue verifica que ni está ni puede volver a entrar.
-          dequeue "$pr" || anomaly dequeue_fallo "$pr"
-          queue_forget "$pr"; queue_release "$pr"; park "$pr" cola_expulsada "$why"; ok=1; break ;;
+          queue_settle "$pr" "$tier" "$s" "$eq" "$jr" cola_expulsada "$why"; ok=1; break ;;
         *) anomaly cola_ilegible "$pr" ;;
       esac
     done
-    [[ -n "$ok" ]] || { dequeue "$pr" || anomaly dequeue_fallo "$pr"; queue_forget "$pr"; queue_release "$pr"; park "$pr" cola_agotada; }
+    [[ -n "$ok" ]] || queue_settle "$pr" "$tier" "$s" "$eq" "$jr" cola_agotada
   done
 }
 
@@ -1145,7 +1166,7 @@ for n in o: p=by[n]; print(p["pr"],p["head"],p["tier"],p["base_ref"],p["head_rep
     case "$RESULT" in
       awaiting_judge) awaiting="$awaiting $pr:$tier:$AWAIT_TO" ;;
       merged) record_merge "$pr" "$t" "$CUR" "$EQ" ;;
-      queued) QUEUED="$QUEUED $pr:$t:$CUR:$EQ:" ;;
+      queued) queue_set "$pr:$t:$CUR:$EQ:" ;;
       *) park "$pr" "${RESULT%%:*}" "$CONFLICT_FILES" ;;
     esac
   done <<<"$entries"
@@ -1185,7 +1206,7 @@ for n in o: p=by[n]; print(p["pr"],p["head"],p["tier"],p["base_ref"],p["head_rep
     try_merge "$pr" "$h0" "$tier" "$to"
     case "$RESULT" in
       merged) record_merge "$pr" "$tier" "$CUR" "$EQ" "${v#SAFE:}" ;;
-      queued) QUEUED="$QUEUED $pr:$tier:$CUR:$EQ:${v#SAFE:}" ;;
+      queued) queue_set "$pr:$tier:$CUR:$EQ:${v#SAFE:}" ;;
       awaiting_judge) again="$again $pr" ;;   # código nuevo tras el SAFE: solicitud nueva, se evalúa de cero
       *) park "$pr" "${RESULT%%:*}" "$CONFLICT_FILES" ;;
     esac
