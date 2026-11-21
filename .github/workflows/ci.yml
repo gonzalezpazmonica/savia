@@ -395,6 +395,14 @@ jobs:
       - name: Generated artifacts fresh
         run: bash scripts/validate-ci-local.sh --fresh-only --quick
 
+      # SE-498 F0: plano de control. Sus suites viven en tests/*.bats (ci-select-bats no las elige).
+      - name: Plano de control (SE-498)
+        run: |
+          bats tests/test-savia-control-state.bats tests/test-savia-control-scopes.bats \
+               tests/test-savia-control-epoch.bats tests/test-savia-control-resume.bats \
+               tests/test-savia-control-reconcile.bats tests/test-savia-control-refutacion.bats \
+               tests/test-control-epoch-ci.bats
+
       # Sus tests viven en tests/*.bats (ci-select-bats no los elige); sin este paso no se ejecutan.
       - name: Tests de frescura de artefactos (validate-ci-local)
         run: bats tests/test-validate-ci-fresh.bats

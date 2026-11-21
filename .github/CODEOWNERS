@@ -58,3 +58,10 @@ config/guard-allow-corpus.json              @gonzalezpazmonica
 # y el generador que decide qué regiones entran. Gobernanza tier 4 (risk-tier.py).
 docs/rules/domain/savia-core.md             @gonzalezpazmonica
 scripts/generate-savia-core.py              @gonzalezpazmonica
+
+# Plano de control (SE-498): aprobaciones de resume, operadora, ejecutores remotos, época y gate.
+# Gobernanza tier 4 (risk-tier.py); el check de época monótona y su workflow se ejecutan desde la base.
+config/control/                             @gonzalezpazmonica
+scripts/savia-control.py                    @gonzalezpazmonica
+tests/test-control-epoch-monotonic.bats     @gonzalezpazmonica
+.github/workflows/control-epoch.yml         @gonzalezpazmonica
