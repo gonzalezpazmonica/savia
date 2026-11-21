@@ -149,7 +149,8 @@ ledger() { printf '%s\n' "$@" > "$SAVIA_EFFECT_LEDGER"; }
   approve executor:a 0 1
   gh_api "repos_owner_repo_pulls_${APPROVAL_PR}_files" "[{\"filename\":\"docs/x.md\",\"previous_filename\":\"config/control/operator.json\"}]"
   run sc resume --scope executor:a --via-pr; echo "$output"
-  [ "$status" -eq 0 ]
+  # Pasa el tier por el nombre antiguo; solo la frena después que la PR no contenga la aprobación (security P2-1).
+  [ "$status" -eq 4 ]; [[ "$output" == *APPROVAL_NOT_IN_PR* ]]; [[ "$output" != *TIER_NOT_4* ]]
 }
 
 @test "correctness P2-3 (negativo): el mismo renombrado a un nombre inocuo no sale tier 4" {
@@ -419,4 +420,50 @@ spec = importlib.util.spec_from_file_location("sc", sys.argv[1]); m = importlib.
 spec.loader.exec_module(m)
 print(sorted(k for k in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM") if k in os.environ))' "$R/scripts/savia-control.py"
   echo "$output"; [ "$output" = "[]" ]
+}
+
+# ── P2 de la revisión de seguridad sobre 5c7a9cf67 ──────────────────────────
+
+# fake_replace: origin/main con REVOCATION_EPOCH=3 y un refs/replace local que lo hace parecer 9.
+fake_replace() {
+  origin_put config/control/REVOCATION_EPOCH 3
+  local real; real=$(git -C "$R" rev-parse origin/main)
+  printf '%s' 9 > "$R/config/control/REVOCATION_EPOCH"
+  git -C "$R" add -- config/control/REVOCATION_EPOCH && git -C "$R" commit -qm falso
+  git -C "$R" replace "$real" "$(git -C "$R" rev-parse HEAD)"
+  [ "$(git -C "$R" show origin/main:config/control/REVOCATION_EPOCH)" = 9 ]   # el replace está activo para git
+}
+
+@test "security P2-1: una PR tier 4 de la operadora que no contiene la aprobación no la valida" {
+  operator_setup; sc pause --scope executor:a --reason x; sc reconcile
+  approve executor:a 0 1
+  gh_api "repos_owner_repo_pulls_${APPROVAL_PR}_files" '[{"filename":"config/control/operator.json","sha":"'"$APPROVAL_BLOB"'"}]'
+  run sc resume --scope executor:a --via-pr; echo "$output"
+  [ "$status" -eq 4 ]; [[ "$output" == *APPROVAL_NOT_IN_PR* ]]
+  run sc check --executor a; [ "$status" -ne 0 ]
+}
+
+@test "security P2-1: la PR contiene la ruta pero con otro blob o sin blob → APPROVAL_NOT_IN_PR" {
+  operator_setup; sc pause --scope executor:a --reason x; sc reconcile
+  approve executor:a 0 1
+  gh_api "repos_owner_repo_pulls_${APPROVAL_PR}_files" '[{"filename":"'"$APPROVAL_PATH"'","sha":"0000000000000000000000000000000000000000"}]'
+  run sc resume --scope executor:a --via-pr; [ "$status" -eq 4 ]; [[ "$output" == *APPROVAL_NOT_IN_PR* ]]
+  gh_api "repos_owner_repo_pulls_${APPROVAL_PR}_files" '[{"filename":"'"$APPROVAL_PATH"'"}]'
+  run sc resume --scope executor:a --via-pr; [ "$status" -eq 4 ]; [[ "$output" == *APPROVAL_NOT_IN_PR* ]]
+}
+
+@test "security P2-1 (positivo): la PR con la aprobación y su blob reanuda" {
+  operator_setup; sc pause --scope executor:a --reason x; sc reconcile
+  approve executor:a 0 1
+  run sc resume --scope executor:a --via-pr; echo "$output"; [ "$status" -eq 0 ]
+}
+
+@test "security P2-2: un refs/replace local no cambia la época que se lee de origin/main" {
+  fake_replace
+  run sc epoch; echo "$output"; [ "${lines[0]}" = 3 ]
+}
+
+@test "security P2-2: GIT_NO_REPLACE_OBJECTS vacío heredado no reactiva los replace" {
+  fake_replace
+  GIT_NO_REPLACE_OBJECTS= run sc epoch; [ "${lines[0]}" = 3 ]
 }

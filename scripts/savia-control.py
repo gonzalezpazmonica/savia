@@ -64,6 +64,9 @@ def scrub_git_env(env=None):
     for k in list(env):
         if k in GIT_REDIRECT_VARS or k in GH_REDIRECT_VARS or re.fullmatch(r"GIT_CONFIG_(KEY|VALUE)_[0-9]+", k):
             del env[k]
+    # refs/replace/* del repo local reescriben lo que git ve bajo un hash real (aprobación, operator.json,
+    # REVOCATION_EPOCH de origin/main): se desactivan en todas las llamadas, no basta con quitar la variable.
+    env["GIT_NO_REPLACE_OBJECTS"] = "1"
     return env
 
 
@@ -996,6 +999,11 @@ def verify_pr(ctx, scope, entry):
         raise Fail(4, f"TIER_UNVERIFIABLE: la PR #{n} tiene ficheros con espacios en el nombre")
     if origin_tier(ctx, names) != 4:
         raise Fail(4, f"TIER_NOT_4: la PR #{n} no sale tier 4 con el risk-tier.py de origin/main")
+    # La PR verificada tiene que ser la que fijó esta aprobación, con este mismo contenido: si origin/main local
+    # está manipulado, cualquier PR tier 4 real de la operadora no puede servir de aprobación.
+    own = [f for f in files if isinstance(f, dict) and f.get("filename") == path and f.get("status") != "removed"]
+    if len(own) != 1 or own[0].get("sha") != blob:
+        raise Fail(4, f"APPROVAL_NOT_IN_PR: la PR #{n} no contiene {path} con el blob {blob[:12]}")
     if merge_sprint_merged(ctx, n):
         raise Fail(4, f"MERGED_BY_SPRINT: la PR #{n} figura MERGED en el ledger del merge-sprint")
     return blob, ap["accept"], n

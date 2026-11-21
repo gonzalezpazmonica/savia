@@ -81,8 +81,8 @@ approve() {
   sha=$(git -C "$R" rev-parse HEAD); APPROVAL_N=$((APPROVAL_N + 1)); n=$APPROVAL_N
   gh_api "repos_owner_repo_commits_${sha}_pulls" "[{\"number\":$n,\"merged_at\":\"2026-11-16T00:00:00Z\"}]"
   gh_api "repos_owner_repo_pulls_$n" "{\"number\":$n,\"merged_by\":{\"login\":\"${5:-operadora}\"}}"
-  gh_api "repos_owner_repo_pulls_${n}_files" "[{\"filename\":\"$path\"}]"
   APPROVAL_PATH="$path"; APPROVAL_PR="$n"; APPROVAL_BLOB=$(git -C "$R" rev-parse "HEAD:$path")
+  gh_api "repos_owner_repo_pulls_${n}_files" "[{\"filename\":\"$path\",\"sha\":\"$APPROVAL_BLOB\"}]"
 }
 
 # jget <fichero json> <expresión python sobre d>

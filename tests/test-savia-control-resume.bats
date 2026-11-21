@@ -325,7 +325,7 @@ require_script() {
   paused_a
   approve executor:a 0 "$(seq_of executor:a)"
   gh_api "repos_owner_repo_pulls_${APPROVAL_PR}_files" '[{"filename":"docs/x.md"}]'
-  printf '[{"filename":"%s"}]' "$APPROVAL_PATH" > "$GH_STUB_DIR/api/repos_owner_repo_pulls_${APPROVAL_PR}_files.page2.json"
+  printf '[{"filename":"%s","sha":"%s"}]' "$APPROVAL_PATH" "$APPROVAL_BLOB" > "$GH_STUB_DIR/api/repos_owner_repo_pulls_${APPROVAL_PR}_files.page2.json"
   run sc resume --scope executor:a --via-pr; echo "$output"; [ "$status" -eq 0 ]
   grep -q "pulls/$APPROVAL_PR/files --paginate" "$GH_STUB_DIR/calls.log"
 }
