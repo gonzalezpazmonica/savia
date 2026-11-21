@@ -1,3 +1,7 @@
+---
+context_tier: L2
+token_budget: 595
+---
 # Puerta de comprensión — escenas confirmadas antes de la spec, prototipo antes del código
 
 > SE-505. Gate: `scripts/comprehension-gate.py` (comprobación 11 de `bash scripts/roadmap.sh validate`).

@@ -1,0 +1,52 @@
+{
+  "scenario": "golden",
+  "agent": "truth-tribunal-orchestrator",
+  "cases": [
+    {
+      "id": "golden-seven-judges-exist",
+      "input": "informe con report_type declarado y tier de destino",
+      "expected": "el orquestador convoca los 7 jueces de la tabla y cada uno existe como agente",
+      "checks": [
+        {"id": "table-factuality", "target": "agent", "must_match": "^\\| factuality-judge \\|"},
+        {"id": "table-source-traceability", "target": "agent", "must_match": "^\\| source-traceability-judge \\|"},
+        {"id": "table-hallucination", "target": "agent", "must_match": "^\\| hallucination-judge \\|"},
+        {"id": "table-coherence", "target": "agent", "must_match": "^\\| coherence-judge \\|"},
+        {"id": "table-calibration", "target": "agent", "must_match": "^\\| calibration-judge \\|"},
+        {"id": "table-completeness", "target": "agent", "must_match": "^\\| completeness-judge \\|"},
+        {"id": "table-compliance", "target": "agent", "must_match": "^\\| compliance-judge \\|"},
+        {"id": "file-factuality", "target": ".claude/agents/factuality-judge.md", "must_match": "^name: factuality-judge$"},
+        {"id": "file-source-traceability", "target": ".claude/agents/source-traceability-judge.md", "must_match": "^name: source-traceability-judge$"},
+        {"id": "file-hallucination", "target": ".claude/agents/hallucination-judge.md", "must_match": "^name: hallucination-judge$"},
+        {"id": "file-coherence", "target": ".claude/agents/coherence-judge.md", "must_match": "^name: coherence-judge$"},
+        {"id": "file-calibration", "target": ".claude/agents/calibration-judge.md", "must_match": "^name: calibration-judge$"},
+        {"id": "file-completeness", "target": ".claude/agents/completeness-judge.md", "must_match": "^name: completeness-judge$"},
+        {"id": "file-compliance", "target": ".claude/agents/compliance-judge.md", "must_match": "^name: compliance-judge$"}
+      ]
+    },
+    {
+      "id": "golden-verdict-bands",
+      "input": "puntuacion ponderada y vetos",
+      "expected": "las cuatro bandas de veredicto y los umbrales estan declarados",
+      "checks": [
+        {"id": "band-publishable", "target": "agent", "must_match": "PUBLISHABLE \\(≥90 \\+ no vetos\\)"},
+        {"id": "band-conditional", "target": "agent", "must_match": "CONDITIONAL \\(70-89 \\+ no critical vetos; human decides\\)"},
+        {"id": "band-iterate", "target": "agent", "must_match": "ITERATE \\(<70 or veto; feedback to generator\\)"},
+        {"id": "band-escalate", "target": "agent", "must_match": "ESCALATE \\(after 3 iterations still failing\\)"},
+        {"id": "crc-artifact", "target": "agent", "must_match": "\\*\\*Write `\\.truth\\.crc`\\*\\* next to the report"}
+      ]
+    },
+    {
+      "id": "golden-weights-profiles-sum-to-one",
+      "input": "perfiles de pesos de docs/rules/domain/truth-tribunal-weights.md",
+      "expected": "cada perfil suma 1.00 y cubre las 7 dimensiones (se ejecuta en el bats)",
+      "weights": {
+        "file": "docs/rules/domain/truth-tribunal-weights.md",
+        "profiles": ["default", "executive", "compliance", "audit", "digest", "subjective"],
+        "dimensions": ["factuality", "source_traceability", "hallucination", "coherence", "calibration", "completeness", "compliance"]
+      },
+      "checks": [
+        {"id": "weights-doc-referenced", "target": "agent", "must_match": "docs/rules/domain/truth-tribunal-weights\\.md"}
+      ]
+    }
+  ]
+}

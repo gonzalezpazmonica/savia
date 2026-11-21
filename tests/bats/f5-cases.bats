@@ -30,49 +30,49 @@ teardown() {
 }
 
 @test "F5 caso 3: crash antes del merge (reserved) permite reanudar" {
-  run bash "$SCRIPT" reserve pr.merge k3
+  run bash "$SCRIPT" reserve pr.merge 103
   [ "$status" -eq 0 ]
-  run bash "$SCRIPT" reserve pr.merge k3
+  run bash "$SCRIPT" reserve pr.merge 103
   [ "$status" -eq 0 ]
-  [ "$(bash "$SCRIPT" status pr.merge k3)" = "reserved" ]
+  [ "$(bash "$SCRIPT" status pr.merge 103)" = "reserved" ]
 }
 
 @test "F5 caso 4: crash tras solicitar merge (submitted) permite reanudar" {
-  bash "$SCRIPT" reserve pr.merge k4 >/dev/null
-  bash "$SCRIPT" mark_submitted pr.merge k4 >/dev/null
-  run bash "$SCRIPT" reserve pr.merge k4
+  bash "$SCRIPT" reserve pr.merge 104 >/dev/null
+  bash "$SCRIPT" mark_submitted pr.merge 104 >/dev/null
+  run bash "$SCRIPT" reserve pr.merge 104
   [ "$status" -eq 0 ]
-  [ "$(bash "$SCRIPT" status pr.merge k4)" = "submitted" ]
+  [ "$(bash "$SCRIPT" status pr.merge 104)" = "submitted" ]
 }
 
 @test "F5 caso 5+6: reject retry tras CLOSED con ALREADY_EXECUTED" {
-  bash "$SCRIPT" reserve pr.merge k6 >/dev/null
+  bash "$SCRIPT" reserve pr.merge 106 >/dev/null
   export F5_TEST_REMOTE_STATE=MERGED
-  bash "$SCRIPT" close pr.merge k6 >/dev/null
-  run bash "$SCRIPT" reserve pr.merge k6
+  bash "$SCRIPT" close pr.merge 106 >/dev/null
+  run bash "$SCRIPT" reserve pr.merge 106
   [ "$status" -eq 3 ]
   [[ "$output" == *"ALREADY_EXECUTED"* ]]
-  [ "$(bash "$SCRIPT" status pr.merge k6)" = "closed" ]
+  [ "$(bash "$SCRIPT" status pr.merge 106)" = "closed" ]
 }
 
 @test "F5 caso 7: reject efecto externo ya ejecutado" {
-  printf '{"op":"pr.merge","key":"k7","state":"reserved"}' > "$SAVIA_RESERVATIONS/pr.merge__k7.json"
+  printf '{"op":"pr.merge","key":"107","state":"reserved"}' > "$SAVIA_RESERVATIONS/pr.merge__107.json"
   export F5_TEST_REMOTE_STATE=MERGED
-  run bash "$SCRIPT" reserve pr.merge k7
+  run bash "$SCRIPT" reserve pr.merge 107
   [ "$status" -eq 3 ]
   [[ "$output" == *"externamente"* || "$output" == *"ALREADY_EXECUTED"* ]]
-  [ "$(bash "$SCRIPT" status pr.merge k7)" = "closed" ]
+  [ "$(bash "$SCRIPT" status pr.merge 107)" = "closed" ]
 }
 
 @test "F5 negativo: close bloquea estado remoto no mergeado" {
-  bash "$SCRIPT" reserve pr.merge denied >/dev/null
-  run bash "$SCRIPT" close pr.merge denied
+  bash "$SCRIPT" reserve pr.merge 108 >/dev/null
+  run bash "$SCRIPT" close pr.merge 108
   [ "$status" -eq 2 ]
   [[ "$output" == *"BLOCK"* ]]
 }
 
 @test "F5 edge nonexistent reservation: mark_submitted falla cerrado" {
-  run bash "$SCRIPT" mark_submitted pr.merge missing
+  run bash "$SCRIPT" mark_submitted pr.merge 109
   [ "$status" -ne 0 ]
   [[ "$output" == *"FAIL"* ]]
 }

@@ -1,5 +1,6 @@
 ---
 context_tier: L3
+token_budget: 1170
 ---
 
 # Criterio de evidencia en los tests (SE-456)

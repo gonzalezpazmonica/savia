@@ -3,12 +3,10 @@
   "spec": "SE-400",
   "phase": "F4",
   "registry_id": "f4-pretooluse-bash",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "status": "PREREGISTERED_BEFORE_RUN",
-  "history": "0.1.0 corrió con las mismas unidades y expectativas: 18/18 INCONCLUSIVE porque el control FULL deja pasar f4-adb-root. 0.2.0 solo añade esa exclusión con su causa; no cambia unidades, expectativas, corpus ni regla.",
-  "excluded_cases": [
-    {"id": "f4-adb-root", "reason": "CONTROL_DEFECT: android-adb-validate.sh lee la orden de la variable TOOL_INPUT y el runtime la entrega por stdin, así que el guard nunca actúa en FULL. Caduca en cuanto el hook lea stdin."}
-  ],
+  "history": "0.1.0 corrió con las mismas unidades y expectativas: 18/18 INCONCLUSIVE porque el control FULL deja pasar f4-adb-root. 0.2.0 solo añade esa exclusión con su causa; no cambia unidades, expectativas, corpus ni regla. 0.3.0 solo añade cuatro unidades que pasaron a ser bloqueantes del grupo después de 0.2.0 (block-commit-to-main, memory-write-sanitize, pr-summary-gate, prompt-hook-commit); sin ellas el alcance del preregistro quedaba incompleto (PREREG_SCOPE_INCOMPLETE). No se han ejecutado: sus hipótesis son una afirmación a contrastar, sin expectativa de captura única ni resultado previo; Además retira la exclusión de f4-adb-root: caducó cuando #1398 hizo que android-adb-validate.sh lea la orden por stdin (el propio 0.2.0 la daba por caducada en ese momento); el caso vuelve al corpus y la expectativa de u-android-adb-validate (f4-adb-root) pasa a ser contrastable. Cambia la lista de unidades y esa exclusión, no las expectativas de las otras nueve ni la regla de decisión. En el corpus cambia un solo caso exec, architecture-query de config/kernel-corpus.json: desde SE-501 sam.json no se versiona ni entra en el snapshot, así que el caso lo genera (generate-capability-map.py y sam.py generate) antes de la consulta; no es un caso de hook y no altera ninguna expectativa de captura.",
+  "excluded_cases": [],
   "description": "Preregistro F4 (SE-400 §6): ablación determinista A0 (quitar el hook de settings, conservar el fichero) y A2 (sustituir el hook por un no-op en el snapshot) de cada hook bloqueante del grupo PreToolUse/Bash. Las expectativas se fijan antes de correr y el receipt las compara con lo observado; un fallo de predicción es un dato, no un error. Ningún resultado autoriza retirar nada.",
   "scope": {"event": "PreToolUse", "matcher": "Bash"},
   "corpora": ["config/kernel-corpus.json", "config/ablation-f4-corpus.json"],
@@ -51,6 +49,18 @@
      "expected_unique_catches": []},
     {"id": "u-action-review", "unit": ".claude/hooks/action-review.sh", "modes": ["A0", "A2"],
      "hypothesis": "Opt-in con doble factor; inerte con el entorno por defecto.",
+     "expected_unique_catches": []},
+    {"id": "u-block-commit-to-main", "unit": ".claude/hooks/block-commit-to-main.sh", "modes": ["A0", "A2"],
+     "hypothesis": "Añadida en 0.3.0, sin ejecutar. Mira commit sobre ramas protegidas; el corpus no tiene caso conocido para ella, así que no se espera captura única.",
+     "expected_unique_catches": []},
+    {"id": "u-memory-write-sanitize", "unit": ".claude/hooks/memory-write-sanitize.sh", "modes": ["A0", "A2"],
+     "hypothesis": "Añadida en 0.3.0, sin ejecutar. Sanea escrituras de memoria; el corpus no lo ejercita, así que no se espera captura única.",
+     "expected_unique_catches": []},
+    {"id": "u-pr-summary-gate", "unit": ".claude/hooks/pr-summary-gate.sh", "modes": ["A0", "A2"],
+     "hypothesis": "Añadida en 0.3.0, sin ejecutar. Actúa solo en gh pr create con revisión del resumen; el corpus no lo ejercita, así que no se espera captura única.",
+     "expected_unique_catches": []},
+    {"id": "u-prompt-hook-commit", "unit": ".claude/hooks/prompt-hook-commit.sh", "modes": ["A0", "A2"],
+     "hypothesis": "Añadida en 0.3.0, sin ejecutar. Actúa sobre commit; el corpus no tiene caso conocido para ella, así que no se espera captura única.",
      "expected_unique_catches": []}
   ]
 }
