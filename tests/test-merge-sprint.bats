@@ -1539,3 +1539,87 @@ PY
   [ "$status" -eq 0 ]
   grep -qx 239 "$FAKE/merged"
 }
+
+# HOLD entre cabezas equivalentes: tests de la implementación (complementan los de Codex, no los sustituyen).
+# Separan las tres comprobaciones (plan, entrada de run y último punto antes de merge_at) para que un mutante
+# que quite una sola de ellas haga caer al menos un test.
+
+ms_ledger_count() {  # <evento> <pr> → nº de eventos de ese tipo para esa PR (JSON parseado, no grep del orden de claves)
+  python3 -c 'import json,sys; print(sum(1 for l in open(sys.argv[1]) if (e:=json.loads(l)).get("event")==sys.argv[2] and e.get("pr")==sys.argv[3]))' \
+    "$MERGE_SPRINT_HOME/ledger.jsonl" "$1" "$2"
+}
+
+@test "HOLD-impl run entrada: PR retenida se aparca sin re-sincronizar ni empujar su rama" {
+  v2_repo; v2_pr 240 feature.txt contenido
+  main_moves main-1.txt avance; pr_absorbs_main 240
+  plan_and_grant
+  local held; held=$(ms_hold_head 240)
+  ms_hold_review_at 240 "$held" HOLD correctness 1
+  main_moves main-2.txt otro-avance          # la rama queda desfasada: sin la comprobación de entrada, resync la movería
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"aparcado #240: revision"* ]]
+  [ "$(ms_hold_head 240)" = "$held" ]
+  [ "$(ms_ledger_count RESYNC 240)" = 0 ]
+  ms_hold_parked 240
+}
+
+@test "HOLD-impl run merge_at: HOLD sobre la cabeza re-sincronizada durante el run impide el merge" {
+  v2_repo; v2_pr 241 feature.txt contenido
+  main_moves main-1.txt avance
+  plan_and_grant
+  # Una revisora registra HOLD sobre la cabeza que empuja resync, entre el push y el merge (hook real del remoto).
+  cat > "$BARE/hooks/post-receive" <<HOOK
+#!/usr/bin/env bash
+while read -r _ new ref; do
+  [[ "\$ref" == refs/heads/pr-241 ]] || continue
+  printf 'VERDICT: HOLD pr=241 sha=%s role=correctness tier=2 reviewer=independent-reviewer author=impl-agent p0=0 p1=1 p2=0 p2_blocking=0\n' "\$new" > "$TMPDIR_T/late-hold.md"
+  bash "$PWD/$SCRIPT" review-register 241 "$TMPDIR_T/late-hold.md" >/dev/null
+done
+HOOK
+  chmod +x "$BARE/hooks/post-receive"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ "$(ms_ledger_count RESYNC 241)" -ge 1 ]   # el HOLD llegó durante el run, tras el push de resync
+  grep -q '"verdict":"HOLD"' "$MERGE_SPRINT_HOME/reviews.jsonl"
+  [[ "$output" == *"aparcado #241: revision"* ]]
+  ms_hold_parked 241
+}
+
+@test "HOLD-impl negativo: APPROVE posterior del mismo rol sobre A levanta el HOLD de una B intermedia" {
+  v2_repo; v2_pr 242 feature.txt contenido
+  local approved; approved=$(ms_hold_head 242)
+  main_moves main-1.txt avance; pr_absorbs_main 242
+  ms_hold_review_at 242 "$(ms_hold_head 242)" HOLD correctness 1
+  ms_hold_review_at 242 "$approved" APPROVE correctness
+  main_moves main-2.txt otro-avance; pr_absorbs_main 242
+  plan_and_grant
+  [[ "$output" != *"excluida PR 242"* ]]
+  grep -q "\"head\":\"$approved\"" "$MERGE_SPRINT_HOME/manifest.json"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 242 "$FAKE/merged"
+}
+
+@test "HOLD-impl block: APPROVE posterior de otro rol no levanta el HOLD de una B intermedia" {
+  v2_repo; v2_pr 243 feature.txt contenido
+  local approved; approved=$(ms_hold_head 243)
+  main_moves main-1.txt avance; pr_absorbs_main 243
+  ms_hold_review_at 243 "$(ms_hold_head 243)" HOLD security 1
+  ms_hold_review_at 243 "$approved" APPROVE correctness
+  main_moves main-2.txt otro-avance; pr_absorbs_main 243
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  ms_hold_excluded 243
+}
+
+@test "HOLD-impl fail-closed: HOLD con el informe alterado sigue reteniendo" {
+  v2_repo; v2_pr 244 feature.txt contenido
+  main_moves main-1.txt avance; pr_absorbs_main 244
+  ms_hold_review_at 244 "$(ms_hold_head 244)" HOLD correctness 1
+  local f; f=$(python3 -c 'import json,sys; print([json.loads(l) for l in open(sys.argv[1])][-1]["file"])' "$MERGE_SPRINT_HOME/reviews.jsonl")
+  echo "VERDICT: APPROVE manipulado" > "$f"
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  ms_hold_excluded 244
+}
