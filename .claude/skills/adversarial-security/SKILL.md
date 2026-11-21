@@ -70,6 +70,8 @@ score = sum(factor × peso) × 10 → escala 0-10
 9. Logging Failures
 10. SSRF
 
+Proyectos con IA, agentes o MCP: añadir `references/ia-agentes-mcp.md` (OWASP LLM 2026, Agentic 2026 y MCP Top 10; regla de dos; GitHub Actions; refutación y cierre con «revisado, sin problema» y «no cubierto»).
+
 ## §4 Dependency Audit
 
 ```bash
