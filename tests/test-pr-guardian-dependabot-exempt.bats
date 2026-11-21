@@ -114,8 +114,9 @@ import yaml,sys
 steps=yaml.safe_load(open('$WORKFLOW'))['jobs']['pr-guardian']['steps']
 ex=[s for s in steps if s.get('id')=='deps_exempt']
 assert len(ex)==1, 'falta el paso deps_exempt'
-assert ex[0]['if'].strip()==\"github.event.pull_request.user.login == 'dependabot[bot]'\", ex[0]['if']
-cond=\"steps.deps_exempt.outputs.exempt != 'true'\"
+# merge_group (cola de fusión): sin PR en el evento, la exención y las puertas que dependen de ella no corren.
+assert ex[0]['if'].strip()==\"github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'\", ex[0]['if']
+cond=\"github.event_name == 'pull_request' && steps.deps_exempt.outputs.exempt != 'true'\"
 gated=sorted(s['name'] for s in steps if 'deps_exempt' in str(s.get('if','')) and s.get('id')!='deps_exempt')
 assert gated==['Gate 1: PR Description Quality','Gate 8: CHANGELOG Required'], gated
 for s in steps:
