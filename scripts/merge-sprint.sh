@@ -118,15 +118,22 @@ PY
 hold_blocks() {  # hold_blocks <pr> <sha_usado> <cabeza_actual> → 0 si un HOLD retiene la PR (incidente #1642)
   # reviews_ok solo mira (pr, sha_usado): una cabeza equivalente posterior con HOLD pasaba con la APPROVE antigua.
   # Retiene: cualquier HOLD sobre la cabeza actual o sobre el sha usado; y cualquier otro HOLD de la PR que no
-  # tenga detrás, en el registro, una APPROVE íntegra del mismo rol sobre el sha usado (la PR se corrigió y se
-  # volvió a aprobar). Un HOLD con el informe ilegible o alterado sigue reteniendo. Error o registro ausente: retiene.
-  python3 - "$REG" "$1" "$2" "$3" <<'PY'
-import hashlib, json, sys
-reg, pr, used, cur = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
+  # tenga detrás, en el registro, una APPROVE íntegra del mismo rol sobre el sha usado, siendo ese sha posterior
+  # al retenido (no ancestro suyo: re-aprobar un sha antiguo equivalente no levanta nada, PR #1653 P1-1).
+  # Un HOLD con el informe ilegible o alterado sigue reteniendo. Error, registro ausente o git dudoso: retiene.
+  # Límites conocidos: el rol lo declara la revisora (mismo modelo de confianza que reviews_ok) y un HOLD
+  # registrado entre esta comprobación y merge_at no se ve (ventana TOCTOU mínima, --match-head-commit acota).
+  python3 - "$REG" "$1" "$2" "$3" "$GITROOT" <<'PY'
+import hashlib, json, subprocess, sys
 def intact(d):
     try: return hashlib.sha256(open(d["file"], "rb").read()).hexdigest() == d["hash"]
     except OSError: return False
-try:   # una excepción sale con 1 («libre»): cualquier error del registro retiene (2)
+def predates(a, b):  # True salvo que git confirme que a NO es ancestro de b (exit 1); igual o error: True
+    try: return a == b or subprocess.run(["git", "-C", gitroot, "merge-base", "--is-ancestor", a, b],
+                                         capture_output=True).returncode != 1
+    except Exception: return True
+try:   # cualquier excepción sale con 1 («libre»): todo error de argumentos o registro retiene (2)
+    reg, pr, used, cur, gitroot = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]
     entries = [json.loads(l) for l in open(reg).read().splitlines()]
     holds, approves = [], []
     for i, d in enumerate(entries):
@@ -135,7 +142,7 @@ try:   # una excepción sale con 1 («libre»): cualquier error del registro ret
         elif d["sha"] == used and intact(d): approves.append((i, d["role"]))
 except Exception: sys.exit(2)
 for i, s, role in holds:
-    if s in (cur, used): sys.exit(0)
+    if s in (cur, used) or predates(used, s): sys.exit(0)
     if not any(j > i and r == role for j, r in approves): sys.exit(0)
 sys.exit(1)
 PY

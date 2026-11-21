@@ -1586,19 +1586,59 @@ HOOK
   ms_hold_parked 241
 }
 
-@test "HOLD-impl negativo: APPROVE posterior del mismo rol sobre A levanta el HOLD de una B intermedia" {
+@test "HOLD-impl block: re-aprobar A (ancestro de la B intermedia retenida) con el mismo rol no levanta el HOLD (PR #1653 P1-1)" {
   v2_repo; v2_pr 242 feature.txt contenido
   local approved; approved=$(ms_hold_head 242)
   main_moves main-1.txt avance; pr_absorbs_main 242
   ms_hold_review_at 242 "$(ms_hold_head 242)" HOLD correctness 1
-  ms_hold_review_at 242 "$approved" APPROVE correctness
+  ms_hold_review_at 242 "$approved" APPROVE correctness   # otra revisora del mismo rol, sin ningún arreglo
   main_moves main-2.txt otro-avance; pr_absorbs_main 242
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  ms_hold_excluded 242
+}
+
+@test "HOLD-impl negativo: arreglo sobre la B retenida y APPROVE del mismo rol levantan el HOLD aunque la cabeza avance" {
+  v2_repo; v2_pr 246 feature.txt contenido
+  main_moves main-1.txt avance; pr_absorbs_main 246
+  ms_hold_review_at 246 "$(ms_hold_head 246)" HOLD correctness 1
+  G switch -q pr-246
+  echo corregido > "$MERGE_SPRINT_GIT_ROOT/feature.txt"
+  G commit -qam arreglo; G push -q origin pr-246; G switch -q main
+  local fixed; fixed=$(ms_hold_head 246)
+  ms_hold_review_at 246 "$fixed" APPROVE correctness
+  main_moves main-2.txt otro-avance; pr_absorbs_main 246
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"excluida PR 246"* ]]
+  grep -q "\"head\":\"$fixed\"" "$MERGE_SPRINT_HOME/manifest.json"
   plan_and_grant
-  [[ "$output" != *"excluida PR 242"* ]]
-  grep -q "\"head\":\"$approved\"" "$MERGE_SPRINT_HOME/manifest.json"
   run bash "$SCRIPT" run
   [ "$status" -eq 0 ]
-  grep -qx 242 "$FAKE/merged"
+  grep -qx 246 "$FAKE/merged"
+}
+
+@test "HOLD-impl fail-closed: HOLD sobre un sha que git no conoce no se levanta con un APPROVE posterior" {
+  v2_repo; v2_pr 247 feature.txt contenido
+  local approved; approved=$(ms_hold_head 247)
+  main_moves main-1.txt avance; pr_absorbs_main 247
+  ms_hold_review_at 247 "$(printf 'e%.0s' {1..40})" HOLD correctness 1   # git no puede decidir la ancestría
+  ms_hold_review_at 247 "$approved" APPROVE correctness
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  ms_hold_excluded 247
+}
+
+@test "HOLD-impl fail-closed: argumentos inválidos de hold_blocks retienen en vez de dar «libre»" {
+  local fn="$TMPDIR_T/hold_blocks.sh"
+  sed -n '/^hold_blocks() {/,/^}/p' "$SCRIPT" > "$fn"
+  [ -s "$fn" ]
+  REG="$TMPDIR_T/reg.jsonl"; GITROOT="$TMPDIR_T"; : > "$REG"
+  source "$fn"
+  run hold_blocks no-numero "$(printf 'a%.0s' {1..40})" "$(printf 'a%.0s' {1..40})"
+  [ "$status" -eq 0 ]          # 0 = retiene
+  run hold_blocks 1 "$(printf 'a%.0s' {1..40})" "$(printf 'a%.0s' {1..40})"
+  [ "$status" -eq 1 ]          # control: registro vacío y PR válida → libre
 }
 
 @test "HOLD-impl block: APPROVE posterior de otro rol no levanta el HOLD de una B intermedia" {
