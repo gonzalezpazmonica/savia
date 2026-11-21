@@ -566,3 +566,40 @@ print(g.redact("git status && echo hola"))'
   [ "$(stat -c %a "$SAVIA_GUARD_BLOCKS_LOG")" = "600" ]
   [ "$(wc -l <"$SAVIA_GUARD_BLOCKS_LOG")" -eq 1 ]
 }
+
+# ── Revisión de 2021f79 (correctness P1-1/P2-2/P2-3, seguridad P2-1, Codex) ──
+@test "SE-510 F3 negativo (correctness 2021f79 P1-1, Codex): \`.\` tras salto de línea, then o command → exit 2" {
+  git init -q "$TMP/a"
+  cmds=($'echo hi\n. ./env.sh\ngh pr create' "if true; then . ./env.sh; fi; gh pr create"
+        "command . ./env.sh; gh pr create" "builtin . ./env.sh && gh pr create")
+  for cmd in "${cmds[@]}"; do
+    resolve_in "$TMP/a" "$cmd"
+    [ "$status" -eq 2 ] || { echo "no bloqueó: $cmd → $output"; false; }
+  done
+}
+
+@test "SE-510 F3 negativo (Codex 2021f79): cd relativo sin ./ (CDPATH) → exit 2; con ./ se resuelve" {
+  git init -q "$TMP/a" && git init -q "$TMP/a/sub"
+  resolve_in "$TMP/a" "cd sub && gh pr create"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *CDPATH* ]]
+  # Negativo: `./sub` no pasa por CDPATH y resuelve el árbol del cd.
+  resolve_in "$TMP/a" "cd ./sub && gh pr create"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(git -C "$TMP/a/sub" rev-parse --show-toplevel)" ]
+}
+
+@test "SE-510 AC-4 (Codex/correctness 2021f79): la redacción cruza continuaciones y comillas multilínea" {
+  run python3 -c '
+import sys; sys.path.insert(0, "scripts"); import guard_blocks as g
+o = "-" + "p"; s = "defghijkl"
+cases = ["x pass" + f"word=abc\\\n{s} && ls", f"x {o} \"abc\n{s}\"", f"x {o} \"abc\n{s}"]
+for c in cases:
+    r = g.redact(c)
+    print("FUGA" if s in r or "REDACTED" not in r else "ok", repr(r))
+print(g.redact("echo a\\\nb"))'
+  echo "$output"
+  [[ "$output" != *FUGA* ]]
+  [ "$(grep -c '^ok' <<<"$output")" -eq 3 ]
+  [[ "$output" == *$'\n'"echo a\\"$'\n'"b" ]]
+}

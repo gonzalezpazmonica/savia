@@ -189,3 +189,21 @@ JSON
   run grep -c 'TS_GUARD | bloqueante | fakeGuard' "$t/docs/hooks-coverage-matrix.md"
   [ "$output" = "0" ]
 }
+
+@test "SE-510 negativo (seguridad 2021f79 P2-1): import de lib/before-guards.ts comentado no da cobertura" {
+  t="$BATS_TEST_TMPDIR/tree"
+  _mk_tree "$t" '// import { BEFORE_GUARDS } from "./lib/before-guards.ts";'
+  run bash "$t/scripts/hooks-coverage-matrix.sh"
+  [ "$status" -eq 0 ]
+  grep -q '| PreToolUse | fake-guard.sh | no | NONE | bloqueante |' "$t/docs/hooks-coverage-matrix.md"
+}
+
+@test "SE-510 (correctness 2021f79 P2-3): ] en un comentario y anotación de tipo no vacían BEFORE_GUARDS" {
+  t="$BATS_TEST_TMPDIR/tree"
+  _mk_tree "$t" 'import { BEFORE_GUARDS } from "./lib/before-guards.ts";'
+  printf 'import { fakeGuard } from "../guards/fake-guard.ts";\nexport const BEFORE_GUARDS: Guard[] = [\n  // ver [nota]\n  fakeGuard,\n];\n' \
+    > "$t/.opencode/plugins/lib/before-guards.ts"
+  run bash "$t/scripts/hooks-coverage-matrix.sh"
+  [ "$status" -eq 0 ]
+  grep -q '| PreToolUse | fake-guard.sh | si | TS_GUARD | bloqueante | fakeGuard |' "$t/docs/hooks-coverage-matrix.md"
+}

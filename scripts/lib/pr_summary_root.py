@@ -22,7 +22,8 @@ queda en segundo plano), `cd` cuyo destino no se puede saber sin ejecutar nada (
 `$(…)`, `` ` ``, `~usuario`, `cd -`, `cd` a secas), más de un `cd` (habría que
 encadenarlos), un `cd` dentro de un subshell que se cierra antes de gh (`(cd X); gh …`),
 `pushd`/`popd` en cualquier posición (`builtin pushd`), `source` o `.` (ejecutan otro
-fichero en este shell), `env -C` en cualquier grafía (`-C<ruta>`, `-iC`, `--chdir`,
+fichero en este shell; `.` también tras salto de línea, `then`, `command`…), un `cd` a una
+ruta relativa sin `./` (bash la busca antes en CDPATH, que el hook no ve), `env -C` en cualquier grafía (`-C<ruta>`, `-iC`, `--chdir`,
 `--chdir=`) o `env -S`/`--split-string`, cualquier expansión antes de gh (`$x`, `${x}d`,
 `$(…)`, `` `…` ``, `$'…'`, `$"…"`: puede formar un `cd` y `$'…'` no se analiza), un
 `gh pr create` disfrazado (`\\gh`, `"gh"`) que no se puede situar en la orden, o un
@@ -62,7 +63,10 @@ UNSAFE = re.compile(r"[$`]|^~[^/]|^-$")
 # `source`/`.` ejecutan otro fichero en ESTE shell (puede hacer `cd`); `env -S`/`--split-string`
 # parte un texto en argumentos (`env -S'-C /B gh pr create'`), y `--chdir=` no lleva espacio.
 OTHER_CHDIR = re.compile(r"(?<![\w./-])(?:pushd|popd|source)(?![\w./-])"
-                         r"|(?:^|[;&|({])\s*\.\s"
+                         # `.` como orden: al inicio, tras un separador o salto de línea, o tras una
+                         # palabra que da paso a una orden (`then . x`, `command . x`) (correctness
+                         # 2021f79 P1-1, Codex 2021f79).
+                         r"|(?:^|[;&|({!\n]|\b(?:then|do|else|elif|command|builtin|exec|time|eval)\b)\s*\.\s"
                          r"|\benv\b[^;&|()]*[\s=](?:-[A-Za-z]*[CS]|--chdir|--split-string)")
 # Una expansión (`$x`, `$(…)`, `` `…` ``, `$'…'`, `$"…"`) antes de gh puede ser el propio `cd`
 # (`c$'d' /B`, `x=cd; $x /B`) y el texto entre `$'…'` no se analiza: fallo cerrado.
@@ -71,6 +75,9 @@ EXPANSION = re.compile(r"[$`]")
 # `cd` no llega a gh (`cd X && true & gh pr create`).
 BACKGROUND = re.compile(r"(?<![&>|<])&(?![&>])")
 CONTINUATION = re.compile(r"\\\r?\n")
+# Destino relativo que no empieza por `/`, `.` ni `~`: bash lo busca primero en CDPATH, que
+# puede venir del perfil de la shell y que el hook no ve → fallo cerrado (Codex 2021f79).
+BARE_RELATIVE = re.compile(r"^[^/.~]")
 # Palabra que precede a `pr create`: si es `gh` escrito con barras o comillas cerradas
 # (`\\gh`, `"gh"`, `g''h`), es gh para bash pero GH_RE no la ve.
 GH_WORD = re.compile(r"(?:^|(?<=[;&|(`\s]))([^\s;&|()]+)(?=\s+pr\s+create(?:[\s;&|)]|$))")
@@ -176,6 +183,9 @@ def cd_target(command: str) -> str | None:
         raise Unresolved(f"destino de `cd` ilegible: {arg}") from exc
     if len(parts) != 1 or UNSAFE.search(parts[0]):
         raise Unresolved(f"destino de `cd` no resoluble sin ejecutar nada: {arg}")
+    if BARE_RELATIVE.match(parts[0]):
+        raise Unresolved(f"`cd {parts[0]}` relativo sin `./`: bash lo busca antes en CDPATH, que el "
+                         "hook no ve; usa `cd ./{0}` o la ruta absoluta".replace("{0}", parts[0]))
     return os.path.expanduser(parts[0])
 
 

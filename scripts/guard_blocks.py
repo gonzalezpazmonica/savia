@@ -40,7 +40,9 @@ ID_RE = re.compile(r"^[0-9a-f]{12}$")
 # Valor = una palabra entera de shell: bash concatena trozos con y sin comillas
 # (`""abc`, `a"b c"d`, `a\ b`), así que se tapa la palabra completa y no solo su primer
 # trozo. Una comilla sin cerrar tapa hasta el final (ante la duda, se tapa).
-SHELL_WORD = r"""(?:\\.|"(?:\\.|[^"\\])*"|'[^']*'|["'].*|[^\s'"\\;&|])+"""
+# `[\s\S]` y no `.`: `\\`+salto es una continuación (la palabra sigue en la línea siguiente) y
+# la comilla sin cerrar llega también a las líneas siguientes (Codex y correctness 2021f79).
+SHELL_WORD = r"""(?:\\[\s\S]|"(?:\\[\s\S]|[^"\\])*"|'[^']*'|["'][\s\S]*|[^\s'"\\;&|])+"""
 # Redacción del opt-in (docs/rules/domain/secret-redaction-policy.md): ante la duda, se tapa.
 SECRET_RES = [
     re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"),
