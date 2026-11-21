@@ -11,7 +11,7 @@ Informe anterior: `docs/evidence/SE-515-S0-auditoria-linea-base.md` (#1504, leí
 | Commit del preregistro y los fixtures | `7d81ec3c35a018a22165d9ce4fadd0d93f74f3c8`, anterior a este informe |
 | `tests/fixtures/se515-s0/prereg.json` | blob `0c9bc29c3080a0f4a758523f3bd7315613b4dca5` · sha256 `bf5ef6ea…55facfee5` |
 | `tests/fixtures/se515-s0/pilot-cases.jsonl` | blob `7d994b8e476fb77dda6555e474be19d3d62a573b` · sha256 `bd05bc41…bd605400e` |
-| Manifiesto | `tests/fixtures/se515-s0/SHA256SUMS`; lo comprueba `tests/test-se515-s0-fixtures.bats` |
+| Manifiesto | `tests/fixtures/se515-s0/SHA256SUMS`; lo comprueba `tests/bats/test-se515-s0-fixtures.bats` (14 casos, CI lo selecciona por estar en `tests/bats/`) |
 
 Marcas: **O** observado (ejecutado o leído en este árbol), **I** inferido de lo observado, **NV** no verificado. Las cifras del log de recall salen del log local de una instalación (fuera del repo); aquí solo hay agregados por id de criterio, que son públicos en `CRITERIO.md`. Que una suite esté en verde no prueba que la pieza esté operativa.
 

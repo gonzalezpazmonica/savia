@@ -9,11 +9,15 @@
 FIX="tests/fixtures/se515-s0"
 
 setup() {
-  cd "$BATS_TEST_DIRNAME/.." || exit 1
+  cd "$BATS_TEST_DIRNAME/../.." || exit 1
   REPO="$PWD"
   WORK="$BATS_TEST_TMPDIR/fix"
   mkdir -p "$WORK"
   cp "$FIX"/prereg.json "$FIX"/pilot-cases.jsonl "$FIX"/SHA256SUMS "$WORK"/
+}
+
+teardown() {
+  [[ -d "$WORK" ]] && chmod -R u+w "$WORK"; return 0
 }
 
 # Validador del esquema: imprime un error por línea y sale 1 si hay alguno.
@@ -85,7 +89,7 @@ PY
   [[ "$output" == *"pilot-cases.jsonl: OK"* ]]
 }
 
-@test "negativo: cambiar una etiqueta sin actualizar el hash rompe la integridad" {
+@test "negativo (fail): cambiar una etiqueta sin actualizar el hash rompe la integridad" {
   sed -i 's/"expected_decision":"BLOCK"/"expected_decision":"PASS"/' "$WORK/pilot-cases.jsonl"
   run bash -c "cd '$WORK' && sha256sum -c --strict SHA256SUMS"
   [ "$status" -ne 0 ]
@@ -98,14 +102,14 @@ PY
   [ -z "$output" ]
 }
 
-@test "negativo: una etiqueta puesta por un modelo se rechaza" {
+@test "negativo (reject): una etiqueta puesta por un modelo se rechaza" {
   sed -i '0,/"type":"test"/s//"type":"model"/' "$WORK/pilot-cases.jsonl"
   run validate "$WORK"
   [ "$status" -eq 1 ]
   [[ "$output" == *"no es externo al modelo"* ]]
 }
 
-@test "negativo: una sonda sin condiciones NO-GO se rechaza" {
+@test "negativo (missing): una sonda sin condiciones NO-GO se rechaza" {
   python3 - "$WORK/prereg.json" <<'PY'
 import json, sys
 p = sys.argv[1]; d = json.load(open(p, encoding="utf-8"))
@@ -117,7 +121,7 @@ PY
   [[ "$output" == *"P12: sin condiciones NO-GO"* ]]
 }
 
-@test "negativo: sin línea base B0 o sin la regla 0/N el preregistro se rechaza" {
+@test "negativo (missing): sin línea base B0 o sin la regla 0/N el preregistro se rechaza" {
   python3 - "$WORK/prereg.json" <<'PY'
 import json, sys
 p = sys.argv[1]; d = json.load(open(p, encoding="utf-8"))
@@ -131,28 +135,28 @@ PY
   [[ "$output" == *"falta la regla 0/N en esta muestra"* ]]
 }
 
-@test "negativo: un contraejemplo que espera bloqueo se rechaza (falso bloqueo preregistrado)" {
+@test "negativo (block): un contraejemplo que espera bloqueo se rechaza (falso bloqueo preregistrado)" {
   sed -i '/"id":"X2"/s/"expected_decision":"PASS"/"expected_decision":"BLOCK"/' "$WORK/pilot-cases.jsonl"
   run validate "$WORK"
   [ "$status" -eq 1 ]
   [[ "$output" == *"X2: un contraejemplo no puede esperar bloqueo"* ]]
 }
 
-@test "límite: con dos casos útiles en vez de tres el piloto se rechaza" {
+@test "boundary: con dos casos útiles en vez de tres el piloto se rechaza" {
   sed -i '/"id":"C3"/d' "$WORK/pilot-cases.jsonl"
   run validate "$WORK"
   [ "$status" -eq 1 ]
   [[ "$output" == *"casos útiles: 2 (se esperan 3)"* ]]
 }
 
-@test "negativo: un test oráculo que no existe en su suite se rechaza" {
+@test "negativo (invalid): un test oráculo que no existe en su suite se rechaza" {
   sed -i 's/block: head cambiado tras la revisión aparca el PR/block: test inventado/' "$WORK/pilot-cases.jsonl"
   run validate "$WORK"
   [ "$status" -eq 1 ]
   [[ "$output" == *"C2: el test oráculo"* ]]
 }
 
-@test "negativo: un preregistro con resultados dentro se rechaza" {
+@test "negativo (reject): un preregistro con resultados dentro se rechaza" {
   python3 - "$WORK/prereg.json" <<'PY'
 import json, sys
 p = sys.argv[1]; d = json.load(open(p, encoding="utf-8"))
@@ -164,9 +168,31 @@ PY
   [[ "$output" == *"no puede llevar resultados"* ]]
 }
 
-@test "negativo: fixtures ilegibles no pasan" {
+@test "negativo (invalid): fixtures ilegibles no pasan" {
   printf '{roto' > "$WORK/pilot-cases.jsonl"
   run validate "$WORK"
   [ "$status" -eq 1 ]
   [[ "$output" == *"ilegible"* ]]
+}
+
+@test "boundary: con cuatro casos útiles en vez de tres el piloto se rechaza" {
+  sed -n '/"id":"C1"/p' "$WORK/pilot-cases.jsonl" | sed 's/"id":"C1"/"id":"C4"/' >> "$WORK/pilot-cases.jsonl"
+  run validate "$WORK"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"casos útiles: 4 (se esperan 3)"* ]]
+}
+
+@test "empty: un fichero de casos vacío no pasa" {
+  : > "$WORK/pilot-cases.jsonl"
+  run validate "$WORK"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"casos útiles: 0 (se esperan 3)"* ]]
+  [[ "$output" == *"contraejemplos: 0 (se esperan 3)"* ]]
+}
+
+@test "nonexistent: un oráculo que apunta a un fichero inexistente se rechaza" {
+  sed -i '/"id":"X1"/s#docs/rules/domain/autonomous-safety.md#docs/rules/domain/no-existe.md#' "$WORK/pilot-cases.jsonl"
+  run validate "$WORK"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"X1: oráculo 'docs/rules/domain/no-existe.md' no existe"* ]]
 }
