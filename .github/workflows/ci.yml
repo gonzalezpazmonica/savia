@@ -409,6 +409,16 @@ jobs:
       - name: Corpus de órdenes legítimas (SE-510)
         run: bats tests/test-se510-guard-allow-corpus.bats
 
+      # Guard de firmantes del grant de merge y su medición (#1628): suites fuera de tests/bats/,
+      # ci-select-bats no las elige; sin este paso una regresión del guard no se vería en CI.
+      # La suite de Codex (TDD cruzado) se versiona tal como la escribió Codex. Sus dos G4 de
+      # hooks (G2, G3) fallan hasta que la operadora aplique el parche de .claude/hooks; el filtro
+      # los deja fuera AQUÍ, no en el fichero. Al aplicar el parche, quitar el --filter.
+      - name: Guard de firmantes y medición de decisiones
+        run: |
+          bats tests/test-operator-grant.bats tests/test-operator-grant-heredoc-data.bats tests/test-guard-decision-log.bats
+          bats --filter '^(G[123] |G4 G1:)' tests/test-guards-falsos-positivos.bats
+
       # SE-487: guardia de clon limpio y arranque neutral; su suite vive fuera de tests/bats/.
       - name: Clon limpio neutral (SE-487)
         run: bats tests/test-se487-clean-clone.bats tests/test-critical-facts-cap.bats

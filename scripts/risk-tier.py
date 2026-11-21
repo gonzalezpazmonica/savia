@@ -44,6 +44,8 @@ GOVERNANCE_EXACT = (
     # SE-511 S2 (revisión de seguridad de #1527, P1-1): el bloque que se carga en cada turno con
     # las reglas de autonomía y honestidad, y el generador que decide qué regiones entran en él.
     "docs/rules/domain/savia-core.md", "scripts/generate-savia-core.py",
+    # #1628 (revisión de seguridad, P1-1): la medición que carga el guard de firmantes.
+    "scripts/lib/guard-decision-log.sh",
 )
 GOVERNANCE_PREFIXES = ("config/merge-sprint", ".opencode/", ".github/workflows/")
 # SE-510 D1: corpus de órdenes que ninguna guarda puede bloquear. Cada entrada es una exención:

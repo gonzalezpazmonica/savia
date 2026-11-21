@@ -426,8 +426,13 @@ spend_scope() {
 # (sin claves ningún grant vale). Evento malformado o incompleto, o cualquier
 # error al evaluarlo (excepción, python ausente): exit 2 (SE-453), nunca 0 ni 1.
 GUARD_PY='
-import fnmatch, glob, json, os, re, shlex, sys
-def block(why):
+import ast, fnmatch, glob, json, os, re, shlex, sys
+# Código de motivo para la medición (G4): una línea en stdout, que guard_main
+# lee; el mensaje para la persona va a stderr. El código no depende del texto.
+def verdict(code):
+    print(code); sys.stdout.flush()
+def block(why, code="evento-no-evaluable"):
+    verdict(code)
     print("BLOQUEADO [operator-grant-guard]: " + why, file=sys.stderr); sys.exit(2)
 ESC = {"a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n", "r": "\r",
        "t": "\t", "v": "\v", "\\": "\\", "\x27": "\x27", "\"": "\"", "?": "?"}
@@ -464,7 +469,7 @@ def seq(body):
         return None
     x, y = (int(a), int(b)) if num else (ord(a), ord(b))
     if abs(y - x) // step + 1 > MAX_ALTS:
-        block("orden con demasiadas expansiones de llaves para evaluarla")
+        block("orden con demasiadas expansiones de llaves para evaluarla", "limite-de-expansion")
     r = range(x, y + 1, step) if x <= y else range(x, y - 1, -step)
     return [str(v) if num else chr(v) for v in r]
 def braces(t):
@@ -481,8 +486,153 @@ def braces(t):
             alts = seq(m.group(1))
             todo.extend(s[:m.start()] + alt + s[m.end():] for alt in (alts if alts is not None else m.group(1).split(",")))
         if len(out) + len(todo) > MAX_ALTS or steps > 20 * MAX_ALTS:
-            block("orden con demasiadas expansiones de llaves para evaluarla")
+            block("orden con demasiadas expansiones de llaves para evaluarla", "limite-de-expansion")
     return out
+# Heredocs cuyo cuerpo es DATO para la expansión de llaves y comodines: bash no
+# expande {a,b} ni * dentro de un heredoc, y con delimitador entre comillas
+# tampoco $(…). Lista cerrada y fail-closed: ante cualquier duda se analiza la
+# orden ENTERA, como antes. Solo se poda si (revisión #1628):
+#  - cada línea con << tiene UN único heredoc y es entre comillas (un <<EOF sin
+#    comillas al lado expandiría $(…) y comodines en su cuerpo);
+#  - el lector es `cat` o `python3 [-]`, por su nombre desnudo (sin ruta, sin
+#    asignaciones delante: ni ./cat ni PATH=. cat);
+#  - el cuerpo de python3 solo importa módulos de una lista cerrada y no usa
+#    indirección (getattr, __import__, eval…), shell ni enumeración de ficheros;
+#  - fuera de los cuerpos no queda NINGUNA otra orden: así nada ejecuta después
+#    lo que el heredoc escribió (`cat > s.py … ; python3 s.py`).
+HD_RE = re.compile(r"(?<!<)<<(?!<)(-?)[ \t]*([\x27\"])([A-Za-z_][\w.-]*)\2(?=[ \t<>]|$)")
+HD_ANY = re.compile(r"(?<!<)<<(?!<)")
+HD_PYTHON = re.compile(r"python3?(\.[0-9]+)?")
+HD_PY_FLAGS = {"-", "-I", "-B", "-u", "-E", "-s", "-S", "-q"}
+HD_PY_MODULES = {"pathlib", "json", "re", "sys", "collections", "datetime", "textwrap", "itertools",
+                 "functools", "typing", "dataclasses", "math", "string", "csv", "hashlib", "difflib",
+                 "pprint", "statistics", "decimal", "enum", "tomllib", "unicodedata"}
+# Órdenes que ejecutan como shell lo que reciben o lo que se escribió antes.
+HD_SHELLS = re.compile(r"(^|[^\w.-])((ba|z|da|k|mk|ya|c|tc)?sh|fish|eval|exec|source|xargs|parallel"
+                       r"|busybox|env|sudo|su|ssh|nohup|timeout|watch|script|make|npm|npx)(?![\w.-])"
+                       r"|(^|[;&|(\s])\.[ \t]")
+# Cuerpo de python3 que lanza un shell, enumera ficheros o llega a ellos por indirección.
+HD_ACTIVE = re.compile(r"os\.|popen|spawn|subprocess|shell\s*=|pty\b|\bsystem\s*\(|\bexec|\beval|compile\s*\("
+                       r"|__|getattr|setattr|importlib|modules|builtins|globals|vars\s*\(|ctypes|runpy"
+                       r"|`|glob|iterdir|walk|listdir|scandir|fnmatch|breakpoint|open\s*\(\s*[0-9]",
+                       re.I)
+def outside_quotes(line, pos):
+    """True si line[pos] está fuera de comillas y de comentarios en esa línea."""
+    sq = dq = esc = False
+    for i, c in enumerate(line[:pos]):
+        if esc:
+            esc = False
+        elif c == "\\" and not sq:
+            esc = True
+        elif c == "\x27" and not dq:
+            sq = not sq
+        elif c == "\"" and not sq:
+            dq = not dq
+        elif c == "#" and not sq and not dq and (i == 0 or line[i - 1] in " \t;&|("):
+            return False
+    return not (sq or dq or esc)
+def py_imports_ok(body):
+    """True si cada import del cuerpo es de HD_PY_MODULES y tiene la forma simple."""
+    for line in body.split("\n"):
+        if not re.search(r"\bimport\b", line):
+            continue
+        st = line.strip()
+        m = re.fullmatch(r"from\s+([A-Za-z_][\w.]*)\s+import\s+[\w\s,()]+", st)
+        if m:
+            mods = [m.group(1)]
+        elif st.startswith("import "):
+            mods = [part.strip().split(" as ")[0].strip() for part in st[7:].split(",")]
+        else:
+            return False
+        for mod in mods:
+            if not re.fullmatch(r"[A-Za-z_][\w.]*", mod) or mod.split(".")[0] not in HD_PY_MODULES:
+                return False
+    return True
+# Módulos que lanzan procesos, enumeran ficheros o abren la indirección: un cuerpo
+# «dato» no los nombra ni como atributo ni como nombre importado (pathlib.os).
+HD_PY_REACH = {"os", "posix", "nt", "sys", "subprocess", "pty", "shutil", "glob", "fnmatch",
+               "multiprocessing", "asyncio", "concurrent", "ctypes", "importlib", "builtins", "runpy",
+               "code", "codeop", "pdb", "platform", "webbrowser", "socket", "pydoc", "signal",
+               "threading", "tempfile", "zipimport", "pkgutil", "inspect", "gc", "types", "marshal",
+               "pickle", "shelve", "operator", "posixpath", "ntpath", "genericpath", "io"}
+# Llamadas de proceso que un cuerpo «dato» no usa, aunque lleguen por alias.
+HD_PY_CALLS = {"popen", "system", "spawn", "fork", "execv", "execl", "pipe", "startfile", "call",
+               "run", "check_call", "check_output", "getoutput", "getstatusoutput"}
+def py_ast_ok(body):
+    """True si el cuerpo compila y no llega a otro módulo ni a una llamada de proceso
+    por nombre importado o atributo (from pathlib import os, pathlib.os, o.popen)."""
+    try:
+        tree = ast.parse(body)
+    except (SyntaxError, ValueError):
+        return False
+    def bad(name):
+        return (not isinstance(name, str) or name.startswith("_") or name in HD_PY_REACH
+                or name in HD_PY_CALLS or name.startswith(("spawn", "exec", "popen")))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                parts = a.name.split(".")
+                if parts[0] not in HD_PY_MODULES or any(x.startswith("_") for x in parts):
+                    return False
+        elif isinstance(node, ast.ImportFrom):
+            parts = (node.module or "").split(".")
+            if node.level or parts[0] not in HD_PY_MODULES or any(x.startswith("_") for x in parts):
+                return False
+            if any(a.name == "*" or bad(a.name) for a in node.names):
+                return False
+        elif isinstance(node, ast.Attribute) and bad(node.attr):
+            return False
+    return True
+def inert_heredocs(cmd):
+    """(orden sin los cuerpos de heredocs que son dato, podado?); la orden intacta si hay duda."""
+    lines, kept, i, ops = cmd.split("\n"), [], 0, 0
+    while i < len(lines):
+        line = lines[i]
+        if "<<" not in line.replace("<<<", ""):
+            kept.append(line)
+            i += 1
+            continue
+        found = list(HD_RE.finditer(line))
+        if len(found) != 1 or len(HD_ANY.findall(line)) != 1:
+            return cmd, False
+        if re.search(r"[|;&()`]|\$\(", line) or not outside_quotes(line, found[0].start()):
+            return cmd, False
+        dash, delim = found[0].group(1), found[0].group(3)
+        end = next((j for j in range(i + 1, len(lines))
+                    if (lines[j].lstrip("\t") if dash else lines[j]) == delim), None)
+        if end is None:
+            return cmd, False
+        try:
+            words = shlex.split(HD_RE.sub(" ", line), comments=False, posix=True)
+        except ValueError:
+            return cmd, False
+        if not words:
+            return cmd, False
+        head, body = words[0], "\n".join(lines[i + 1:end])
+        if head == "cat":
+            pass
+        elif HD_PYTHON.fullmatch(head):
+            if not set(words[1:]) <= HD_PY_FLAGS or HD_ACTIVE.search(body) or not py_imports_ok(body)\
+                    or not py_ast_ok(body):
+                return cmd, False
+        else:
+            return cmd, False  # otro lector, ruta (./cat), asignación delante (PATH=. cat)
+        kept.append(line)
+        ops += 1
+        i = end + 1
+    if not ops:
+        return cmd, False
+    rest = [l for l in kept if l.strip() and not l.lstrip().startswith("#")]
+    if len(rest) != ops:  # alguna orden fuera de los cuerpos: podría ejecutar lo escrito
+        return cmd, False
+    for line in kept:
+        try:  # cada línea restante cierra sus comillas: ninguna envuelve un «heredoc»
+            shlex.split(line, comments=False, posix=True)
+        except ValueError:
+            return cmd, False
+    if HD_SHELLS.search("\n".join(kept)):
+        return cmd, False
+    return "\n".join(kept), True
 def main():
     try:
         ev = json.load(sys.stdin)
@@ -502,7 +652,7 @@ def main():
     named = re.compile(re.escape(marker) + r"(?![A-Za-z0-9_.-])")
     cwd = ev.get("cwd") if isinstance(ev.get("cwd"), str) and os.path.isdir(ev.get("cwd")) else os.getcwd()
     def deny():
-        block(marker + " es la raíz de confianza del grant de merge; solo la operadora la cambia, por PR. Para leerla usa Read.")
+        block(marker + " es la raíz de confianza del grant de merge; solo la operadora la cambia, por PR. Para leerla usa Read.", "firmantes-destino")
     def is_signers(p, base=cwd):
         rp = os.path.realpath(os.path.join(base, os.path.expanduser(p)))
         # También la copia de otro worktree o checkout: <raíz>/config/operator-grant-signers.
@@ -511,6 +661,7 @@ def main():
         paths = [ti.get(f) for f in ("file_path", "notebook_path") if ti.get(f) is not None]
         if not paths or not all(isinstance(p, str) and p for p in paths):
             block("evento " + tool + " sin ruta evaluable")
+        reason = "fichero-ajeno"
         if any(is_signers(p) for p in paths):
             deny()
     elif tool == "Bash":
@@ -521,10 +672,14 @@ def main():
         for form in (cmd, unescape(cmd)):
             if named.search(re.sub(r"[\"\x27\\\\]", "", form)):
                 deny()
+        # El nombre exacto se busca arriba en la orden ENTERA; llaves y comodines,
+        # sin los cuerpos de heredoc que son dato (python3 - <<PY con {a,b} o config/*).
+        scan, pruned = inert_heredocs(cmd)
+        reason = "bash-heredoc-dato" if pruned else "bash-sin-firmantes"
         try:
-            toks = shlex.split(cmd, comments=False, posix=True)
+            toks = shlex.split(scan, comments=False, posix=True)
         except ValueError:
-            toks = cmd.split()
+            toks = scan.split()
         pieces = [p for tok in toks for p in re.split(r"[<>|;&=()`]", tok) if p]
         expanded = [(p, [c for c in braces(p) if c]) for p in pieces]
         def resolve(cand, base):
@@ -547,7 +702,7 @@ def main():
                             if os.path.isdir(x) and x not in dirs:
                                 dirs.append(x)
                                 if len(dirs) > MAX_DIRS:
-                                    block("orden con demasiados directorios para evaluarla")
+                                    block("orden con demasiados directorios para evaluarla", "limite-de-expansion")
                 want = False
             if piece in ("cd", "pushd", "-C", "--directory", "--work-tree"):
                 want = True
@@ -561,26 +716,52 @@ def main():
                     if ("signer" in cand or "operator-grant" in cand) and any(
                             fnmatch.fnmatchcase(x, cand) for x in (marker, tail, signers)):
                         deny()
+    else:
+        reason = "herramienta-sin-ruta"
+    verdict(reason)
     sys.exit(0)
 try:
     main()
 except SystemExit:
     raise
 except BaseException as e:
-    block("error al evaluar el evento (%s); sin evaluar no se deja pasar" % type(e).__name__)
+    block("error al evaluar el evento (%s); sin evaluar no se deja pasar" % type(e).__name__, "error-interno")
 '
 
+# Medición aislada (revisión de seguridad #1628, P1-1): la librería se carga en un
+# subshell DESPUÉS de decidir, así que ni un `exit` al cargarla ni su función pueden
+# cambiar el código de salida del guard. La librería es además de gobernanza
+# (scripts/risk-tier.py, GOVERNANCE_EXACT): cambiarla exige a la operadora.
+_grant_measure() {
+  ( # shellcheck source=/dev/null
+    source "$REPO_ROOT/scripts/lib/guard-decision-log.sh" && guard_decision_log operator-grant "$1" "$2"
+  ) </dev/null >/dev/null 2>&1 || true
+}
+
 guard_main() {
-  local input="" rc=0
+  local input="" rc=0 reason=""
+  # Medición (G4): una línea por decisión en output/guard-decisions/operator-grant.jsonl,
+  # con un código de motivo, nunca la orden. Sin la librería, no se mide (la decisión no cambia).
   if [[ ! -t 0 ]]; then input=$(timeout 3 cat 2>/dev/null) || true; fi
-  [[ -z "$input" ]] && { echo "BLOQUEADO [operator-grant-guard]: sin entrada del hook" >&2; return 2; }
-  printf '%s' "$input" | GUARD_SIGNERS_FILE="$SIGNERS_FILE" python3 -I -c "$GUARD_PY" || rc=$?
+  if [[ -z "$input" ]]; then
+    echo "BLOQUEADO [operator-grant-guard]: sin entrada del hook" >&2
+    _grant_measure block sin-entrada
+    return 2
+  fi
+  # stdout del guard Python: una línea con el código de motivo; stderr pasa tal cual.
+  reason=$(printf '%s' "$input" | GUARD_SIGNERS_FILE="$SIGNERS_FILE" python3 -I -c "$GUARD_PY") || rc=$?
+  reason="${reason%%$'\n'*}"
   # Claude Code solo bloquea con 2: cualquier otro fallo (python ausente = 127,
   # señal, excepción no prevista) sería fallo abierto.
   if (( rc != 0 )); then
-    (( rc == 2 )) || echo "BLOQUEADO [operator-grant-guard]: el guard falló (exit $rc); sin evaluar no se deja pasar" >&2
+    if (( rc != 2 )); then
+      echo "BLOQUEADO [operator-grant-guard]: el guard falló (exit $rc); sin evaluar no se deja pasar" >&2
+      reason="fallo-cerrado"
+    fi
+    _grant_measure block "${reason:-fallo-cerrado}"
     return 2
   fi
+  _grant_measure allow "${reason:-sin-motivo}"
   return 0
 }
 [[ "${1:-}" == "guard" ]] && { guard_main; exit $?; }
