@@ -64,7 +64,7 @@ infraestructura. Medido sobre `main` (7b434f9ae):
 
 | AC | Verificación |
 |---|---|
-| AC1 | `pytest tests/python/test_compare_stats.py`: `rate_ci(30, 50)` coincide con Wilson de referencia a 3 decimales; `paired_diff` con listas de ids distintos lanza error; una diferencia pareada con varianza nula da IC de ancho 0; un caso con correlación por tarea da IC pareado más estrecho que el no pareado (prueba de que el emparejamiento se usa). |
+| AC1 | `pytest tests/python/test_compare_stats.py`: `rate_ci(30, 50)` coincide con Wilson de referencia a 3 decimales; `paired_diff` con listas de ids distintos lanza error; con una diferencia pareada de varianza nula (empate en todas las tareas), `paired_diff` no da IC de ancho 0 como resultado inferencial: añade `worst_loss_95 = 1 − 0,05^(1/n_tareas)` contando **tareas distintas**, no respuestas (4 tareas × 3 repeticiones → 0,527, no 0,221), y un test negativo comprueba que el informe no declara no inferioridad cuando esa cota supera el margen; un caso con correlación por tarea da IC pareado más estrecho que el no pareado (prueba de que el emparejamiento se usa). |
 | AC2 | `censoring`: con 4 terminadas y 2 `timeout` en un brazo, `worst_case` cuenta 2 fallos más; la sensibilidad excluyendo cortes se reporta aparte; ninguna política descarta cortes sin dejarlos en `censored`. |
 | AC3 | Validador de informe: rechaza JSON sin `ci95`, sin `design` o sin `censored`; acepta uno completo. |
 | AC4 | Texto de conclusión: con IC que incluye 0 el generador emite «sin diferencia demostrada» y un test negativo comprueba que no emite «mejor». |
@@ -136,3 +136,13 @@ S1 S, S2 S, S3 S.
 
 - **Cliente previsto: S09.** Si S09 compara configuraciones de supervisión (misma tarea con más o menos revisión humana o verificación automática), usa `paired_diff`, `clustered_se` y `censoring` de esta librería, sin duplicarlas. Un brazo que no completa algo con los permisos vigentes cuenta como fallo en el denominador, no se descarta.
 - **Sin datos sintéticos como veredicto.** Con menos casos de los que el IC admite, el informe dice `MORE_EVIDENCE`; no declara ganador.
+
+## Enmienda propuesta 2026-11-21 (empate total no es certeza)
+
+> Origen: tesis externa TC-03 y dictamen en Savia Labs (`labs/research/20261121-tesis-tc03-dictamen.md`). No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Problema comprobado.** El bootstrap por remuestreo de diferencias todas iguales a cero devuelve (0; 0) por construcción: no puede generar un fallo que no apareció. SE-511 D4b (Haiku, 10 casos trampa) y SE-527 S1 (Haiku `tabular`, 4 casos `trap`) dieron GO con ese intervalo. Con 0 pérdidas en n tareas independientes, la cota superior unilateral al 95 % de la tasa de pérdida es `1 − 0,05^(1/n)`: 25,9 % con 10 tareas y 52,7 % con 4. El AC1 original («varianza nula da IC de ancho 0») convertía esa propiedad descriptiva en criterio de aceptación; queda sustituido arriba.
+- **Unidad efectiva.** `n` es el número de tareas distintas. Las repeticiones de la misma tarea entran en `clustered_se`, nunca como unidades nuevas.
+- **Dos salidas, sin sistema de estados nuevo.** El informe separa `rule_verdict` (se cumplió la regla prerregistrada: GO/REVERT) de `evidence` (`sufficient` o `more_evidence`, según la cota frente al margen). La decisión de adoptar o revertir sigue siendo de la operadora y puede ser sensata con `more_evidence` si el cambio es reversible.
+- **Corpus reutilizado.** Si la variante B se diseñó mirando fallos del mismo corpus (caso D4 → D4b), el informe lo declara y `evidence` no puede ser `sufficient` sin un conjunto de tareas reservado.
+- **Lo que no se hace.** No se reescriben los veredictos de D4b ni de SE-527 S1: eran GO de regla y siguen siéndolo. No se cambia ningún script de evaluación en esta enmienda.
