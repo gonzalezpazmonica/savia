@@ -1,0 +1,52 @@
+{
+  "scenario": "edge",
+  "agent": "meeting-digest",
+  "cases": [
+    {
+      "id": "edge-confidential-section-boundaries",
+      "input": "tramo confidencial sin senal de cierre claro",
+      "expected": "la seccion confidencial se extiende hasta el cambio de tema; se cierra con 'ya puedes apuntar' o cambio explicito a asuntos laborales",
+      "checks": [
+        {"id": "end-explicit-phrase", "target": "agent", "must_match": "\"ya puedes apuntar\""},
+        {"id": "end-topic-change", "target": "agent", "must_match": "Cambio explicito de tema a asuntos laborales"},
+        {"id": "end-no-signal-extends", "target": "agent", "must_match": "Sin senal clara → se extiende hasta cambio de tema"}
+      ]
+    },
+    {
+      "id": "edge-sensitive-without-request",
+      "input": "el entrevistado menciona su salud o busca empleo sin pedir secreto",
+      "expected": "se trata como sensible por defecto",
+      "checks": [
+        {"id": "sensitive-defaults", "target": "agent", "must_match": "Salud, situaciones legales, quejas de salario, busqueda de empleo"},
+        {"id": "sensitive-defaults-2", "target": "agent", "must_match": "orientacion sexual, religion, ideologia"}
+      ]
+    },
+    {
+      "id": "edge-asr-resolution-thresholds",
+      "input": "nombre deformado por el transcriptor automatico",
+      "expected": "umbrales de resolucion: >=80 auto, 50-79 marcado, <50 gap abierto",
+      "checks": [
+        {"id": "asr-thresholds", "target": "agent", "must_match": "≥80% auto, 50-79% marcado, <50% gap abierto"},
+        {"id": "asr-before-extraction", "target": "agent", "must_match": "ANTES de extraer, corregir errores del transcriptor ASR"}
+      ]
+    },
+    {
+      "id": "edge-ambiguous-and-inferred",
+      "input": "dato dudoso o no confirmado explicitamente",
+      "expected": "se marca, no se afirma",
+      "checks": [
+        {"id": "ambiguous-marker", "target": "agent", "must_match": "\\[DATO AMBIGUO — confirmar con PM\\]"},
+        {"id": "inferred-marker", "target": "agent", "must_match": "Marcar con `# inferido` campos no confirmados explicitamente"}
+      ]
+    },
+    {
+      "id": "edge-file-size-limit",
+      "input": "actualizacion de documentos de contexto de la Fase 4",
+      "expected": "respeta el limite de 150 lineas por fichero",
+      "checks": [
+        {"id": "150-lines", "target": "agent", "must_match": "Respetar limite 150 lineas por fichero"},
+        {"id": "only-non-confidential", "target": "agent", "must_match": "Solo datos no confidenciales"}
+      ]
+    }
+  ]
+}

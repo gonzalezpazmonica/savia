@@ -34,6 +34,38 @@ bash scripts/run-agent-evals.sh
 bash scripts/run-agent-evals.sh --agent sdd-spec-writer
 ```
 
+## Evals L4 de agentes (SE-387 D)
+
+Los agentes L4 llevan además `golden.json`, `edge.json`, `adversarial.json` y
+`bypass.json` en `tests/evals/<agente>/`, un descriptor en
+`contracts/capabilities/` y un `tests/bats/<agente>-l4.bats`. Los de
+`context-dome-manager`, `meeting-digest`, `recommendation-tribunal-orchestrator`
+y `truth-tribunal-orchestrator` usan este formato:
+
+- `cases[].checks[]`: aserción estática (`target` = `agent` o ruta del repo;
+  `must_match` / `must_not_match` = regex `grep -E`). Comprueba que la garantía
+  declarada (veto, lista de delegados, restricción, umbral) sigue escrita.
+- `cases[].aggregate`: ejecución real del agregador determinista
+  (`recommendation-tribunal-orchestrator`) con veredictos sintéticos y
+  `expect` (`exit`, `verdict`, `consensus_score`, `veto_judges`).
+- `cases[].weights`: comprobación ejecutada de que cada perfil de pesos del
+  Truth Tribunal suma 1.00 (`truth-tribunal-orchestrator`).
+
+Cada `.bats` incluye mutantes: copias del agente (o del script) sin la
+garantía, y exige que la eval falle. Una eval que no puede fallar no vale.
+
+```bash
+bats tests/bats/context-dome-manager-l4.bats tests/bats/meeting-digest-l4.bats \
+     tests/bats/recommendation-tribunal-orchestrator-l4.bats \
+     tests/bats/truth-tribunal-orchestrator-l4.bats
+```
+
+Estas evals NO ejecutan el agente con un modelo (igual que las demás L4: no
+corren contra la API en CI). Para evaluar el comportamiento con modelo, usar
+los campos `input` / `expected` de cada case como prompt y rúbrica con
+`bash scripts/eval-agent.sh <agente>` en local; los `checks` sirven de
+criterios comprobables de la respuesta.
+
 ## Threshold
 
 Exit 0 si score estructural ≥ 80% de los eval cases son válidos.

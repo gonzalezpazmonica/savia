@@ -95,8 +95,11 @@ conf = re.search(r"^### Confirmación\n(.*?)(?=^#)", spec, re.S | re.M)
 if not conf or "respuesta: «Confirmo las escenas»" not in conf.group(1) \
         or "fecha: 2026-11-10" not in conf.group(1):
     errs.append("confirmación de escenas ausente o distinta")
+# APPROVED solo es válido con la aprobación expresa de la operadora registrada (la hizo el 2026-11-11);
+# una spec que un agente marca APPROVED sin ese rastro no pasa.
 if re.search(r"^status: APPROVED", spec, re.M):
-    errs.append("la spec no puede estar APPROVED en S0")
+    if not re.search(r'value: "APPROVED"\n\s+source: "operadora', spec) or not re.search(r"^## Aprobación", spec, re.M):
+        errs.append("la spec figura APPROVED sin aprobación expresa de la operadora registrada")
 for e in errs:
     print("FAIL:", e)
 print(f"errores={len(errs)}")
@@ -170,11 +173,17 @@ run_check() { run python3 "$CHECK" "$BATS_TEST_TMPDIR/spec.md" "$BATS_TEST_TMPDI
   [[ "$output" == *"confirmación de escenas"* ]]
 }
 
-@test "fail: la spec no puede figurar APPROVED en S0" {
-  sed -i 's/^status: PROPOSED/status: APPROVED/' "$BATS_TEST_TMPDIR/spec.md"
+@test "fail: APPROVED sin aprobación de la operadora registrada no pasa" {
+  sed -i 's/^\(    source: "\)operadora,/\1agente,/' "$BATS_TEST_TMPDIR/spec.md"
   run_check
   [ "$status" -eq 1 ]
-  [[ "$output" == *"APPROVED"* ]]
+  [[ "$output" == *"APPROVED sin aprobación"* ]]
+}
+
+@test "positivo: APPROVED con la aprobación de la operadora registrada pasa" {
+  run_check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"errores=0"* ]]
 }
 
 @test "error fail-closed: prototipo nonexistent da error, no PASS" {

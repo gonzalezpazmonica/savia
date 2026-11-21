@@ -424,6 +424,12 @@ jobs:
       - name: Approval receipts by PR merge (SE-488 S1)
         run: python3 -m unittest tests/python/test_approval_receipt.py
 
+      # SE-512 S1: grant de política (plan, petición y verificación del recibo de SE-488). Sin run ni fusiones.
+      - name: Night policy grant (SE-512 S1)
+        run: |
+          python3 -m unittest tests/python/test_merge_sprint_policy.py
+          bats tests/test-merge-sprint-policy.bats
+
       # SE-453 S2: los guards blocking dan el mismo código en bash (con y sin jq) y en su puerto de OpenCode.
       # SAVIA_REQUIRE_TS=1 exige runtime TS (node/bun) y jq: si falta cualquiera, el paso falla en vez de saltar.
       - name: Gate guards parity (SE-453 S2)

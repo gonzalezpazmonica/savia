@@ -29,7 +29,7 @@
 // Reference: SPEC-OC-01 (Savia Shield adaptation)
 // Reference: docs/rules/domain/provider-agnostic-env.md
 
-import { toV1After, toV1Before } from "./lib/v2-compat.ts";
+import { stripSaviaKeys, toV1After, toV1Before } from "./lib/v2-compat.ts";
 
 import { validateBashGlobal } from "./guards/validate-bash-global.ts";
 import { autoRedactSecrets } from "./guards/auto-redact-credentials.ts";
@@ -162,14 +162,7 @@ async function setupV2(ctx: any): Promise<void> {
 
   // Saneamiento: V2 copia claves desconocidas de un agente a request.body
   // (p. ej. `model_tier`). Se eliminan antes de enviar la petición.
-  await register("session", "model.request", (event: any) => {
-    const body = event?.body;
-    if (body && typeof body === "object") {
-      for (const key of Object.keys(body)) {
-        if (key === "model_tier" || key.startsWith("x_savia_")) delete body[key];
-      }
-    }
-  });
+  await register("session", "model.request", (event: any) => stripSaviaKeys(event?.body));
 }
 
 // ── V1 adapter (OpenCode 1.18.29+) ─────────────────────────────────────────

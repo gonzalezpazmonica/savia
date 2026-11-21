@@ -1,0 +1,43 @@
+{
+  "scenario": "golden",
+  "agent": "meeting-digest",
+  "cases": [
+    {
+      "id": "golden-delegation-chain",
+      "input": "transcripcion one2one con un tramo confidencial y decisiones de proyecto",
+      "expected": "extrae en Fase 1, delega confidencialidad (Fase 2) y riesgos (Fase 3) en los dos agentes permitidos, y actualiza contexto (Fase 4)",
+      "checks": [
+        {"id": "phase-0-transcription", "target": "agent", "must_match": "### Fase 0 — Transcription Resolution"},
+        {"id": "phase-1-extraction", "target": "agent", "must_match": "### Fase 1 — Extraccion"},
+        {"id": "phase-2-confidentiality-judge", "target": "agent", "must_match": "### Fase 2 — Juicio de confidencialidad"},
+        {"id": "phase-3-risk", "target": "agent", "must_match": "### Fase 3 — Analisis de riesgos"},
+        {"id": "phase-4-context-update", "target": "agent", "must_match": "### Fase 4 — Actualizacion de contexto del proyecto"},
+        {"id": "phase-4-mandatory", "target": "agent", "must_match": "OBLIGATORIA tras cada digestion"},
+        {"id": "delegates-judge", "target": "agent", "must_match": "Invocar `meeting-confidentiality-judge` via Task"},
+        {"id": "delegates-risk", "target": "agent", "must_match": "Invocar `meeting-risk-analyst` via Task"},
+        {"id": "judge-agent-exists", "target": ".claude/agents/meeting-confidentiality-judge.md", "must_match": "^name: meeting-confidentiality-judge$"},
+        {"id": "risk-agent-exists", "target": ".claude/agents/meeting-risk-analyst.md", "must_match": "^name: meeting-risk-analyst$"}
+      ]
+    },
+    {
+      "id": "golden-output-format",
+      "input": "digest terminado",
+      "expected": "la salida lleva los cuatro bloques en orden fijo",
+      "checks": [
+        {"id": "block-perfil", "target": "agent", "must_match": "^=== PERFIL ===$"},
+        {"id": "block-negocio", "target": "agent", "must_match": "^=== NEGOCIO ===$"},
+        {"id": "block-notas-pm", "target": "agent", "must_match": "^=== NOTAS PM ===$"},
+        {"id": "block-riesgos", "target": "agent", "must_match": "^=== RIESGOS ===$"}
+      ]
+    },
+    {
+      "id": "golden-real-consumer",
+      "input": "el comando /meeting-digest",
+      "expected": "existe un consumidor real que invoca al agente (justifica el nivel L4)",
+      "checks": [
+        {"id": "command-exists", "target": ".claude/commands/meeting-digest.md", "must_match": "^name: meeting-digest$"},
+        {"id": "weights-profile-digest", "target": "docs/rules/domain/truth-tribunal-weights.md", "must_match": "^### digest \\(.*meeting-digest"}
+      ]
+    }
+  ]
+}

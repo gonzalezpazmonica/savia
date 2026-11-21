@@ -16,7 +16,8 @@ unpinned() {
     done
 }
 
-setup() { TMP="$(mktemp -d "$ROOT/.tmp-pinned.XXXXXX")"; }
+# Fixtures fuera del árbol: dentro del repo las verían las suites que lo recorren en paralelo (nocturna).
+setup() { TMP="$(mktemp -d "$BATS_TEST_TMPDIR/pinned.XXXXXX")"; }
 teardown() { [[ -n "${TMP:-}" && -d "$TMP" ]] && python3 -c 'import shutil,sys;shutil.rmtree(sys.argv[1])' "$TMP"; }
 
 @test "AC1: el arbol real no contiene uses: externos sin SHA" {

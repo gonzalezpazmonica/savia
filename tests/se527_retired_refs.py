@@ -30,15 +30,20 @@ LITERAL_ROOTS = ("scripts/", "config/")
 def patterns(name):
     n = re.escape(name)
     a, b = r"(?<![A-Za-z0-9_-])", r"(?![A-Za-z0-9_-])"
-    return [
+    # Patrones que se aplican sobre el texto entero: `\s` cruza saltos de línea, así que
+    # cubren la clave en una línea y el nombre en la siguiente (YAML, flujo, JSON).
+    multi = [
         re.compile(r"subagent_type[\"']?\s*[:=]\s*[\"']?" + n + b),
         re.compile(a + r"agent[\"']?\s*:\s*[\"']?" + n + b),
         re.compile(r"(?:Task|Agent)\(\s*[\"']?" + n + b),
+    ]
+    line_pats = [
         re.compile(r"^\s*-\s+[\"']?" + n + r"[\"']?\s*$"),
         re.compile(r"\|\s*`?" + n + r"`?\s*\|"),
         re.compile(r"[\"'`]" + n + r"[\"'`]"),
         re.compile(r"agents/" + n + r"\.md"),
-    ], re.compile(a + n + b)
+    ]
+    return multi, line_pats, re.compile(a + n + b)
 
 
 def history(rel):
@@ -81,10 +86,17 @@ def scan(root, names):
             hits.append("%s:0: no legible (%s)" % (rel, e.__class__.__name__))
             continue
         literal_file = rel.startswith(LITERAL_ROOTS)
-        for i, line in enumerate(lines, 1):
-            for name, (ctx, lit) in pats.items():
+        seen = set()
+        text = "".join(lines)
+        for name, (multi, ctx, lit) in pats.items():
+            for p in multi:
+                for m in p.finditer(text):
+                    seen.add((text.count("\n", 0, m.start()) + 1, name))
+            for i, line in enumerate(lines, 1):
                 if (literal_file and lit.search(line)) or any(p.search(line) for p in ctx):
-                    hits.append("%s:%d: '%s'" % (rel, i, name))
+                    seen.add((i, name))
+        for i, name in sorted(seen):
+            hits.append("%s:%d: '%s'" % (rel, i, name))
     return hits
 
 

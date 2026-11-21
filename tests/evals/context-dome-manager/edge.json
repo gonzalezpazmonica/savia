@@ -1,0 +1,48 @@
+{
+  "scenario": "edge",
+  "agent": "context-dome-manager",
+  "cases": [
+    {
+      "id": "edge-structure-boundary",
+      "input": "cupula con exactamente 50 notas",
+      "expected": "el limite esta declarado con sus dos lados (<50 plana, >50 jerarquica); el caso 50 exacto lo debe resolver quien invoque, no se inventa",
+      "checks": [
+        {"id": "both-sides-of-threshold", "target": "agent", "must_match": "<50 notas → plana; >50"}
+      ]
+    },
+    {
+      "id": "edge-publication-gate-by-level",
+      "input": "publicar conocimiento N3 como N2, y N4 como N3",
+      "expected": "N3->N2->N1 exige audit + 2 revisores + 30 dias; N4->N3 anade revision legal",
+      "checks": [
+        {"id": "publish-gate", "target": "agent", "must_match": "Audit pass \\+ 2 revisores \\+ 30 dias maduracion"},
+        {"id": "publish-n4-legal", "target": "agent", "must_match": "N4→N3: \\+ legal review"}
+      ]
+    },
+    {
+      "id": "edge-archive-gate",
+      "input": "nota sin accesos en 90 dias pero con referencias entrantes",
+      "expected": "no se archiva: exige 90 dias sin acceso Y sin referencias entrantes Y backup previo",
+      "checks": [
+        {"id": "archive-gate", "target": "agent", "must_match": "90 dias sin acceso \\+ sin referencias entrantes \\+ backup previo"}
+      ]
+    },
+    {
+      "id": "edge-federation-hops-and-weights",
+      "input": "cupula federada que a su vez federa otra",
+      "expected": "un solo salto, sin bucles; pesos acotados 0.1-2.0",
+      "checks": [
+        {"id": "one-hop", "target": "agent", "must_match": "NO federar en bucle \\(1 hop max\\)"},
+        {"id": "weights-range", "target": "agent", "must_match": "pesos \\(0\\.1-2\\.0\\)"}
+      ]
+    },
+    {
+      "id": "edge-refactor-thresholds",
+      "input": "nota de 2500 lineas y nota de 30 lineas",
+      "expected": "la primera es candidata a dividir (>2000), la segunda a consolidar (<50)",
+      "checks": [
+        {"id": "refactor-thresholds", "target": "agent", "must_match": "refactorizar monolitos \\(>2000 lineas\\), consolidar atomicas \\(<50 lineas\\)"}
+      ]
+    }
+  ]
+}
