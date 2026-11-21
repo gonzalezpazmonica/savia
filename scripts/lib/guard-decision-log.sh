@@ -13,15 +13,18 @@
 # la función devuelve 0 siempre.
 
 guard_decision_log() {
-  local guard="${1:-}" verdict="${2:-}" reason="${3:-sin-motivo}" dir file ts
+  local guard="${1:-}" verdict="${2:-}" reason="${3:-sin-motivo}" root dir file ts
   case "$verdict" in allow|block) ;; *) return 0 ;; esac
   guard="${guard,,}"; guard="${guard//[^a-z0-9-]/-}"
   [[ -n "$guard" ]] || return 0
   reason="${reason,,}"; reason="${reason//[^a-z0-9-]/-}"; reason="${reason:0:64}"
   [[ -n "$reason" ]] || reason="sin-motivo"
   # Sin variable propia para el directorio (revisión #1628): no se redirige fuera de output/.
-  dir="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)}/output/guard-decisions"
+  root="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)}"
+  dir="$root/output/guard-decisions"
   file="$dir/$guard.jsonl"
+  # output/ tampoco puede ser enlace, y se mira ANTES de crear nada dentro (revisión #1628).
+  [[ -n "$root" && ! -L "$root/output" ]] || return 0
   mkdir -p "$dir" 2>/dev/null || return 0
   # Ni el directorio ni el fichero pueden ser enlaces: no se añade a otro fichero (revisión #1628).
   [[ -L "$dir" || -L "$file" ]] && return 0
