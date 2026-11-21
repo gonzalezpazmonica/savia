@@ -28,7 +28,7 @@ Los flujos 1-3 son procedimientos que sigue el modelo; no hay script que los imp
 
 | Script | Qué hace de verdad | Exit |
 |---|---|---|
-| `scripts/enterprise/governance-audit-trail.sh` | `append` / `verify [--anchor H]` / `export md\|json` / `chain-status` sobre `${CLAUDE_ENTERPRISE_AUDIT_BASE:-.claude/enterprise/audit}/{tenant}/audit-trail.jsonl` | 0 íntegro · 1 manipulado, vacío o fallo · 2 argumentos |
+| `scripts/enterprise/governance-audit-trail.sh` | `append` / `verify [--anchor H]` / `export md\|json` / `chain-status` sobre `$CLAUDE_ENTERPRISE_AUDIT_BASE/{tenant}/audit-trail.jsonl` (la base por defecto la fija el propio script) | 0 íntegro · 1 manipulado, vacío o fallo · 2 argumentos |
 | `scripts/enterprise/compliance-check.sh` | Revisión documental por marco (`eu-ai-act`, `gdpr`, `nis2`, `dora`, `all`); JSON con `score = aprobados*100/total` | 0 solo si todo marco da 100 · 1 brechas · 2 argumentos o salida no escribible |
 
 Garantías del audit trail:

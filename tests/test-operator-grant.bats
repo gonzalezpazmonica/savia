@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# nightly: serial (el test de caducidad firma un grant de 2 s de vida y mide reloj real; con la CPU compartida caduca antes del primer check)
 # BATS tests for scripts/operator-grant.sh (SE-343)
 # Ref: SE-343, SPEC-186, autonomous-safety.md
 

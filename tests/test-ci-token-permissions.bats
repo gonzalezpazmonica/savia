@@ -39,7 +39,8 @@ print(f"evaluados={len(files)}")
 PY
 }
 
-setup() { TMP="$(mktemp -d "$ROOT/.tmp-perm.XXXXXX")"; mkdir -p "$TMP/.github/workflows"; }
+# Fixtures fuera del árbol: dentro del repo las verían las suites que lo recorren en paralelo (nocturna).
+setup() { TMP="$(mktemp -d "$BATS_TEST_TMPDIR/perm.XXXXXX")"; mkdir -p "$TMP/.github/workflows"; }
 teardown() { [[ -n "${TMP:-}" && -d "$TMP" ]] && python3 -c 'import shutil,sys;shutil.rmtree(sys.argv[1])' "$TMP"; }
 
 @test "el arbol real: permissions de nivel superior presentes y sin escritura" {

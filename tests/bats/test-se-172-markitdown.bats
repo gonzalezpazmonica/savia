@@ -8,14 +8,13 @@ SCRIPT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
 DIGEST_EXTRACT="$SCRIPT_DIR/scripts/digest-extract.sh"
 WRAPPER="$SCRIPT_DIR/scripts/markitdown-digest-wrapper.py"
 AGENTS_DIR="$SCRIPT_DIR/.opencode/agents"
-# TMP_DIR must be inside WORKSPACE_ROOT so AC-07 path checks pass
-WS_TMP_BASE="$SCRIPT_DIR/tests/bats/.se172-tmp"
 TMP_DIR=""
 
 setup() {
-  # Create a unique temp dir inside the workspace (required by AC-07)
-  TMP_DIR="$(mktemp -d "$WS_TMP_BASE-XXXXXX")"
-  export WORKSPACE_ROOT="$SCRIPT_DIR"
+  # TMP_DIR must be inside WORKSPACE_ROOT so AC-07 path checks pass. The workspace is the test's own
+  # temp dir, not the repo: files created inside the repo are seen by suites that walk it in parallel.
+  export WORKSPACE_ROOT="$BATS_TEST_TMPDIR"
+  TMP_DIR="$(mktemp -d "$WORKSPACE_ROOT/se172-XXXXXX")"
 }
 
 teardown() {

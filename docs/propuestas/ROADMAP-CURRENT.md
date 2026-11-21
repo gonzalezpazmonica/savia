@@ -24,10 +24,10 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: Savia Viva (SE-515 S3–S4), el sprint nocturno y el modo mediado de Space dependen de este bloque; esfuerzo: cinco specs medianas en serie; cuatro decisiones pendientes.
 
 - **S27 · P0 · fase A** — Revisión de graduación de lo ya entregado
-  Acción: 22 specs figuran APPROVED o DEFERRED con sus artefactos y PRs ya en main. Revisar AC por AC, ejecutar sus tests y registrar completion con revisión humana, o anotar el slice que falta. No se reimplementa nada.
-  Entrada: La evidencia de partida es existencia de artefactos y PRs fusionadas (lectura del 2026-11-09), no verificación de cada AC. La graduación la decide la operadora spec a spec.
-  Salida: Cada una IMPLEMENTED con completion y revisión humana, o con su resto anotado y devuelto a la cola. El número de APPROVED sin implementar baja de 63 según lo verificado.
-  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: saca de la cola hasta 22 specs sin escribir código y deja ver el backlog real; esfuerzo: revisión por lotes de cinco; sin hueco WIP.
+  Acción: Graduación S27 aplicada el 2026-11-21 (decisión de la operadora, pregunta interactiva «12 + 5 con resto»): 12 specs a IMPLEMENTED sin resto y 5 a IMPLEMENTED con resto. Quedan en la cola dos grupos. A) NO graduadas, con lo que falta (evidencia en las PR #1639, #1637, #1633, #1635 y #1638): SE-453 slice S6, anclar la lista de data-sovereignty-gate.sh:97 con test que falle antes y caso negativo; SE-468 AC5 sin cumplir: el detector de vacuidad no cubre el gate Evals CI Gate (dejar constancia en validate-ci-local.sh o reformular AC5); SE-484 smoke manual de /profile-setup en Claude Code y OpenCode con un perfil sin vertical, o aceptar AC-8 con la evidencia estática; SE-387 paraguas con 5 criterios no cumplidos: que BLOCK bloquee en validate-ci-local.sh, cubrir los 4 L4 sin evals, generar coherence-closure-status, cablear F2/F3/F4; SE-433 §2.3 sin implementar y defectos de main_ci, topes absolutos y campos de MERGED (RESTO-433-a a e). B) Graduadas con resto pequeño: SE-403 (a: test de frontera peor; b: test de concurrencia que falle sin flock); SE-455 (a: emergency-status.sh no muere si nvidia-smi falla; b: revisión legal D1); SE-456 (a: reparar las cuatro aserciones de setup()); SE-378 (prioridades contradictorias, ROADMAP-UNIFIED como histórico, regla de no volver de IMPLEMENTED); SE-395 recortada a F0-F3 (AC07-12 y AC16 pasan a SE-489; queda AC16 explain determinista y receipt al store, AC15).
+  Entrada: Evidencia de graduación en las PR #1633, #1635, #1637, #1638 y #1639 (docs/evidence/graduacion-s27/). Cada resto se hace como slice pequeño con test que falle antes y pase después.
+  Salida: Cada NO graduada con su falta cerrada o enmendada, y cada resto hecho o retirado por decisión de la operadora.
+  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: deja la cola con solo los restos reales de lo ya entregado; sin código nuevo de producto salvo los slices pequeños citados; esfuerzo: slices pequeños (S) salvo SE-433 §2.3 y SE-387 (M); sin hueco WIP.
 
 - **S03 · P0 · fase A** — Deuda de calidad con pruebas de comportamiento
   Acción: Remedir deuda certificada y elegir el siguiente grupo por riesgo/uso; conservar umbral >=80 y ratchet; usar #1180 como evidencia de entrega, no como cierre de toda la wave. SE-467 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): no se ejecuta hasta reactivarla.
@@ -145,14 +145,11 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 
 - SE-376 [IMPLEMENTING] Quality Debt Burn-down — evidencia: 2026-09-27: el 133→48 de #1097 era inflado (121 tests de presencia en #1097 y 5 en #1100, score 23; 130 skills marcadas stable sin evidencia). Criterio endurecido: Calibrated exige test certificado >=80. Deuda real 128/137 (incluye 3 skills GRC de #1142); vuelta a wave 0 (baseline 133). Objetivo final 0 o excepciones aprobadas pendiente.
 - SE-392 [APPROVED] Runtime común de Savia para Codex y OpenCode — evidencia: Spec persistida; equivalencia funcional y E2E aún no demostradas.
-- SE-395 [APPROVED] Savia Vaults Adaptive Connectivity — evidencia: PR #1122: aislamiento de grafo por dome. PR #1131: V02 de cache por principal/policy/contenido, provenance y límites mergeada con 349 tests SaviaVaults. Experimento adaptativo permanece pendiente.
 - SE-396 [IMPLEMENTING] Harness operational integrity & verifiable substitution — evidencia: PRs #1112/#1113/#1122/#1129/#1130/#1131/#1132/#1133/#1135 mergeadas. H02/H10/A01b/A01c: autoridad previa al executor, composición aislada y sustitución operacional Codex/OpenCode. Auditoría AC local: docs/evidence/SE-396-closure-review-20260924.md; 127 tests dual-cli, 18 de planificación y gate canónico previo 6/6. Doctor nativo permanece DEGRADED_SAFE; recibo A01c requiere revisión de procedencia. Actualización 2026-09-30: #1183 integrado (5b03a196), canaries de sesión y validación de recibo implementados, sin ejecución real. Informe delta: docs/evidence/SE-396-closure-review-20260928.md.
 - SE-398 [APPROVED] Savia Desktop Runtime & Surface Support — evidencia: docs/specs/SE-398-f0-desktop-runtime-discovery.md
 - SE-399 [APPROVED] Savia Visual Installer & Environment Bootstrap — evidencia: docs/specs/SE-399-f0-installer-discovery.md
 - SE-400 [APPROVED] Model-Agnostic Savia Ablation & Minimal Sufficient Kernel — evidencia: docs/specs/SE-400-f0-model-agnostic-ablation-inventory.md
 - SE-401 [APPROVED] Intent-to-Effect Execution Architecture (I2E) — evidencia: docs/specs/SE-401-intent-to-effect-execution-architecture.spec.md
-- SE-403 [APPROVED] Benchmark evidence: trazas, frontera, hash de selección — evidencia: PR #1171 mergeada 2026-09-28 sin review registrada; graduación pendiente de revisión humana (completion.human_review). Spec: docs/specs/SE-403-benchmark-evidence-frontier.spec.md · integrada #1171; revisar evidencia/graduación
-- SE-404 [APPROVED] Proceso proporcional: G13 v2 y una corrección por revisión — evidencia: PR #1170 mergeada 2026-09-28 sin review registrada; graduación pendiente de revisión humana (completion.human_review). Spec: docs/specs/SE-404-proportional-process-gates.spec.md · integrada #1170; revisar evidencia/graduación
 - SE-409 [APPROVED] Bucle experiencia → skill con curación y retirada — evidencia: docs/specs/SE-409-experience-to-skill-loop.spec.md
 - SE-426 [IMPLEMENTING] Firma de confidencialidad con secreto de CI y HMAC siempre verificado — evidencia: docs/specs/SE-426-confidentiality-hmac-ci-key.spec.md
 - SE-428 [IMPLEMENTING] Savia Space como sustituto de OpenCode, con OpenCode como motor — evidencia: docs/specs/SE-428-savia-space-orchestrator-opencode-engine.spec.md
@@ -165,13 +162,9 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-435 [APPROVED] Savia Space: distribución agnóstica (paquetes nativos y savia-space setup) — evidencia: docs/specs/SE-435-savia-space-distribution.spec.md
 - SE-436 [APPROVED] Savia Space: proyectos y cúpulas desde Space — evidencia: docs/specs/SE-436-savia-space-projects-and-domes.spec.md
 - SE-439 [APPROVED] Savia Space: sesión gráfica agéntica sobre Linux — evidencia: docs/specs/SE-439-savia-space-agentic-session.spec.md
-- SE-442 [APPROVED] Cadena de suministro de la CI: acciones fijadas por SHA, Dependabot, CodeQL, Scorecard y divulgación coordinada — evidencia: docs/specs/SE-442-ci-supply-chain-hardening.spec.md
 - SE-443 [APPROVED] Gobierno de conectores MCP: malware de paquetes, secretos tipados, importación, política por herramienta y doctrina de diseño — evidencia: docs/specs/SE-443-mcp-connector-governance.spec.md
-- SE-444 [APPROVED] Autoridad del verificador en los criterios de aceptación y cobertura no verificada explícita — evidencia: docs/specs/SE-444-verifier-authority-ac-closure.spec.md
-- SE-445 [APPROVED] Salvaguardas de ejecución autónoma: repetición bloqueante, presupuesto de turnos, revisor de acciones y criterio de éxito — evidencia: docs/specs/SE-445-autonomous-execution-safeguards.spec.md
 - SE-446 [APPROVED] Canal de aprobación inalcanzable para el agente: prueba de autoaprobación y mitigación — evidencia: docs/specs/SE-446-approval-channel-agent-unreachable.spec.md
 - SE-448 [APPROVED] Fuga por salida de contenido externo: token canario, lista de destinos de URL e ID estable de hallazgos — evidencia: docs/specs/SE-448-external-content-leak-canary-urls.spec.md
-- SE-451 [APPROVED] Gobernanza de contribuciones: DCO frente a CLA y metadatos de licencia por fichero — evidencia: docs/specs/SE-451-contribution-governance-dco.spec.md
 - SE-453 [APPROVED] Contrato de resultado de los gates: limpio, hallazgos y desconocido — evidencia: docs/specs/SE-453-gate-result-contract.spec.md
 - SE-465 [APPROVED] Dependencias de instalación sin fijar: imágenes, instaladores remotos, npm y pip — evidencia: docs/specs/SE-465-pinned-install-dependencies.spec.md
 - SE-466 [APPROVED] 214 avisos OSV en los lockfiles y una auditoría de CI que no puede fallar — evidencia: docs/specs/SE-466-dependency-vulnerability-triage.spec.md
@@ -179,18 +172,9 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-460 [APPROVED] Reactivación revalidada: automatizaciones y memoria con vigencia, procedencia y autoridad — evidencia: docs/specs/SE-460-revalidated-reactivation-context.spec.md
 - SE-461 [APPROVED] Composición de efectos: combinaciones prohibidas en contratos de Yema y pruebas negativas — evidencia: docs/specs/SE-461-effect-composition-contracts.spec.md
 - SE-462 [APPROVED] Leer no implica poder retransmitir: marca de sesión tras leer una cúpula N2+ — evidencia: docs/specs/SE-462-read-is-not-relay.spec.md
-- SE-455 [APPROVED] Ingeniería inversa para la soberanía tecnológica: REA como herramienta externa opcional con puerta de autorización — evidencia: docs/specs/SE-455-reverse-engineering-sovereignty.spec.md
-- SE-456 [APPROVED] Tests que no pueden fallar: detector de vacuidad y criterio de evidencia de REA en la QA — evidencia: docs/specs/SE-456-test-vacuity-evidence-criteria.spec.md
-- SE-457 [APPROVED] Skill harness-architecture: arquitectura de harness, metaharness, flujos largos, bucles y sprints — evidencia: docs/specs/SE-457-harness-architecture-skill.spec.md
 - SE-468 [APPROVED] El gate de evals debe poder fallar — evidencia: docs/specs/SE-468-honest-evals-gate.spec.md
 - SE-470 [APPROVED] Integridad de los artefactos de evaluación — evidencia: docs/specs/SE-470-eval-artifact-integrity.spec.md
-- SE-471 [APPROVED] Relevo nocturno con evidencia: declarado, validado y aceptado — evidencia: docs/specs/SE-471-overnight-handoff-evidence-digest.spec.md
 - SE-473 [APPROVED] Lecciones contrastables: ámbito, evidencia, revalidación y refutación — evidencia: docs/specs/SE-473-contestable-lessons.spec.md
-- SE-480 [APPROVED] Vaults: RAG autónomo (recarga del registro y sincronización por el servicio) — evidencia: docs/specs/SE-480-vaults-rag-autonomous.spec.md
-- SE-481 [APPROVED] Vaults: clasificación con cierre seguro y polaridad en la búsqueda léxica — evidencia: docs/specs/SE-481-vaults-classification-fail-closed.spec.md
-- SE-485 [APPROVED] Vaults: cinco fallos de la auditoría SVTC-00 — evidencia: docs/specs/SE-485-vaults-audit-fixes.spec.md
-- SE-487 [APPROVED] Clon limpio neutral y arranque en Windows — evidencia: docs/specs/SE-487-clean-clone-neutral-and-windows.spec.md
-- SE-483 [APPROVED] Identidad: Savia, metaorquestadora agéntica de I+D+i — evidencia: docs/specs/SE-483-savia-identity-rd-metaorchestrator.spec.md
 - SE-484 [APPROVED] Onboarding adaptativo: Savia se configura para cualquier persona — evidencia: docs/specs/SE-484-adaptive-onboarding.spec.md
 - SE-488 [IMPLEMENTING] Aprobaciones por fusión de PR (operación solo móvil) — evidencia: docs/specs/SE-488-approvals-by-pr-merge.spec.md
 - SE-489 [APPROVED] Vaults: recuperación adaptativa construida y medida (estructura, grafo, reranker, router y cuantización) — evidencia: docs/specs/SE-489-vaults-adaptive-retrieval-empirical.spec.md

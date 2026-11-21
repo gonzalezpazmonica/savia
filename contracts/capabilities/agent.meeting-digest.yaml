@@ -1,0 +1,25 @@
+id: agent.meeting-digest
+version: 1
+description: "Digiere transcripciones de reuniones; delega confidencialidad y riesgos en dos jueces de solo lectura y nunca escribe datos confidenciales"
+input:
+  type: object
+  properties: {}
+safety:
+  effect: mutation
+  visibility: visible
+  reversibility: reversible
+  destructive: false
+  external_side_effect: false
+  human_gate: policy
+  scope: [workspace]
+execution:
+  handler: "agent meeting-digest"
+laws:
+  - LAW-PRIV-001
+  - LAW-HUMAN-001
+enforcement:
+    - meeting-confidentiality-judge
+negative_tests:
+    - meeting-digest-l4.bats
+receipt:
+  - bloque ACTUALIZACIONES del digest
