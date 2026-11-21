@@ -51,7 +51,10 @@ infraestructura. Medido sobre `main` (7b434f9ae):
      resultado.
 2. **Contrato de informe.** Un informe comparativo (JSON) lleva obligatoriamente `n`, `estimate`, `ci95`,
    `design: paired|unpaired|clustered`, `censored: {timeout, infra_error}` por brazo y `censoring_policy`
-   (`worst_case`, `excluded_with_bound` o `rerun`). Sin `ci95` o sin `censored`, el informe no es válido.
+   (`worst_case`, `excluded_with_bound` o `rerun`). Si el informe afirma no inferioridad, lleva además
+   `non_inferiority_margin` (δ, en la misma unidad que `estimate`; parámetro obligatorio fijado en el preregistro
+   antes de ejecutar, nunca después de ver los datos). Con 0 tareas con pérdida lleva también `worst_loss_95`,
+   `evidence` y `corpus_reused` (ver enmienda 2026-11-21). Sin `ci95` o sin `censored`, el informe no es válido.
 3. **Política de censura por defecto: `worst_case`.** Una ejecución cortada cuenta como fallo del brazo que la cortó,
    y el informe muestra además el resultado excluyéndolas como análisis de sensibilidad. Cambiar la política exige
    declararlo antes de ejecutar.
@@ -64,9 +67,9 @@ infraestructura. Medido sobre `main` (7b434f9ae):
 
 | AC | Verificación |
 |---|---|
-| AC1 | `pytest tests/python/test_compare_stats.py`: `rate_ci(30, 50)` coincide con Wilson de referencia a 3 decimales; `paired_diff` con listas de ids distintos lanza error; con una diferencia pareada de varianza nula (empate en todas las tareas), `paired_diff` no da IC de ancho 0 como resultado inferencial: añade `worst_loss_95 = 1 − 0,05^(1/n_tareas)` contando **tareas distintas**, no respuestas (4 tareas × 3 repeticiones → 0,527, no 0,221), y un test negativo comprueba que el informe no declara no inferioridad cuando esa cota supera el margen; un caso con correlación por tarea da IC pareado más estrecho que el no pareado (prueba de que el emparejamiento se usa). |
+| AC1 | `pytest tests/python/test_compare_stats.py`: `rate_ci(30, 50)` coincide con Wilson de referencia a 3 decimales; `paired_diff` con listas de ids distintos lanza error; con **0 tareas con pérdida** (B no pierde en ninguna tarea; incluye el empate total y los casos en que B gana siempre), `paired_diff` no da IC de ancho 0 como resultado inferencial: añade `worst_loss_95 = 1 − 0,05^(1/n_tareas)` contando **tareas distintas**, no respuestas (4 tareas × 3 repeticiones → 0,527, no 0,221); con k>0 tareas con pérdida la cota es la superior unilateral de Clopper-Pearson al 95 % para k de n, nunca la fórmula de cero pérdidas (test: k=1, n=10 da una cota mayor que 0,259). Tests negativos: (a) con `non_inferiority_margin`=0,10 y n=4 (cota 0,527 > δ) el informe no declara no inferioridad y marca `evidence: more_evidence`; (b) un informe que afirma no inferioridad sin `non_inferiority_margin` es inválido; (c) con n=30 y 0 pérdidas (cota 0,095 ≤ 0,10) sí puede declararla; un caso con correlación por tarea da IC pareado más estrecho que el no pareado (prueba de que el emparejamiento se usa). |
 | AC2 | `censoring`: con 4 terminadas y 2 `timeout` en un brazo, `worst_case` cuenta 2 fallos más; la sensibilidad excluyendo cortes se reporta aparte; ninguna política descarta cortes sin dejarlos en `censored`. |
-| AC3 | Validador de informe: rechaza JSON sin `ci95`, sin `design` o sin `censored`; acepta uno completo. |
+| AC3 | Validador de informe: rechaza JSON sin `ci95`, sin `design` o sin `censored`; rechaza uno con 0 tareas con pérdida sin `worst_loss_95`, `evidence` o `corpus_reused`, y uno que afirma no inferioridad sin `non_inferiority_margin`; acepta uno completo. |
 | AC4 | Texto de conclusión: con IC que incluye 0 el generador emite «sin diferencia demostrada» y un test negativo comprueba que no emite «mejor». |
 | AC5 | `bats tests/test-labs-preregister.bats`. Inventario de llamadores a fecha de la spec: `grep -rn labs-preregister scripts tests docs` solo encuentra el propio script y esta spec, sin invocaciones ni tests previos, así que no hay llamadores existentes que romper (se revalida al implementar). Periodo de aviso: durante 2 semanas desde el merge, la ausencia de `--design` o `--censoring-policy` emite aviso por stderr y sale 0; pasado ese plazo sale con error. Con ambos presentes, el fichero de hipótesis los contiene. Test negativo en cada fase. |
 
@@ -135,14 +138,15 @@ S1 S, S2 S, S3 S.
 > Propuesta externa SE-516 del 2026-11-09, evaluada como solape. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
 
 - **Cliente previsto: S09.** Si S09 compara configuraciones de supervisión (misma tarea con más o menos revisión humana o verificación automática), usa `paired_diff`, `clustered_se` y `censoring` de esta librería, sin duplicarlas. Un brazo que no completa algo con los permisos vigentes cuenta como fallo en el denominador, no se descarta.
-- **Sin datos sintéticos como veredicto.** Con menos casos de los que el IC admite, el informe dice `MORE_EVIDENCE`; no declara ganador.
+- **Sin datos sintéticos como veredicto.** Con menos casos de los que el IC admite, el informe lleva `evidence: more_evidence` (el veredicto `MORE_EVIDENCE` de esta línea es ese mismo valor, no un estado aparte); no declara ganador.
 
 ## Enmienda propuesta 2026-11-21 (empate total no es certeza)
 
-> Origen: tesis externa TC-03 y dictamen en Savia Labs (`labs/research/20261121-tesis-tc03-dictamen.md`). No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+> Origen: tesis externa TC-03 y su dictamen, ambos en Savia Labs (privado; no se enlazan aquí). La spec sigue en `PROPOSED`; esta enmienda queda incorporada al texto de la propuesta cuando la operadora fusione la PR, y la implementación espera a su aprobación.
 
-- **Problema comprobado.** El bootstrap por remuestreo de diferencias todas iguales a cero devuelve (0; 0) por construcción: no puede generar un fallo que no apareció. SE-511 D4b (Haiku, 10 casos trampa) y SE-527 S1 (Haiku `tabular`, 4 casos `trap`) dieron GO con ese intervalo. Con 0 pérdidas en n tareas independientes, la cota superior unilateral al 95 % de la tasa de pérdida es `1 − 0,05^(1/n)`: 25,9 % con 10 tareas y 52,7 % con 4. El AC1 original («varianza nula da IC de ancho 0») convertía esa propiedad descriptiva en criterio de aceptación; queda sustituido arriba.
+- **Problema comprobado.** El bootstrap por remuestreo de diferencias todas iguales a cero devuelve (0; 0) por construcción: no puede generar un fallo que no apareció. SE-511 D4b (Haiku, 10 casos trampa) y SE-527 S1 (Haiku `tabular`, 4 casos `trap`) dieron GO con ese intervalo. El disparador es «0 tareas con pérdida», no la varianza nula (que también aparece con diferencias constantes distintas de cero). Con 0 pérdidas en n tareas independientes, la cota superior unilateral al 95 % de la tasa de pérdida es `1 − 0,05^(1/n)`: 25,9 % con 10 tareas y 52,7 % con 4. El AC1 original («varianza nula da IC de ancho 0») convertía esa propiedad descriptiva en criterio de aceptación; queda sustituido arriba.
 - **Unidad efectiva.** `n` es el número de tareas distintas. Las repeticiones de la misma tarea entran en `clustered_se`, nunca como unidades nuevas.
-- **Dos salidas, sin sistema de estados nuevo.** El informe separa `rule_verdict` (se cumplió la regla prerregistrada: GO/REVERT) de `evidence` (`sufficient` o `more_evidence`, según la cota frente al margen). La decisión de adoptar o revertir sigue siendo de la operadora y puede ser sensata con `more_evidence` si el cambio es reversible.
+- **Supuesto declarado.** La cota supone tareas independientes e intercambiables, es decir, una muestra de una población de tareas. Con tareas `trap` diseñadas a mano esa suposición es fuerte: el informe la declara como límite y la cota es orientativa, no una garantía.
+- **Dos salidas, sin sistema de estados nuevo.** El veredicto del informe sigue siendo el de la regla prerregistrada; se nombra `rule_verdict` (GO/REVERT) solo para distinguirlo del campo `evidence` (`sufficient` o `more_evidence`: `sufficient` solo si `worst_loss_95` ≤ `non_inferiority_margin`). No sustituye ningún campo existente y no añade estados. La decisión de adoptar o revertir sigue siendo de la operadora y puede ser sensata con `more_evidence` si el cambio es reversible.
 - **Corpus reutilizado.** Si la variante B se diseñó mirando fallos del mismo corpus (caso D4 → D4b), el informe lo declara y `evidence` no puede ser `sufficient` sin un conjunto de tareas reservado.
 - **Lo que no se hace.** No se reescriben los veredictos de D4b ni de SE-527 S1: eran GO de regla y siguen siéndolo. No se cambia ningún script de evaluación en esta enmienda.
