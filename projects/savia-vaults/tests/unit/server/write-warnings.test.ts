@@ -1,6 +1,6 @@
 // Avisos al escribir (vault_write): nunca bloquean, respetan nivel de confidencialidad y son fail-open.
 import { describe, expect, it } from 'vitest';
-import { computeWriteWarnings, writeWarningsResult, type NoteSource } from '../../../src/server/write-warnings.js';
+import { computeWriteWarnings, writeWarningsResult, MAX_NOTES, type NoteSource } from '../../../src/server/write-warnings.js';
 
 type N = { content: string; fm?: Record<string, unknown> };
 function source(notes: Record<string, N>, over: Partial<NoteSource> = {}): NoteSource {
@@ -65,6 +65,40 @@ describe('avisos de vault_write', () => {
     const solo = await computeWriteWarnings(source({ 'a.md': { content: '# A' } }), 'a.md', 'N2');
     expect(codes(solo)).not.toContain('NEIGHBOR_NOTE');
   });
+  it('vecina entrante (backlink): va antes que las de la comunidad aunque estas pesen más', async () => {
+    // b enlaza a la escrita y a un grupo denso h0..h5; sin prioridad de backlinks, b quedaría fuera del tope de 5.
+    const hubs = Array.from({ length: 6 }, (_, i) => `h${i}`);
+    const notes: Record<string, N> = { 'a.md': { content: '# A' }, 'b.md': { content: '# Enlazadora\n[[a]] ' + hubs.map(h => `[[${h}]]`).join(' ') } };
+    for (const h of hubs) notes[`${h}.md`] = { content: `# ${h}\n` + hubs.filter(x => x !== h).map(x => `[[${x}]]`).join(' ') };
+    const n = (await computeWriteWarnings(source(notes), 'a.md', 'N2')).filter(x => x.code === 'NEIGHBOR_NOTE').map(x => x.target);
+    expect(n[0]).toBe('b.md');
+    expect(n).toHaveLength(5);
+  });
+  it('vecina de la misma comunidad sin enlace directo con la escrita', async () => {
+    // a-b-c-d forman un grupo denso; e-f otro aparte. d no enlaza con a ni a con d.
+    const s = source({
+      'a.md': { content: '# A\n[[b]] [[c]]' },
+      'b.md': { content: '# B\n[[a]] [[c]] [[d]]' },
+      'c.md': { content: '# C\n[[a]] [[b]] [[d]]' },
+      'd.md': { content: '# D\n[[b]] [[c]]' },
+      'e.md': { content: '# E\n[[f]]' },
+      'f.md': { content: '# F\n[[e]]' },
+    });
+    const n = (await computeWriteWarnings(s, 'a.md', 'N2')).filter(x => x.code === 'NEIGHBOR_NOTE').map(x => x.target);
+    expect(n).toContain('d.md');
+    expect(n).not.toContain('e.md');
+    expect(n).not.toContain('f.md');
+  });
+  it('conflicto en el que la nota escrita es la segunda fuente (sourceB) también avisa', async () => {
+    const s = source({
+      'a.md': { content: '# A\n[[z]]', fm: { entity: { id: 'e1' }, owner: 'Ana' } },
+      'z.md': { content: '# Z\n[[a]]', fm: { entity: { id: 'e1' }, owner: 'Luis' } },
+    });
+    for (const p of ['a.md', 'z.md']) {
+      const c = (await computeWriteWarnings(s, p, 'N2')).find(x => x.code === 'OPEN_CONFLICT');
+      expect(c?.target).toBe(p === 'a.md' ? 'z.md' : 'a.md');
+    }
+  });
   it('cada aviso tiene code y message en español no vacío', async () => {
     const s = source({ 'a.md': { content: '# A\n[[x]]' }, 'b.md': { content: '# A' } });
     for (const w of await computeWriteWarnings(s, 'a.md', 'N2')) {
@@ -118,6 +152,40 @@ describe('avisos de vault_write', () => {
       const t0 = Date.now();
       expect(await writeWarningsResult(s, 'a.md', 'N2', { timeoutMs: 50 })).toEqual({ warnings_unavailable: true });
       expect(Date.now() - t0).toBeLessThan(1000);
+    });
+    const many = (n: number): Record<string, N> => {
+      const o: Record<string, N> = {};
+      for (let i = 0; i < n; i++) o[`n${String(i).padStart(4, '0')}.md`] = { content: `# Nota ${i}` };
+      return o;
+    };
+    it(`más de MAX_NOTES (${MAX_NOTES}) notas: warnings_unavailable, nunca un [] engañoso`, async () => {
+      const notes = many(MAX_NOTES + 1);
+      notes['zzz.md'] = { content: '# Z\n[[no-existe]]' }; // queda la última en orden
+      expect(await writeWarningsResult(source(notes), 'zzz.md', 'N2')).toEqual({ warnings_unavailable: true });
+      expect(await writeWarningsResult(source(notes), 'n0000.md', 'N2')).toEqual({ warnings_unavailable: true });
+    });
+    it(`justo MAX_NOTES notas: sí calcula (límite)`, async () => {
+      const notes = many(MAX_NOTES - 1);
+      notes['zzz.md'] = { content: '# Z\n[[no-existe]]' };
+      const r = await writeWarningsResult(source(notes), 'zzz.md', 'N2');
+      expect(r).toHaveProperty('warnings');
+      expect(codes((r as { warnings: Array<{ code: string }> }).warnings)).toContain('BROKEN_WIKILINK');
+    });
+    it('la nota escrita no aparece entre las legibles: warnings_unavailable', async () => {
+      const s = source({ 'b.md': { content: '# B' } });
+      expect(await writeWarningsResult(s, 'a.md', 'N2')).toEqual({ warnings_unavailable: true });
+    });
+    it('lecturas síncronas lentas (como el almacén real): el plazo corta el cálculo y deja de leer', async () => {
+      const notes = many(200);
+      let reads = 0;
+      const busy = (ms: number) => { const t = Date.now() + ms; while (Date.now() < t) { /* lectura síncrona */ } };
+      const base = source(notes);
+      const s: NoteSource = { list: base.list, read: async (p) => { reads++; busy(3); return base.read(p); } };
+      const t0 = Date.now();
+      expect(await writeWarningsResult(s, 'n0000.md', 'N2', { timeoutMs: 60 })).toEqual({ warnings_unavailable: true });
+      expect(Date.now() - t0).toBeLessThan(400);
+      await new Promise(r => setTimeout(r, 50));
+      expect(reads).toBeLessThan(200); // el cálculo se detuvo, no siguió en segundo plano
     });
     it('caso normal: devuelve warnings y no warnings_unavailable', async () => {
       const r = await writeWarningsResult(source({ 'a.md': { content: '# A' } }), 'a.md', 'N2');

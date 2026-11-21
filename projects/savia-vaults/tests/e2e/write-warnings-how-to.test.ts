@@ -67,4 +67,33 @@ describe('vault_write avisos y how_to_proceed (MCP)', () => {
       await client.close();
     }
   }, 60_000);
+
+  it('modo de una sola cúpula (--path, almacén sin nivel): el filtro propio de los avisos oculta la nota N4', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'savia-mcp-warn1-'));
+    folders.push(root);
+    const vault = path.join(root, 'V');
+    fs.mkdirSync(vault);
+    fs.writeFileSync(path.join(vault, 'reservada.md'), '---\nconfidentiality: N4\n---\n# Titulo Reservado Garceta\n');
+    fs.writeFileSync(path.join(vault, 'abierta.md'), '# Abierta\n');
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: ['--import', pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href, path.resolve('src/cli/index.ts'), 'serve', '--transport', 'mcp', '--path', vault],
+      cwd: root,
+      env: { PATH: process.env.PATH || '', HOME: root, SAVIA_RAG_HOME: path.join(root, 'rag'), SAVIA_RAG_TEST_PROVIDER: 'hash', SAVIA_SEARCH_CACHE: path.join(root, 'sc') },
+    });
+    const client = new Client({ name: 'warn-e2e-1', version: '1' });
+    await client.connect(transport);
+    try {
+      const w = await client.callTool({ name: 'vault_write', arguments: { path: 'nueva.md', content: '# Titulo Reservado Garceta\n\n[[abierta]] [[reservada]]\n' } });
+      expect(w.isError).toBeFalsy();
+      const body = JSON.parse(text(w));
+      expect(body.warnings_unavailable).toBeUndefined();
+      const codes = body.warnings.map((x: any) => x.code);
+      expect(codes).toContain('NEIGHBOR_NOTE'); // los avisos sí se calculan
+      expect(codes).not.toContain('DUPLICATE_TITLE');
+      expect(JSON.stringify(body.warnings.filter((x: any) => x.code !== 'BROKEN_WIKILINK'))).not.toContain('reservada');
+    } finally {
+      await client.close();
+    }
+  }, 60_000);
 });

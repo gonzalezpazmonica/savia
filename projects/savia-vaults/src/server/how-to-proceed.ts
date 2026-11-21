@@ -20,7 +20,10 @@ export function howToProceed(e: unknown): string | undefined {
     return 'No tienes permiso para esta operación en esa cúpula: comprueba tu credencial o pide acceso a quien administra la cúpula; no reintentes con la misma credencial.';
   }
   if (e instanceof SecurityError) {
-    return 'La ruta o el tamaño no son válidos: usa una ruta relativa dentro de la cúpula, sin «..», y un fichero dentro del tamaño permitido.';
+    // Los textos vienen de src/security/index.ts; un test los recorre con el VaultSecurity real.
+    if (/^Extension not allowed\b/.test(e.message)) return 'Ese tipo de fichero no se admite en la cúpula: usa una extensión permitida, por ejemplo .md para notas.';
+    if (/max depth\b/.test(e.message)) return 'La ruta tiene demasiadas carpetas anidadas: usa una ruta con menos niveles dentro de la cúpula.';
+    return 'La ruta no es válida o no es accesible: usa una ruta relativa dentro de la cúpula, sin «..», fuera de carpetas internas y sin enlaces que salgan de ella.';
   }
   if (e instanceof FilesError) {
     if (e.code === 'CONFLICT' || e.code === 'IDEMPOTENCY_CONFLICT') {
