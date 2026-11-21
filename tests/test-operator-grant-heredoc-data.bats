@@ -166,6 +166,43 @@ assert_block() {
   assert_block
 }
 
+# Revisión de seguridad #1628 (cabeza 0fcb91d): llegar a os como NOMBRE importado
+# desde un módulo permitido, o como atributo de uno, sin escribir «os.».
+@test "block: python importa os como nombre desde pathlib" {
+  run guard $'python3 - <<\'PY\'\nfrom pathlib import os as o\no.popen("tee " + "config/operator-grant-signer?" + " < x").read()\nPY'
+  assert_block
+}
+
+@test "block: python importa os desde un submódulo privado (pathlib._local)" {
+  run guard $'python3 - <<\'PY\'\nfrom pathlib._local import os as o\no.popen("tee " + "config/operator-grant-signer?" + " < x").read()\nPY'
+  assert_block
+}
+
+@test "block: python guarda os.system en una variable y la llama después" {
+  run guard $'python3 - <<\'PY\'\nfrom pathlib import os as o\ns = o.system; s("tee " + "config/operator-grant-signer?" + " < x")\nPY'
+  assert_block
+}
+
+@test "block: python llega a os como atributo de un módulo permitido" {
+  run guard $'python3 - <<\'PY\'\nimport pathlib\nm = pathlib.os\nm.popen("tee " + "config/operator-grant-signer?" + " < x")\nPY'
+  assert_block
+}
+
+@test "block: python llega a sys como atributo de un módulo permitido" {
+  run guard $'python3 - <<\'PY\'\nimport datetime\nm = datetime.sys\nprint(m, "config/*")\nPY'
+  assert_block
+}
+
+@test "block: cuerpo de python3 que no compila no se poda" {
+  run guard $'python3 - <<\'PY\'\nprint("config/*"\nPY'
+  assert_block
+}
+
+@test "allow: python3 con from pathlib import Path y comodín como dato" {
+  run guard $'python3 - <<\'PY\'\nfrom pathlib import Path\nprint(Path("notas.md").name, "config/*")\nPY'
+  [ "$status" -eq 0 ]
+}
+
 @test "allow: python3 con import de la lista cerrada y comodín como dato" {
   run guard $'python3 - <<\'PY\'\nimport json\nprint(json.dumps({"g": "config/*"}))\nPY'
   [ "$status" -eq 0 ]

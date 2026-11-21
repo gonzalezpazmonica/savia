@@ -426,7 +426,7 @@ spend_scope() {
 # (sin claves ningún grant vale). Evento malformado o incompleto, o cualquier
 # error al evaluarlo (excepción, python ausente): exit 2 (SE-453), nunca 0 ni 1.
 GUARD_PY='
-import fnmatch, glob, json, os, re, shlex, sys
+import ast, fnmatch, glob, json, os, re, shlex, sys
 # Código de motivo para la medición (G4): una línea en stdout, que guard_main
 # lee; el mensaje para la persona va a stderr. El código no depende del texto.
 def verdict(code):
@@ -512,7 +512,7 @@ HD_SHELLS = re.compile(r"(^|[^\w.-])((ba|z|da|k|mk|ya|c|tc)?sh|fish|eval|exec|so
                        r"|busybox|env|sudo|su|ssh|nohup|timeout|watch|script|make|npm|npx)(?![\w.-])"
                        r"|(^|[;&|(\s])\.[ \t]")
 # Cuerpo de python3 que lanza un shell, enumera ficheros o llega a ellos por indirección.
-HD_ACTIVE = re.compile(r"os\.|subprocess|shell\s*=|pty\b|\bsystem\s*\(|\bexec|\beval|compile\s*\("
+HD_ACTIVE = re.compile(r"os\.|popen|spawn|subprocess|shell\s*=|pty\b|\bsystem\s*\(|\bexec|\beval|compile\s*\("
                        r"|__|getattr|setattr|importlib|modules|builtins|globals|vars\s*\(|ctypes|runpy"
                        r"|`|glob|iterdir|walk|listdir|scandir|fnmatch|breakpoint|open\s*\(\s*[0-9]",
                        re.I)
@@ -548,6 +548,41 @@ def py_imports_ok(body):
             if not re.fullmatch(r"[A-Za-z_][\w.]*", mod) or mod.split(".")[0] not in HD_PY_MODULES:
                 return False
     return True
+# Módulos que lanzan procesos, enumeran ficheros o abren la indirección: un cuerpo
+# «dato» no los nombra ni como atributo ni como nombre importado (pathlib.os).
+HD_PY_REACH = {"os", "posix", "nt", "sys", "subprocess", "pty", "shutil", "glob", "fnmatch",
+               "multiprocessing", "asyncio", "concurrent", "ctypes", "importlib", "builtins", "runpy",
+               "code", "codeop", "pdb", "platform", "webbrowser", "socket", "pydoc", "signal",
+               "threading", "tempfile", "zipimport", "pkgutil", "inspect", "gc", "types", "marshal",
+               "pickle", "shelve", "operator", "posixpath", "ntpath", "genericpath", "io"}
+# Llamadas de proceso que un cuerpo «dato» no usa, aunque lleguen por alias.
+HD_PY_CALLS = {"popen", "system", "spawn", "fork", "execv", "execl", "pipe", "startfile", "call",
+               "run", "check_call", "check_output", "getoutput", "getstatusoutput"}
+def py_ast_ok(body):
+    """True si el cuerpo compila y no llega a otro módulo ni a una llamada de proceso
+    por nombre importado o atributo (from pathlib import os, pathlib.os, o.popen)."""
+    try:
+        tree = ast.parse(body)
+    except (SyntaxError, ValueError):
+        return False
+    def bad(name):
+        return (not isinstance(name, str) or name.startswith("_") or name in HD_PY_REACH
+                or name in HD_PY_CALLS or name.startswith(("spawn", "exec", "popen")))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                parts = a.name.split(".")
+                if parts[0] not in HD_PY_MODULES or any(x.startswith("_") for x in parts):
+                    return False
+        elif isinstance(node, ast.ImportFrom):
+            parts = (node.module or "").split(".")
+            if node.level or parts[0] not in HD_PY_MODULES or any(x.startswith("_") for x in parts):
+                return False
+            if any(a.name == "*" or bad(a.name) for a in node.names):
+                return False
+        elif isinstance(node, ast.Attribute) and bad(node.attr):
+            return False
+    return True
 def inert_heredocs(cmd):
     """(orden sin los cuerpos de heredocs que son dato, podado?); la orden intacta si hay duda."""
     lines, kept, i, ops = cmd.split("\n"), [], 0, 0
@@ -577,7 +612,8 @@ def inert_heredocs(cmd):
         if head == "cat":
             pass
         elif HD_PYTHON.fullmatch(head):
-            if not set(words[1:]) <= HD_PY_FLAGS or HD_ACTIVE.search(body) or not py_imports_ok(body):
+            if not set(words[1:]) <= HD_PY_FLAGS or HD_ACTIVE.search(body) or not py_imports_ok(body)\
+                    or not py_ast_ok(body):
                 return cmd, False
         else:
             return cmd, False  # otro lector, ruta (./cat), asignación delante (PATH=. cat)
