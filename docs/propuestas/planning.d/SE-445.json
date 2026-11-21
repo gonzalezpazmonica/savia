@@ -1,0 +1,35 @@
+{
+  "id": "SE-445",
+  "status": "IMPLEMENTED",
+  "priority": "P1",
+  "title": "Salvaguardas de ejecución autónoma: repetición bloqueante, presupuesto de turnos, revisor de acciones y criterio de éxito",
+  "note": "Convierte en enforcement dos reglas de autonomous-safety hoy solo de texto (3 repeticiones, time-box visible). 2026-10-23 conciliación: todos los AC cubiertos en main (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora.",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1639 (docs/evidence/graduacion-s27/SE-445.md). Entrega: PR #1335.",
+  "phase": "A",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "completion": {
+    "merge_pr": 1335,
+    "acceptance_evidence": [
+      {
+        "criterion": "AC (revisión de graduación S27, PR #1639)",
+        "file": "docs/specs/SE-445-autonomous-execution-safeguards.spec.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "tests/test-action-review.bats"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "tests/test-repeat-tool-guard.bats"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "tests/test-turn-budget-inject.bats"
+      }
+    ],
+    "human_review": {
+      "status": "APPROVED",
+      "evidence": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27). Evidencia de revisión: PR #1639."
+    }
+  }
+}

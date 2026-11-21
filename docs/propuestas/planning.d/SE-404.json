@@ -1,0 +1,32 @@
+{
+  "id": "SE-404",
+  "status": "IMPLEMENTED",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "priority": "P1",
+  "title": "Proceso proporcional: G13 v2 y una corrección por revisión",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1638 (docs/evidence/graduacion-s27/SE-404.md). Entrega: PR #1170.",
+  "phase": "B",
+  "delivery": {
+    "merge_pr": 1170,
+    "main_commit": "504e9d38",
+    "verified_on": "2026-09-30"
+  },
+  "completion": {
+    "merge_pr": 1170,
+    "acceptance_evidence": [
+      {
+        "criterion": "AC (revisión de graduación S27, PR #1638)",
+        "file": "docs/specs/SE-404-proportional-process-gates.spec.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "tests/structure/test-se404-g13-v2.bats"
+      }
+    ],
+    "human_review": {
+      "status": "APPROVED",
+      "evidence": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27). Evidencia de revisión: PR #1638."
+    }
+  },
+  "note": "Código de G13 v2 en #1336; #1170 (spec original) se fusionó sin revisión L3. 2026-10-23 conciliación: todos los AC cubiertos en main (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora."
+}

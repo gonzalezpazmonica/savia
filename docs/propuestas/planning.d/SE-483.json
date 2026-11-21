@@ -1,0 +1,27 @@
+{
+  "id": "SE-483",
+  "status": "IMPLEMENTED",
+  "priority": "P1",
+  "title": "Identidad: Savia, metaorquestadora agéntica de I+D+i",
+  "note": "Frase canónica única en savia.md leída por generadores; CLAUDE.md, AGENTS.md, README, plugin, critical-facts, arranque; pm-workspace se queda como identificador técnico; PM pasa a capacidad.",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1637 (docs/evidence/graduacion-s27/SE-483.md). Entrega: PR #1425.",
+  "phase": "D",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "completion": {
+    "merge_pr": 1425,
+    "acceptance_evidence": [
+      {
+        "criterion": "AC (revisión de graduación S27, PR #1637)",
+        "file": "docs/specs/SE-483-savia-identity-rd-metaorchestrator.spec.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "tests/test-se483-identity.bats"
+      }
+    ],
+    "human_review": {
+      "status": "APPROVED",
+      "evidence": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27). Evidencia de revisión: PR #1637."
+    }
+  }
+}
