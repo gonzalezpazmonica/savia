@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
-# Coherencia de los rediseños propuestos (SE-498 F3, SE-514 S2, SE-515 S3-S4), PR #1620.
-# Son anclas de coherencia de la redacción (grep de literales), no cobertura de comportamiento.
+# LINT DE REDACCIÓN de los rediseños propuestos (SE-498 F3, SE-514 S2, SE-515 S3-S4), PR #1620.
+# Anclas de coherencia del texto (grep de literales): no verifican ninguna propiedad de seguridad
+# ni de comportamiento del diseño.
 # Cada ausencia exige que el fichero exista (grep sale 1, no 2). Las comprobaciones que lo
 # indican se ejecutan además sobre una copia mutada que reintroduce el defecto (debe fallar).
 
@@ -14,6 +15,18 @@ CHG="$REPO_ROOT/CHANGELOG.d/rediseno-fases-aparcadas.md"
 absent() {
   [ -f "$2" ] || return 2
   grep -qF -- "$1" "$2" && return 1
+  return 0
+}
+
+# historico_ok <spec>: la frase exige el histórico sin manifiesto archivado, con MERGED.
+historico_ok() {
+  grep -qF 'anterior a F3a (sin `manifest.json` archivado) con `MERGED`' "$1"
+}
+
+# changelog_ok <fichero>: sin cabeceras de sección en el cuerpo.
+changelog_ok() {
+  [ -f "$1" ] || return 2
+  grep -q '^### ' "$1" && return 1
   return 0
 }
 
@@ -63,7 +76,8 @@ ac14_ok() {
 }
 
 @test "SE-498 R5: release con contexto del digest y digest comparado por prefijo y completo" {
-  grep -q 'SAVIA_GH_REPO' "$S498"
+  grep -q 'Sin `SAVIA_GH_REPO`, `pr_state` resolvería' "$S498"
+  grep -q 'responde `none` con exit 0 —falso éxito—' "$S498"
   grep -q 'compara por prefijo de 12 caracteres con el `digest` completo' "$S498"
 }
 
@@ -74,30 +88,31 @@ ac14_ok() {
 @test "SE-515 S4: declara el límite del recibo sin firma y la enmienda pendiente a S2" {
   grep -q 'sha256 sin clave' "$S515"
   grep -q 'Enmienda a S2 pendiente' "$S515"
-  grep -q 'NOT_GUARANTEED' "$S515"
+  grep -q 'declarado `NOT_GUARANTEED`' "$S515"
 }
 
 @test "changelog: solo viñetas, sin cabecera de sección en el cuerpo" {
-  run grep -q '^### ' "$CHG"
-  [ "$status" -eq 1 ]
+  run changelog_ok "$CHG"
+  [ "$status" -eq 0 ]
   grep -q '^version_bump: patch' "$CHG"
 }
 
-@test "changelog negativo: una cabecera en el cuerpo se detecta" {
+@test "changelog negativo: el mismo chequeo rechaza una copia con cabecera en el cuerpo" {
   m="$BATS_TEST_TMPDIR/c.md"
   { cat "$CHG"; printf '\n### Changed\n'; } > "$m"
-  run grep -q '^### ' "$m"
-  [ "$status" -eq 0 ]
+  run changelog_ok "$m"
+  [ "$status" -eq 1 ]
 }
 
 @test "SE-498 R5: el histórico closed+MERGED no exige manifiesto archivado" {
   grep -q 'no\*\* exige el manifiesto archivado' "$S498"
-  grep -q 'Histórico:\*\* reserva `closed` anterior a F3a' "$S498"
+  run historico_ok "$S498"
+  [ "$status" -eq 0 ]
   m="$BATS_TEST_TMPDIR/s498.md"
   sed 's/anterior a F3a (sin `manifest.json` archivado) con `MERGED`/anterior a F3a con `MERGED`/' "$S498" > "$m"
   run cmp -s "$S498" "$m"
   [ "$status" -eq 1 ]
-  run grep -q 'Histórico:\*\* reserva `closed` anterior a F3a (sin `manifest.json`' "$m"
+  run historico_ok "$m"
   [ "$status" -eq 1 ]
 }
 
@@ -120,4 +135,24 @@ ac14_ok() {
   grep -q 'Quién verifica los campos nuevos' "$S515"
   grep -q 'AC-14′ (nuevo)' "$S515"
   grep -q 'HA-1' "$S515"
+}
+
+@test "SE-514 S2: Contestar exige aprobación auténtica y hay AC de auto-respuesta" {
+  grep -q 'solo la acepta con una aprobación auténtica de la operadora (SE-488' "$S514"
+  grep -q 'AC-15 — Auto-respuesta rechazada' "$S514"
+  m="$BATS_TEST_TMPDIR/s.md"
+  sed 's/solo la acepta con una aprobación auténtica de la operadora/la acepta/' "$S514" > "$m"
+  run grep -q 'solo la acepta con una aprobación auténtica de la operadora' "$m"
+  [ "$status" -eq 1 ]
+}
+
+@test "SE-514 S2: el estado visible se deriva, no se guarda" {
+  run absent 'Pone `activity_state` en `waiting_input`' "$S514"
+  [ "$status" -eq 0 ]
+  grep -q 'No guarda `activity_state`' "$S514"
+}
+
+@test "SE-515: D3(a) condicionada a la enmienda a S2 y firma con clave precondición de S4" {
+  grep -q 'condicionada a la enmienda a S2' "$S515"
+  grep -q 'precondición de S4' "$S515"
 }
