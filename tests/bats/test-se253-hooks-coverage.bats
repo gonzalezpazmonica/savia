@@ -147,3 +147,63 @@ print(f'Found percentage: {m.group(0)}')
 "
   [ "$status" -eq 0 ]
 }
+
+# ── SE-510 AC-7: guards listados en lib/before-guards.ts cuentan como TS_GUARD ─
+_mk_tree() {
+  local t="$1" plugin_import="$2"
+  mkdir -p "$t/scripts" "$t/docs" "$t/.claude/hooks" "$t/.opencode/plugins/lib"
+  cp "$SCRIPT" "$t/scripts/"
+  printf '#!/usr/bin/env bash\nexit 2\n' > "$t/.claude/hooks/fake-guard.sh"
+  cat > "$t/.claude/settings.json" <<'JSON'
+{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"bash .claude/hooks/fake-guard.sh"}]}]}}
+JSON
+  printf '%s\n' "$plugin_import" > "$t/.opencode/plugins/savia-foundation.ts"
+  printf 'import { fakeGuard } from "../guards/fake-guard.ts";\nexport const BEFORE_GUARDS = [fakeGuard];\n' \
+    > "$t/.opencode/plugins/lib/before-guards.ts"
+}
+
+@test "SE-510: guard importado vía lib/before-guards.ts sale como TS_GUARD" {
+  t="$BATS_TEST_TMPDIR/tree"
+  _mk_tree "$t" 'import { BEFORE_GUARDS } from "./lib/before-guards.ts";'
+  run bash "$t/scripts/hooks-coverage-matrix.sh"
+  [ "$status" -eq 0 ]
+  grep -q '| PreToolUse | fake-guard.sh | si | TS_GUARD | bloqueante | fakeGuard |' "$t/docs/hooks-coverage-matrix.md"
+}
+
+@test "SE-510 negativo (seguridad c9eaee1 P2-1): guard importado pero fuera de BEFORE_GUARDS no da cobertura" {
+  t="$BATS_TEST_TMPDIR/tree"
+  _mk_tree "$t" 'import { BEFORE_GUARDS } from "./lib/before-guards.ts";'
+  printf 'import { fakeGuard } from "../guards/fake-guard.ts";\nexport const BEFORE_GUARDS = [\n  // fakeGuard,\n  otherGuard,\n];\n' \
+    > "$t/.opencode/plugins/lib/before-guards.ts"
+  run bash "$t/scripts/hooks-coverage-matrix.sh"
+  [ "$status" -eq 0 ]
+  grep -q '| PreToolUse | fake-guard.sh | no | NONE | bloqueante |' "$t/docs/hooks-coverage-matrix.md"
+}
+
+@test "SE-510 negativo: lib/before-guards.ts que el plugin no importa no da cobertura" {
+  t="$BATS_TEST_TMPDIR/tree"
+  _mk_tree "$t" '// sin import de la lista'
+  run bash "$t/scripts/hooks-coverage-matrix.sh"
+  [ "$status" -eq 0 ]
+  grep -q '| PreToolUse | fake-guard.sh | no | NONE | bloqueante |' "$t/docs/hooks-coverage-matrix.md"
+  run grep -c 'TS_GUARD | bloqueante | fakeGuard' "$t/docs/hooks-coverage-matrix.md"
+  [ "$output" = "0" ]
+}
+
+@test "SE-510 negativo (seguridad 2021f79 P2-1): import de lib/before-guards.ts comentado no da cobertura" {
+  t="$BATS_TEST_TMPDIR/tree"
+  _mk_tree "$t" '// import { BEFORE_GUARDS } from "./lib/before-guards.ts";'
+  run bash "$t/scripts/hooks-coverage-matrix.sh"
+  [ "$status" -eq 0 ]
+  grep -q '| PreToolUse | fake-guard.sh | no | NONE | bloqueante |' "$t/docs/hooks-coverage-matrix.md"
+}
+
+@test "SE-510 (correctness 2021f79 P2-3): ] en un comentario y anotación de tipo no vacían BEFORE_GUARDS" {
+  t="$BATS_TEST_TMPDIR/tree"
+  _mk_tree "$t" 'import { BEFORE_GUARDS } from "./lib/before-guards.ts";'
+  printf 'import { fakeGuard } from "../guards/fake-guard.ts";\nexport const BEFORE_GUARDS: Guard[] = [\n  // ver [nota]\n  fakeGuard,\n];\n' \
+    > "$t/.opencode/plugins/lib/before-guards.ts"
+  run bash "$t/scripts/hooks-coverage-matrix.sh"
+  [ "$status" -eq 0 ]
+  grep -q '| PreToolUse | fake-guard.sh | si | TS_GUARD | bloqueante | fakeGuard |' "$t/docs/hooks-coverage-matrix.md"
+}
