@@ -3,11 +3,11 @@ set -uo pipefail
 export LC_ALL=C
 # skill-suggest.sh — Proactive skill suggestion hook (SE-276)
 #
-# Lightweight frontend to configurator's dispatch heuristics.
+# Lightweight frontend to the intent dispatch table (docs/RESOLVER.md).
 # Runs in <500ms on UserPromptSubmit. Emits inline suggestion
 # if a skill matches the user's intent and is not already loaded.
 #
-# Reference: configurator agent (SPEC-166) dispatch table
+# Reference: docs/RESOLVER.md (the dispatch agent of SPEC-166 was retired in SE-527 S1)
 # Reference: SE-276 spec
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -63,7 +63,7 @@ write_state() {
   fi
 }
 
-# --- Dispatch table (mirrors configurator heuristics) ---
+# --- Dispatch table (subset of docs/RESOLVER.md intents) ---
 # Format: "pattern1|pattern2|..." → "skill_id"
 # Only suggest skills (not agents). Skills that always require explicit
 # invocation (overnight-sprint, code-improvement-loop) are excluded.
