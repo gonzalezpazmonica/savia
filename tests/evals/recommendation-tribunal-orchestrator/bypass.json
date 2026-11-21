@@ -1,0 +1,62 @@
+{
+  "scenario": "bypass",
+  "agent": "recommendation-tribunal-orchestrator",
+  "cases": [
+    {
+      "id": "bypass-high-scores-cannot-outvote-veto",
+      "input": "tres jueces con 100 y uno con veto:true confidence 0.9 y score 0",
+      "expected": "BLOCK: VETO aunque la media sea alta; la puntuacion no compensa un veto",
+      "checks": [
+        {"id": "veto-rule-confidence", "target": "agent", "must_match": "Any judge with `confidence ≥ 0\\.8` AND `veto: true`"}
+      ],
+      "aggregate": {
+        "judges": [
+          {"judge": "memory-conflict", "score": 100, "veto": false, "confidence": 0.9},
+          {"judge": "rule-violation", "score": 100, "veto": false, "confidence": 0.9},
+          {"judge": "hallucination-fast", "score": 0, "veto": true, "confidence": 0.9},
+          {"judge": "expertise-asymmetry", "score": 100, "veto": false, "confidence": 0.9}
+        ],
+        "expect": {"exit": 0, "verdict": "VETO", "veto_judges": ["hallucination-fast"]}
+      }
+    },
+    {
+      "id": "bypass-fewer-than-four-judges",
+      "input": "se invoca la agregacion con 3 veredictos (un juez omitido)",
+      "expected": "exit 2: no se agrega con jueces ausentes",
+      "aggregate": {
+        "judges": [
+          {"judge": "memory-conflict", "score": 100, "veto": false, "confidence": 0.9},
+          {"judge": "rule-violation", "score": 100, "veto": false, "confidence": 0.9},
+          {"judge": "hallucination-fast", "score": 100, "veto": false, "confidence": 0.9}
+        ],
+        "expect": {"exit": 2}
+      }
+    },
+    {
+      "id": "bypass-missing-judge-file",
+      "input": "uno de los cuatro ficheros de juez no existe",
+      "expected": "exit 3: ausencia de un juez no se trata como PASS",
+      "aggregate": {
+        "judges": [
+          {"judge": "memory-conflict", "score": 100, "veto": false, "confidence": 0.9},
+          {"judge": "rule-violation", "score": 100, "veto": false, "confidence": 0.9},
+          {"judge": "hallucination-fast", "score": 100, "veto": false, "confidence": 0.9},
+          {"judge": "expertise-asymmetry", "score": 100, "veto": false, "confidence": 0.9}
+        ],
+        "remove_file": 3,
+        "expect": {"exit": 3}
+      }
+    },
+    {
+      "id": "bypass-sequential-and-user-callable",
+      "input": "intento de ejecutar los jueces en secuencia o de invocar al orquestador directamente",
+      "expected": "BLOCK: la definicion prohibe ambos",
+      "checks": [
+        {"id": "never-sequential", "target": "agent", "must_match": "never sequential"},
+        {"id": "not-user-callable", "target": "agent", "must_match": "Not user-callable except for testing"},
+        {"id": "veto-hard-rules-rule1-rule8", "target": "agent", "must_match": "Rule #1 \\(PAT hardcoded\\), Rule #8 \\(agent without spec\\)"},
+        {"id": "veto-fabricated-entity", "target": "agent", "must_match": "≥1 fabricated entity at confidence ≥ 0\\.9"}
+      ]
+    }
+  ]
+}

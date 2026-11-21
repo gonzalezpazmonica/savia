@@ -117,14 +117,14 @@ print('pm-workspace found')
   python3 "$PY" build --db "$DB"
   run python3 "$PY" status --db "$DB"
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "Entities"
-  echo "$output" | grep -q "Relations"
+  grep -q "Entities" <<< "$output"
+  grep -q "Relations" <<< "$output"
 }
 
 @test "status: degradation — no DB prints helpful message" {
   run python3 "$PY" status --db "$TMPDIR/nonexistent-kg-99.db"
   [ "$status" -eq 0 ]
-  echo "$output" | grep -qi "not built\|run"
+  grep -qi "not built\|run" <<< "$output"
 }
 
 # ── Query ─────────────────────────────────────────────────────────────────────
@@ -133,14 +133,14 @@ print('pm-workspace found')
   python3 "$PY" build --db "$DB"
   run python3 "$PY" query "pm-workspace" --db "$DB"
   [ "$status" -eq 0 ]
-  echo "$output" | grep -qi "pm-workspace"
+  grep -qi "pm-workspace" <<< "$output"
 }
 
 @test "query: unknown term returns no-results message (not crash)" {
   python3 "$PY" build --db "$DB"
   run python3 "$PY" query "xyzzy-nonexistent-9999" --db "$DB"
   [ "$status" -eq 0 ]
-  echo "$output" | grep -qi "no results\|not found\|No results"
+  grep -qi "no results\|not found\|No results" <<< "$output"
 }
 
 @test "query: missing DB exits non-zero" {
@@ -154,7 +154,7 @@ print('pm-workspace found')
   python3 "$PY" build --db "$DB"
   run python3 "$PY" impact "pm-workspace" --db "$DB" --depth 1
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "\-\-"
+  grep -q "\-\-" <<< "$output"
 }
 
 @test "impact: missing entity exits non-zero" {
@@ -169,7 +169,7 @@ print('pm-workspace found')
   python3 "$PY" build --db "$DB"
   run python3 "$PY" entities --type spec --db "$DB"
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "spec"
+  grep -q "spec" <<< "$output"
 }
 
 # ── Spec ref ─────────────────────────────────────────────────────────────────
