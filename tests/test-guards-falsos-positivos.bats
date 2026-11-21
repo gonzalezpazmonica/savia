@@ -450,7 +450,17 @@ PY
   assert_decisions operator-grant 2
 }
 
+# G4 de G2/G3 depende del parche de .claude/hooks (validate-bash-global.sh y tdd-gate.sh
+# cargan scripts/lib/guard-decision-log.sh). Ese parche lo aplica la operadora aparte
+# (los hooks son superficie protegida); hasta entonces estos dos tests se saltan con
+# motivo explícito y se activan solos en cuanto el hook usa la librería (revisión #1628).
+require_hook_metrics() {
+  grep -q guard_decision_log "$SOURCE_ROOT/.claude/hooks/$1" \
+    || skip "pendiente: .claude/hooks/$1 aún no registra decisiones (parche G4 de hooks)"
+}
+
 @test "G4 G2: salida rápida allow y commit bloqueado se registran sin la orden" {
+  require_hook_metrics validate-bash-global.sh
   run g2_bash 'printf "%s" FP_ALLOW_SENTINEL'
   [ "$status" -eq 0 ]
   assert_decisions validate-bash-global 1
@@ -460,6 +470,7 @@ PY
 }
 
 @test "G4 G3: test hermano permite y producción huérfana bloquea sin filtrar contenido" {
+  require_hook_metrics tdd-gate.sh
   printf '# FP_SOURCE_SENTINEL\ndef value(): return 1\n' > "$MAIN/src/x.py"
   printf '# FP_TEST_SENTINEL\nfrom x import value\ndef test_value(): assert value() == 1\n' > "$MAIN/src/test_x.py"
   run g3_file Edit "$MAIN/src/x.py"
