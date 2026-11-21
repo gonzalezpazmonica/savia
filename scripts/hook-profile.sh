@@ -1,9 +1,13 @@
 #!/bin/bash
 set -uo pipefail
-# hook-profile.sh — Get/set the active SAVIA_HOOK_PROFILE
-# Usage: hook-profile.sh get | set <profile>
+# hook-profile.sh — Show the active SAVIA_HOOK_PROFILE and explain how to set it
+# Usage: hook-profile.sh get | set <profile> | list
+#
+# The profile lives ONLY in the SAVIA_HOOK_PROFILE environment variable (the
+# hooks read nothing else). This script never writes a file: a persisted file
+# would let an agent lower the guards by writing it (K11-a, 2026-11-20).
 
-PROFILE_FILE="${HOME}/.savia/hook-profile"
+LEGACY_FILE="${HOME}/.savia/hook-profile"
 VALID_PROFILES="minimal standard strict ci"
 
 usage() {
@@ -12,7 +16,7 @@ hook-profile.sh — Savia Hook Profile Manager
 
 Usage:
   hook-profile.sh get               Show active profile
-  hook-profile.sh set <profile>     Set profile (persists to ~/.savia/hook-profile)
+  hook-profile.sh set <profile>     Validate the name and print how to export it (writes nothing)
   hook-profile.sh list              List all profiles with descriptions
 
 Profiles:
@@ -22,21 +26,20 @@ Profiles:
   ci        Same as standard but non-interactive (for CI/CD pipelines)
 
 The active profile is read from:
-  1. \$SAVIA_HOOK_PROFILE env var (highest priority)
-  2. ~/.savia/hook-profile file
-  3. "standard" (default)
+  1. \$SAVIA_HOOK_PROFILE env var
+  2. "standard" (default)
+There is no profile file: ~/.savia/hook-profile is ignored.
 EOF
 }
 
 get_profile() {
   if [[ -n "${SAVIA_HOOK_PROFILE:-}" ]]; then
     echo "$SAVIA_HOOK_PROFILE (env var)"
-  elif [[ -f "$PROFILE_FILE" ]]; then
-    local p
-    p=$(cat "$PROFILE_FILE")
-    echo "$p (from ~/.savia/hook-profile)"
   else
     echo "standard (default)"
+    if [[ -f "$LEGACY_FILE" ]]; then
+      echo "note: $LEGACY_FILE is ignored; export SAVIA_HOOK_PROFILE instead" >&2
+    fi
   fi
 }
 
@@ -54,12 +57,9 @@ set_profile() {
     exit 1
   fi
 
-  mkdir -p "$(dirname "$PROFILE_FILE")"
-  echo "$profile" > "$PROFILE_FILE"
-  echo "Hook profile set to: $profile"
-  echo "Persisted to: $PROFILE_FILE"
-  echo ""
-  echo "To apply in current shell: export SAVIA_HOOK_PROFILE=$profile"
+  echo "Nothing was written: the profile is only read from the environment."
+  echo "To apply in the current shell:  export SAVIA_HOOK_PROFILE=$profile"
+  echo "For one command only:           SAVIA_HOOK_PROFILE=$profile <command>"
 }
 
 list_profiles() {

@@ -99,7 +99,7 @@ assert d['tier'] == 3, f'fail-closed: tier={d[\"tier\"]}'
 }
 
 @test "edge: código + doc al final sigue siendo tier 2 (sin depender del orden)" {
-  for diff in "scripts/tool.sh CLAUDE.md" "CLAUDE.md scripts/tool.sh"; do
+  for diff in "scripts/tool.sh README.md" "README.md scripts/tool.sh"; do
     run python3 "$TIER" --diff "$diff" --json
     [[ "$status" -eq 0 ]]
     echo "$output" | python3 -c "
@@ -323,4 +323,26 @@ tier_of() {
   [ "$output" = "3 True" ]
   run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/auth.schema.json"
   [ "$output" = "3 True" ]
+}
+
+@test "S03n gobernanza: guardas, CLAUDE.md, freno y puente son tier 4" {
+  for f in .claude/hooks/validate-bash-global.sh .claude/hooks/lib/dome_guard.py \
+           .claude/enterprise/hooks/network-egress-guard.sh .opencode/plugins/guards/block-force-push.ts \
+           CLAUDE.md projects/demo/CLAUDE.md scripts/savia-control.py config/control/REVOCATION_EPOCH \
+           scripts/savia-bridge.py scripts/bridge_auth.py scripts/repeat-tool-guard.py; do
+    run tier_of "$TIER" "$f"
+    [ "$output" = "4 True" ] || { echo "$f -> $output"; false; }
+  done
+}
+
+@test "S03n gobernanza: un lote con una guarda sube a tier 4 aunque lo demás sea código normal" {
+  run tier_of "$TIER" "scripts/tool.sh .claude/hooks/scope-guard.sh"
+  [ "$output" = "4 True" ]
+}
+
+@test "S03n gobernanza: los vecinos de nombre parecido no suben a tier 4" {
+  for f in tests/fixtures/sam/valid/CLAUDE.md scripts/guardrail-audit.sh scripts/bridge_auth_notes.py docs/hooks/readme.md; do
+    run tier_of "$TIER" "$f"
+    [[ "$output" != 4* ]] || { echo "$f -> $output"; false; }
+  done
 }

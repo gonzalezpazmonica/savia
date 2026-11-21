@@ -39,7 +39,9 @@ import json
 import os
 import re
 import stat
+import subprocess
 import sys
+import time
 
 WRITE_NOTICE = ("Usa una propuesta: Guardar como nota. El motor no escribe en una cúpula; "
                 "la propuesta la revisa la persona")
@@ -1102,7 +1104,11 @@ def decide_bash(domes: list[dict], files: list[str], project: str, ctx: dict, to
     # hay alguna cúpula N3 o superior (la política de N3 en nube no se rebaja por una clave que el modelo
     # controla); ask en el resto. Nunca pass.
     v = read_verdict(ctx, [d for d in domes if d["level"] >= 3])
-    return v if v[0] == "deny" else ("ask", UNKNOWN_CWD_NOTICE)
+    if v[0] == "deny":
+        return v
+    # Puede leer cualquiera: constancia conservadora de todas las N2+ (revisión de la PR #1611).
+    mark_reads(ctx, domes)
+    return "ask", UNKNOWN_CWD_NOTICE
 
 
 def analyse_bash(domes: list[dict], files: list[str], project: str, ctx: dict, tool_input: dict, base: str,
@@ -1150,13 +1156,17 @@ def analyse_bash(domes: list[dict], files: list[str], project: str, ctx: dict, t
         # Un programa que no es lector conocido (`base64`, `awk`, `cp`, `curl -F file=@`) puede leer igual: una N3
         # tocada en nube se rechaza como con un lector, no se rebaja a una pregunta (ronda 9 de dome_guard.rs).
         # Solo lo que la nombra o cae en ella: alcanzarla por un ancestro o una variable pregunta, como en Space.
-        v = read_verdict(ctx, [d for d in direct_hit if reads_it(d)])
+        read_hit = [d for d in direct_hit if reads_it(d)]
+        v = read_verdict(ctx, read_hit)
         if v[0] == "deny":
             return v
         # Una orden que además recorre una N3 hacia la nube se deniega: la pregunta de escritura no la afloja.
         reached = [d for d in domes if traversal_reaches(cmds, base, d["root"])]
         if reached and read_verdict(ctx, reached)[0] == "deny":
             return read_verdict(ctx, reached)
+        # Lo que nombra o cae en la cúpula puede leerla aunque el programa no sea un lector conocido (`cp`,
+        # `base64`, `awk`): si la persona aprueba, el contenido sale; deja constancia (revisión de la PR #1611).
+        mark_reads(ctx, read_hit)
         return "ask", WRITE_NOTICE if writes(cmds) else UNKNOWN_NOTICE
     if not reads_only and any(direct({"root": f}) for f in files):
         return "ask", REGISTRY_NOTICE
@@ -1166,6 +1176,7 @@ def analyse_bash(domes: list[dict], files: list[str], project: str, ctx: dict, t
             touched.append(d)
     if not touched:
         return "pass", ""
+    mark_reads(ctx, touched)
     return read_verdict(ctx, touched)
 
 
@@ -1278,11 +1289,102 @@ def decide_tool(registry: dict, project: str, tool: str, tool_input, ctx: dict, 
         return decide_bash(domes, files, project, ctx, raw_input, cwd_known)
     root = search_root(project, permission, tool_input)
     if root is None:
+        mark_reads(ctx, domes)
         return read_verdict(ctx, domes)
     recursive = permission != "read"
     touched = [d for d in domes if touches(d["root"], project, root, recursive)
                or (recursive and reaches_by_link(project, root, d["root"]))]
+    mark_reads(ctx, touched)
     return read_verdict(ctx, touched)
+
+
+
+# ── Marca de sesión (SE-462 S1) ──────────────────────────────────────────────
+# Lo leído de una cúpula N2+ deja constancia por sesión para que una salida posterior a un destino de menor
+# nivel pueda preguntar (esa regla es S3). El PreToolUse no sabe si la persona aprobó un «ask»: se marca al
+# emitir el permitir o el «ask» de la lectura (una lectura preguntada y denegada también marca). Gemelo TS:
+# `markReads` en lib/dome-guard.ts; mismo formato (una línea JSON por cúpula y nivel).
+
+SESSION_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,128}")
+MARK_TTL_SECONDS = 7 * 24 * 3600
+MARK_DIR_ENV = "SAVIA_DOME_READ_DIR"  # solo pruebas: redirige la raíz de las marcas
+MARK_FAILED = ("no se pudo dejar constancia de la lectura de una cúpula N2 o superior; "
+               "sin ella no se puede vigilar adónde va lo leído")
+MARK_BAD_SESSION = ("la llamada no trae un identificador de sesión válido; sin él no se puede dejar constancia "
+                    "de la lectura de una cúpula N2 o superior")
+
+
+def mark_reads(ctx: dict, touched: list[dict]) -> None:
+    """Anota en `ctx["marks"]` las cúpulas N2+ que una lectura toca (la escritura no pasa por aquí)."""
+    marks = ctx.setdefault("marks", [])
+    for d in touched:
+        if d["level"] >= 2 and not any(m["id"] == d["id"] and m["level"] == d["level"] for m in marks):
+            marks.append({"id": d["id"], "level": d["level"]})
+
+
+def marks_root(env: dict) -> str:
+    return env.get(MARK_DIR_ENV) or os.path.join(os.path.expanduser("~"), ".savia", "dome-read")
+
+
+def autonomous_run(env: dict, project: str) -> bool:
+    """Ejecución autónoma: variable o rama `agent/*` (nadie contesta a un «ask»)."""
+    if env.get("SAVIA_AUTONOMOUS_RUN") == "1":
+        return True
+    try:
+        out = subprocess.run(["git", "-C", project, "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True,
+                             text=True, timeout=3, check=False).stdout.strip()
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False
+    return out.startswith("agent/")
+
+
+def write_marks(root: str, session_id, marks: list[dict], now: float | None = None) -> bool:
+    """Añade las marcas a `<root>/<session_id>` (directorio 0700, fichero 0600; purga a 7 días).
+    `False` si el identificador no es válido (sin tocar el disco) o si algo falla: quien llama pregunta."""
+    if not isinstance(session_id, str) or not SESSION_ID_RE.fullmatch(session_id):
+        return False
+    try:
+        try:
+            os.mkdir(root, 0o700)
+        except FileExistsError:
+            pass
+        except FileNotFoundError:
+            os.makedirs(root, mode=0o700, exist_ok=True)
+        st = os.lstat(root)  # un enlace o un fichero en su lugar no es el directorio de marcas
+        if not stat.S_ISDIR(st.st_mode):
+            return False
+        os.chmod(root, 0o700)
+        now = now if now is not None else time.time()
+        cutoff = now - MARK_TTL_SECONDS
+        for name in os.listdir(root):
+            # El fichero de la sesión en curso no se purga: perdería las marcas de lecturas anteriores.
+            if name != session_id and SESSION_ID_RE.fullmatch(name):
+                try:
+                    f = os.path.join(root, name)
+                    fs = os.lstat(f)
+                    if stat.S_ISREG(fs.st_mode) and fs.st_mtime < cutoff:
+                        os.unlink(f)
+                except OSError:
+                    pass
+        path = os.path.join(root, session_id)
+        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                return False
+            os.fchmod(fd, 0o600)
+            # Renueva el mtime aunque no se añada nada: una sesión viva no caduca para la purga de otra.
+            os.utime(fd, (now, now))
+            with os.fdopen(os.dup(fd), "r", encoding="utf-8", errors="replace") as fh:
+                have = set(fh.read().splitlines())
+            for m in marks:
+                line = json.dumps({"cupula": m["id"], "nivel": level_name(m["level"])}, ensure_ascii=False, separators=(",", ":"))
+                if line not in have:
+                    os.write(fd, (line + "\n").encode("utf-8"))
+        finally:
+            os.close(fd)
+        return True
+    except (OSError, ValueError):
+        return False
 
 
 # ── Registro y contexto ──────────────────────────────────────────────────────
@@ -1423,8 +1525,18 @@ def decide_payload(raw: str, root: str) -> tuple[str, str]:
     cwd_known = isinstance(cwd, str) and bool(cwd)
     project = os.path.abspath(cwd if cwd_known else root)
     tool = payload.get("tool_name")
-    return decide(registry, project, tool if isinstance(tool, str) else "", payload.get("tool_input"),
-                  session_context(payload), cwd_known)
+    ctx = session_context(payload)
+    verdict = decide(registry, project, tool if isinstance(tool, str) else "", payload.get("tool_input"),
+                     ctx, cwd_known)
+    if verdict[0] == "deny" or not ctx.get("marks"):
+        return verdict
+    # SE-462 S1: lectura N2+ permitida o preguntada → constancia en la sesión. Sin constancia posible, falla cerrado.
+    session_id = payload.get("session_id")
+    valid = isinstance(session_id, str) and SESSION_ID_RE.fullmatch(session_id) is not None
+    if valid and write_marks(marks_root(os.environ), session_id, ctx["marks"]):
+        return verdict
+    failure = ("deny" if autonomous_run(os.environ, project) else "ask", MARK_FAILED if valid else MARK_BAD_SESSION)
+    return strictest([verdict, failure])
 
 
 def main(argv: list[str]) -> int:

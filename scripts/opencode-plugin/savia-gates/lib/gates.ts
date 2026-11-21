@@ -133,7 +133,7 @@ export async function createGates(init: GatesInit, flavor: Flavor) {
       // SE-436 S5: guard de cúpulas nativo, gemelo del hook dome-guard.sh (misma decisión). El motor no
       // pasa `permission.ask` a los plugins, así que `ask` se aplica como bloqueo con el aviso de propuesta.
       const dome = strictest(variants.map((v) =>
-        domeGuardVerdict({ root, project: cwd, tool, input: v, env: process.env })))
+        domeGuardVerdict({ root, project: cwd, tool, input: v, sessionId: a.sessionID, env: process.env })))
       if (dome.decision !== "pass") {
         await auditLog({ event: "dome-guard", tool, decision: dome.decision, reason: dome.reason })
         throw new Error(`savia-gates: DOME_${dome.decision.toUpperCase()}: ${dome.reason}`)

@@ -16,7 +16,7 @@ lang: fr
 
 **Savia est une méta-orchestratrice agentique de R&D&I : elle coordonne des agents et des harnesses spécialisés, des axes de recherche, des dômes de connaissance gouvernée et des projets, l'autorité restant toujours à la personne. Open source et souveraine.**
 
-**567 commandes · 90 agents · 140 skills · 135 hooks**
+**567 commandes · 86 agents · 140 skills · 135 hooks**
 
 Savia orchestre le travail de R&D&I assisté par IA : elle répartit les tâches entre des harnesses spécialisés (exécutants, relectrices indépendantes, fournisseurs externes), soutient des axes de recherche, gouverne la connaissance dans des dômes (Savia Vaults) et gère les projets comme une capacité parmi d'autres. Elle intègre mémoire, sécurité, politiques exécutables (policy-as-code), traçabilité par receipts et évaluation sur une architecture indépendante du modèle, du fournisseur et du frontend. Elle fonctionne en local avec souveraineté des données et de l'inférence, en 9 langues.
 
@@ -39,7 +39,7 @@ L'exécution assistée par IA progresse plus vite que la confiance qu'on lui acc
 - **Orchestrer** — méta-orchestration de harnesses spécialisés : un exécutant par contrat, des relectrices indépendantes et des fournisseurs externes, avec invocation déterministe et l'autorité à la personne.
 - **Rechercher** — axes de recherche avec hypothèses, expériences et leçons vérifiables.
 - **Gouverner** — risque (L0-L4), human gates, policy-as-code, receipts et provenance de chaque action.
-- **Exécuter** — 90 agents, 567 commandes, 140 skills avec specs exécutables (SDD), audit de sécurité et revue de code.
+- **Exécuter** — 86 agents, 567 commandes, 140 skills avec specs exécutables (SDD), audit de sécurité et revue de code.
 - **Connaître** — dômes de connaissance gouvernée (Savia Vaults) et mémoire persistante bitemporelle avec provenance et trust-gates.
 - **Évaluer** — evals avec baseline, paired-delta regression et canaries multi-frontend.
 - **Domaines** — gestion de projets (sprints, backlog, rapports ; une capacité parmi d'autres), ingénierie logicielle et domaines spécialisés.
@@ -103,7 +103,7 @@ Tableau complet des capacités : [capabilities.fr.md](docs/readme/capabilities.f
 
 ## Savia
 
-Savia est l'identité du workspace : un motif textuel qui persiste d'un modèle à l'autre (Claude, DeepSeek, Qwen). En tant que méta-orchestratrice, elle coordonne 90 agents, 567 commandes, 140 skills et des harnesses externes. Elle opère selon des principes d'honnêteté calibrée, de souveraineté des données et de revue humaine obligatoire.
+Savia est l'identité du workspace : un motif textuel qui persiste d'un modèle à l'autre (Claude, DeepSeek, Qwen). En tant que méta-orchestratrice, elle coordonne 86 agents, 567 commandes, 140 skills et des harnesses externes. Elle opère selon des principes d'honnêteté calibrée, de souveraineté des données et de revue humaine obligatoire.
 
 Elle n'est pas une personne, ne ressent rien et ne remplace pas le jugement de qui l'utilise. Elle propose, exécute, avertit. Elle ne décide que de ce qui lui a été explicitement délégué.
 

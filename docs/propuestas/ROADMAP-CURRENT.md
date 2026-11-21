@@ -19,6 +19,7 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
 - **S23 · P0 · fase A** — Fundamentos de efectos y autoridad: construir en orden
   Acción: Construir en este orden: SE-488 (aprobación por fusión), SE-508 (control previo de MCP y WebFetch: hoy no hay ninguno, arranca en observación), SE-498 (STOP y revocación), SE-496 (contrato de delegación). SE-512 se aprueba por el camino de SE-488, sin tercer formato de firma. SE-491, SE-499 y SE-494 siguen por decidir; SE-502 queda aplazada hasta tener las tres primeras.
   Entrada: SE-496, SE-498 y SE-508 aprobadas (2026-11-09, escenas confirmadas); falta el prototipo S0 de cada una antes de S1. Una en curso cada vez; riesgo alto: revisión humana del PR concreto. SE-512, SE-491, SE-499 y SE-494 siguen PROPOSED.
+  Aparcado: SE-498 F3 y R7 — bloqueada por spec retirada (SE-493); decisión de la operadora 2026-11-19: rediseñar a partir del 26-11 sobre el registro existente
   Salida: Cada spec decidida; las aprobadas con sus AC y pruebas negativas en los dos frontends; ninguna ruta de efecto nueva sin su gate.
   Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: Savia Viva (SE-515 S3–S4), el sprint nocturno y el modo mediado de Space dependen de este bloque; esfuerzo: cinco specs medianas en serie; cuatro decisiones pendientes.
 
@@ -91,6 +92,7 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
 - **S30 · P1 · fase D** — Atención humana y aprobaciones contestables
   Acción: SE-458 aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar; tope y lotes de PRs en revisión sin decidir). SE-459 S1 y S3 (tarjeta), SE-492 (estado declarado, no inferido), SE-507 (latido de runs, con el digest de SE-471 leyendo del ledger) y, encima, la cola única de SE-514. SE-461 y SE-462: composición de efectos y marca de sesión. SE-463 (cobertura de supervisión) aparcada (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar).
   Entrada: Aprobación de SE-492 y SE-507 por la operadora, con escenas confirmadas (SE-505). SE-514 ya aprobada (2026-11-09): su S1 va después de S22.
+  Aparcado: SE-514 S2 — bloqueada por spec retirada (SE-513); decisión de la operadora 2026-11-19: rediseñar a partir del 26-11 sobre el registro existente
   Salida: Peticiones a la persona medidas antes y después; ningún permiso inferido del silencio; cada spec con sus negativos.
   Necesidad: media; urgencia: media; valor: alto; desbloqueo: protege el recurso más escaso; SE-515 con revisión obligatoria necesita esta cola; esfuerzo: slices pequeños independientes.
 
@@ -101,7 +103,7 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: media; urgencia: baja; valor: alto; desbloqueo: las lecciones y la evidencia de Savia Viva se sirven desde Vaults; esfuerzo: SE-489 decisión; SE-486 media.
 
 - **S14 · P2 · fase D** — Higiene de contexto, instalación y operación
-  Acción: SE-448 S0 y canario; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-472 se retira si ese bucle ya no se usa. SE-464 sin dependientes: se decide al llegar; SE-506 aplazada. SE-449, SE-450 y SE-454 aparcadas (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): no se ejecutan hasta reactivarlas.
+  Acción: SE-448 S0 y canario; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 retirada el 2026-11-20 (el bucle nocturno que gobernaba no se usa). SE-464 sin dependientes: se decide al llegar; SE-506 aplazada. SE-449, SE-450 y SE-454 aparcadas (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): no se ejecutan hasta reactivarlas.
   Entrada: Specs aprobadas salvo SE-464 (PROPOSED) y SE-506 (aplazada); se ejecutan por separado, una por vez; sin hueco WIP nuevo.
   Salida: Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición.
   Necesidad: media; urgencia: baja; valor: medio; desbloqueo: reduce superficie sin bloquear otras fases; esfuerzo: slices pequeños independientes.
@@ -127,6 +129,7 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
 - **S34 · P2 · fase D** — Savia Viva: un dominio con verificador externo y revalidación
   Acción: SE-515 S3–S4: una obligación comprobada por un verificador determinista en un gate existente, con el modelo instruido para ignorarla, y revalidación si cambian política, recurso o época de STOP entre el plan y el efecto.
   Entrada: S29 con GO; S23 con SE-498 implementada en la ruta piloto (el libro de efectos está retirado: SE-515 S3–S4 queda aparcada por decisión de la operadora); S28 con aprobación auténtica disponible.
+  Aparcado: SE-515 S3–S4 — bloqueada por spec retirada (SE-493); decisión de la operadora 2026-11-19: rediseñar a partir del 26-11 sobre el registro existente
   Salida: El efecto inválido se bloquea en la ruta cubierta aunque el modelo ignore la lección; garantía declarada por ruta; canario con retirada.
   Necesidad: condicionada; urgencia: baja; valor: por demostrar; desbloqueo: convierte una lección en garantía comprobable, o lo descarta con datos; esfuerzo: un dominio; medio.
 
@@ -182,7 +185,6 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-468 [APPROVED] El gate de evals debe poder fallar — evidencia: docs/specs/SE-468-honest-evals-gate.spec.md
 - SE-470 [APPROVED] Integridad de los artefactos de evaluación — evidencia: docs/specs/SE-470-eval-artifact-integrity.spec.md
 - SE-471 [APPROVED] Relevo nocturno con evidencia: declarado, validado y aceptado — evidencia: docs/specs/SE-471-overnight-handoff-evidence-digest.spec.md
-- SE-472 [APPROVED] Vigencia de la autoridad comprobada antes de cada tarea nocturna — evidencia: docs/specs/SE-472-overnight-per-task-authority-check.spec.md
 - SE-473 [APPROVED] Lecciones contrastables: ámbito, evidencia, revalidación y refutación — evidencia: docs/specs/SE-473-contestable-lessons.spec.md
 - SE-480 [APPROVED] Vaults: RAG autónomo (recarga del registro y sincronización por el servicio) — evidencia: docs/specs/SE-480-vaults-rag-autonomous.spec.md
 - SE-481 [APPROVED] Vaults: clasificación con cierre seguro y polaridad en la búsqueda léxica — evidencia: docs/specs/SE-481-vaults-classification-fail-closed.spec.md
