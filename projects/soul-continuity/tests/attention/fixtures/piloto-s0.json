@@ -1,0 +1,244 @@
+{
+  "spec": "SE-514",
+  "slice": "S0",
+  "dominio": "Preguntas de agentes y PRs que esperan a la persona durante una orquestación de varios agentes",
+  "nota": "Datos inventados. Horas como {dia, hh, mm} desde el lunes de referencia de tests/attention/comun.ts. Configuración del operador: opA (ventanas 9-14 y 15-18 de lunes a viernes, descanso 22-07). Una tarjeta se identifica por su versión compuesta «id@versión»; dos decisiones se unen solo con el mismo tema y el mismo texto.",
+  "casos": [
+    {
+      "id": "C1",
+      "tipo": "caso",
+      "escena": 1,
+      "que_es": "Dos agentes preguntan la misma decisión sobre el mismo fichero",
+      "preguntas": [
+        {
+          "id": "c1-a",
+          "agente": "ag-1",
+          "trabajo": "trab-1",
+          "clase": "DECISION",
+          "tema": "orden-edicion-fichero-x",
+          "pregunta_a": {
+            "dia": 0,
+            "hh": 10,
+            "mm": 5
+          },
+          "que": "Dos agentes van a editar el mismo fichero. ¿Quién va primero?"
+        },
+        {
+          "id": "c1-b",
+          "agente": "ag-2",
+          "trabajo": "trab-2",
+          "clase": "DECISION",
+          "tema": "orden-edicion-fichero-x",
+          "pregunta_a": {
+            "dia": 0,
+            "hh": 10,
+            "mm": 6
+          },
+          "que": "Dos agentes van a editar el mismo fichero. ¿Quién va primero?"
+        }
+      ],
+      "esperado": {
+        "tarjetas_visibles": 1,
+        "una_respuesta_resuelve": [
+          "c1-a",
+          "c1-b"
+        ]
+      }
+    },
+    {
+      "id": "C2",
+      "tipo": "caso",
+      "escena": 3,
+      "que_es": "Permiso obligatorio de publicar pedido a las 23:30, en descanso",
+      "preguntas": [
+        {
+          "id": "c2-a",
+          "agente": "ag-1",
+          "trabajo": "trab-publicar",
+          "clase": "PERMISO",
+          "permiso": "publicar-informe",
+          "obligatoria": true,
+          "pregunta_a": {
+            "dia": 0,
+            "hh": 23,
+            "mm": 30
+          },
+          "caduca": {
+            "dia": 1,
+            "hh": 12,
+            "mm": 0
+          },
+          "que": "¿Publico el informe?"
+        }
+      ],
+      "esperado": {
+        "visibles_en_descanso": 0,
+        "puede_ejecutar_en_descanso": false,
+        "estado_trabajo_en_descanso": "EN_ESPERA",
+        "visible_en": {
+          "dia": 1,
+          "hh": 9,
+          "mm": 5
+        },
+        "puede_ejecutar_al_verla": false
+      }
+    },
+    {
+      "id": "C3",
+      "tipo": "caso",
+      "escena": 5,
+      "que_es": "La persona contesta a una versión anterior de una tarjeta que ha cambiado",
+      "preguntas": [
+        {
+          "id": "c3-a",
+          "agente": "ag-1",
+          "trabajo": "trab-3",
+          "clase": "DECISION",
+          "version": "v2",
+          "pregunta_a": {
+            "dia": 0,
+            "hh": 10,
+            "mm": 0
+          },
+          "que": "¿Renombro el módulo?"
+        }
+      ],
+      "respuesta": {
+        "version": "c3-a@v1",
+        "valor": "SI",
+        "a": {
+          "dia": 0,
+          "hh": 10,
+          "mm": 30
+        }
+      },
+      "esperado": {
+        "ok": false,
+        "motivo": "VERSION_CAMBIADA",
+        "vuelve_a_ensenar_version": "c3-a@v2"
+      }
+    },
+    {
+      "id": "X1",
+      "tipo": "contraejemplo",
+      "ac": "AC-4",
+      "que_es": "Dos permisos distintos con el mismo tema y el mismo texto parecen una sola pregunta",
+      "preguntas": [
+        {
+          "id": "x1-a",
+          "agente": "ag-1",
+          "trabajo": "trab-x1a",
+          "clase": "PERMISO",
+          "permiso": "publicar-informe",
+          "tema": "informe-semanal",
+          "pregunta_a": {
+            "dia": 0,
+            "hh": 10,
+            "mm": 0
+          },
+          "que": "¿Puedo seguir con el informe semanal?"
+        },
+        {
+          "id": "x1-b",
+          "agente": "ag-2",
+          "trabajo": "trab-x1b",
+          "clase": "PERMISO",
+          "permiso": "borrar-borrador",
+          "tema": "informe-semanal",
+          "pregunta_a": {
+            "dia": 0,
+            "hh": 10,
+            "mm": 1
+          },
+          "que": "¿Puedo seguir con el informe semanal?"
+        }
+      ],
+      "esperado": {
+        "tarjetas_visibles": 2,
+        "una_respuesta_resuelve": [
+          "x1-a"
+        ]
+      }
+    },
+    {
+      "id": "X2",
+      "tipo": "contraejemplo",
+      "que_es": "El reconciliador emite el mismo estado de una PR en cada pasada; parecen muchas peticiones",
+      "fuentes": {
+        "PR_REVISION": [
+          "pr-savia-100",
+          "pr-savia-100",
+          "pr-savia-100"
+        ]
+      },
+      "esperado": {
+        "peticiones": 1,
+        "duplicadas": 2
+      }
+    },
+    {
+      "id": "X3",
+      "tipo": "contraejemplo",
+      "ac": "AC-3",
+      "que_es": "Un permiso sin respuesta al vencer: el silencio parece consentir",
+      "preguntas": [
+        {
+          "id": "x3-a",
+          "agente": "ag-1",
+          "trabajo": "trab-x3",
+          "clase": "PERMISO",
+          "permiso": "publicar-x3",
+          "obligatoria": true,
+          "pregunta_a": {
+            "dia": 0,
+            "hh": 10,
+            "mm": 0
+          },
+          "caduca": {
+            "dia": 0,
+            "hh": 11,
+            "mm": 0
+          },
+          "que": "¿Publico el resultado?"
+        }
+      ],
+      "vencer_a": {
+        "dia": 0,
+        "hh": 11,
+        "mm": 0
+      },
+      "repreguntar_caduca": {
+        "dia": 0,
+        "hh": 13,
+        "mm": 0
+      },
+      "esperado": {
+        "estado_trabajo": "DEFER",
+        "puede_ejecutar": false,
+        "repreguntas_en_ventana": [
+          true,
+          false
+        ]
+      }
+    }
+  ],
+  "huecos_observados": [
+    {
+      "id": "H1",
+      "que_es": "La misma PR llega por dos fuentes distintas (PRs en revisión y «Esperan algo de ti»)",
+      "fuentes": {
+        "PR_REVISION": [
+          "pr-savia-200"
+        ],
+        "ESPERAN_ALGO": [
+          "pr-savia-200"
+        ]
+      },
+      "observado": {
+        "peticiones": 2,
+        "duplicadas": 0
+      },
+      "nota": "Hoy la cola solo une entradas de la misma fuente y el mismo id. No es un AC de S0; se fija aquí para que un cambio de comportamiento se vea."
+    }
+  ]
+}
