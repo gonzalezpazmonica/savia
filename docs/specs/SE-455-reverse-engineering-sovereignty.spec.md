@@ -1,5 +1,5 @@
 ---
-status: APPROVED
+status: IMPLEMENTED
 approved_at: 2026-10-23
 approved_by: "operadora, AskUserQuestion 2026-10-23"
 priority: P2
