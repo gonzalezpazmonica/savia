@@ -213,3 +213,68 @@ sweep_with_auditor() {  # sweep_with_auditor <cuerpo del auditor falso>
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.verdict == "PASS" and .compliant == 1' >/dev/null
 }
+
+# PATH mínimo con solo las órdenes que el barrido usa: permite simular la ausencia de jq o python3.
+# restricted_path <orden-excluida>...
+restricted_path() {
+  local bin="$BATS_TEST_TMPDIR/bin" c x skip
+  mkdir -p "$bin"
+  for c in bash dirname find sort grep cat python3 jq; do
+    skip=0
+    for x in "$@"; do [[ "$c" == "$x" ]] && skip=1; done
+    (( skip )) && continue
+    command -v "$c" >/dev/null 2>&1 && ln -sf "$(command -v "$c")" "$bin/$c"
+  done
+  echo "$bin"
+}
+
+# Corre el barrido con un auditor falso sin jq en el PATH y comprueba FAIL con 0 conformes.
+assert_sweep_rejects_without_jq() {  # <cuerpo del auditor falso>
+  local p="$BATS_TEST_TMPDIR/proj" bin
+  sweep_with_auditor "$1"   # prepara el proyecto copia (con jq: lo que importa es la siguiente)
+  bin=$(restricted_path jq)
+  [ ! -e "$bin/jq" ]
+  run env PATH="$bin" bash "$p/scripts/test-auditor-sweep.sh" --json
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'"verdict":"FAIL"'* && "$output" == *'"compliant":0'* ]]
+}
+
+@test "sin jq: un total válido seguido de basura no certifica" {
+  assert_sweep_rejects_without_jq "printf '%s' '{\"total\":100}basura'"
+}
+
+@test "sin jq: dos documentos en una línea no certifican" {
+  assert_sweep_rejects_without_jq "echo '{\"total\":100} {}'"
+}
+
+@test "sin jq: un total decimal no certifica" {
+  assert_sweep_rejects_without_jq "echo '{\"total\":100.5}'"
+}
+
+@test "sin jq: un entero enorme que desborda a 0..100 no certifica" {
+  # 18446744073709551716 = 2^64 + 100: en aritmética de bash de 64 bits vale 100.
+  assert_sweep_rejects_without_jq "echo '{\"total\":18446744073709551716}'"
+}
+
+@test "clave total repetida (0 y luego 100) no certifica" {
+  assert_sweep_rejects_without_jq "echo '{\"total\":0,\"total\":100}'"
+}
+
+@test "sin jq: un documento válido sobre el umbral sigue contando como conforme" {
+  local p="$BATS_TEST_TMPDIR/proj" bin
+  sweep_with_auditor "echo '{\"total\":90}'"
+  bin=$(restricted_path jq)
+  run env PATH="$bin" bash "$p/scripts/test-auditor-sweep.sh" --json
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"verdict":"PASS"'* && "$output" == *'"compliant":1'* ]]
+}
+
+@test "sin python3 no hay respaldo: un auditor válido puntúa 0 y el barrido sale FAIL" {
+  local p="$BATS_TEST_TMPDIR/proj" bin
+  sweep_with_auditor "echo '{\"total\":90}'"
+  bin=$(restricted_path python3)
+  [ ! -e "$bin/python3" ]
+  run env PATH="$bin" bash "$p/scripts/test-auditor-sweep.sh" --json
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'"verdict":"FAIL"'* && "$output" == *'"compliant":0'* ]]
+}

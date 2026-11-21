@@ -89,6 +89,25 @@ if [[ ${#TEST_FILES[@]} -eq 0 ]]; then
   exit 1
 fi
 
+# Lee por stdin la salida del auditor e imprime su "total" solo si es un único objeto JSON válido
+# con total entero (no booleano) en 0..100; si no, sale 1.
+PARSE_TOTAL_PY='
+import json, sys
+def no_dup(pairs):
+    keys = [k for k, _ in pairs]
+    if len(keys) != len(set(keys)):
+        raise ValueError("clave repetida")
+    return dict(pairs)
+try:
+    doc = json.loads(sys.stdin.read(), object_pairs_hook=no_dup)
+except ValueError:
+    sys.exit(1)
+t = doc.get("total") if isinstance(doc, dict) else None
+if type(t) is not int or not 0 <= t <= 100:
+    sys.exit(1)
+print(t)
+'
+
 # Audit each file
 declare -a RESULTS=()
 total=0
@@ -97,23 +116,19 @@ compliant=0
 for f in "${TEST_FILES[@]}"; do
   total=$((total + 1))
   rel=${f#$PROJECT_ROOT/}
-  # Run auditor, extract score (robust to missing jq)
+  # Run auditor, extract score
   # Auditor JSON uses "total" field, not "score".
   # El auditor sale con 1 bajo su umbral pero imprime su JSON igualmente: el respaldo solo
   # entra si no imprimió nada (con `|| echo` se concatenaban dos documentos y el score salía "68\n0").
   output=$(bash "$AUDITOR" "$f" 2>/dev/null)
   [[ -z "$output" ]] && output='{"total":0}'
-  # Solo vale un único documento JSON con "total" entero en 0..100. Dos documentos (aunque uno
-  # diga 100), un total fuera de rango o ilegible puntúan 0: la salida corrupta no certifica.
-  if command -v jq >/dev/null 2>&1; then
-    score=$(printf '%s\n' "$output" | jq -rs \
-      'if length == 1 and (.[0].total | type) == "number" then .[0].total else "x" end' 2>/dev/null)
-  elif [[ "$(printf '%s\n' "$output" | grep -cE '"total"[[:space:]]*:')" == 1 ]]; then
-    score=$(printf '%s\n' "$output" | grep -oE '"total"[[:space:]]*:[[:space:]]*[0-9]+' | grep -oE '[0-9]+$')
-  else
-    score=x
-  fi
-  [[ "$score" =~ ^[0-9]+$ ]] && (( 10#$score <= 100 )) || score=0
+  # Solo vale un único documento JSON (un objeto, sin basura detrás ni claves repetidas) con
+  # "total" entero en 0..100. Dos documentos (aunque uno diga 100), un total decimal, enorme,
+  # fuera de rango o ilegible puntúan 0: la salida corrupta no certifica. Un único analizador
+  # estricto (python3, el mismo intérprete que el motor del auditor): sin python3 no hay
+  # respaldo por expresiones regulares, todo puntúa 0 y el barrido sale FAIL.
+  score=$(printf '%s' "$output" | python3 -c "$PARSE_TOTAL_PY" 2>/dev/null) || score=x
+  [[ "$score" =~ ^[0-9]{1,3}$ ]] && (( 10#$score <= 100 )) || score=0
   score=$((10#$score))
   [[ "$score" -ge "$THRESHOLD" ]] && compliant=$((compliant + 1))
   RESULTS+=("$score|$rel")
