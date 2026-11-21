@@ -1,5 +1,5 @@
 ---
-status: APPROVED
+status: IMPLEMENTED
 approved_at: 2026-10-20
 approved_by: "operadora, AskUserQuestion 2026-10-20 (sprint nocturno de Savia)"
 priority: P0

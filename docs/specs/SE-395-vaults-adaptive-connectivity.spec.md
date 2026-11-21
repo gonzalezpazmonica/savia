@@ -1,5 +1,5 @@
 ---
-status: APPROVED
+status: IMPLEMENTED
 approval: "Operadora 2026-09-09: aprobación global de trabajo pendiente"
 priority: P1
 developer_type: agent-team

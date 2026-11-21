@@ -130,13 +130,14 @@ teardown() {
   CLAUDE_PROJECT_DIR="$repo" HOME="$TEST_HOME" bash "$hook_abs" <<< "" >/dev/null 2>&1
 
   local n=0
-  while [[ ! -f "$TEST_HOME/.savia/session-end-worker.log" && $n -lt 30 ]]; do
+  # esperar al contenido, no a que exista el fichero: el worker lo crea al redirigir y escribe después
+  while ! grep -q "worker-start" "$TEST_HOME/.savia/session-end-worker.log" 2>/dev/null && [[ $n -lt 100 ]]; do
     sleep 0.1; n=$((n+1))
   done
 
   cd "$BATS_TEST_DIRNAME/.."
   run cat "$TEST_HOME/.savia/session-end-worker.log"
-  [[ "$output" == *"feature/x"* || "$output" == *"worker-start"* ]]
+  [[ "$output" == *"worker-start | branch=feature/x"* ]]
   rm -rf "$repo"
 }
 

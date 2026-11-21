@@ -1,0 +1,10 @@
+{
+  "id": "SE-395",
+  "status": "IMPLEMENTED",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "priority": "P1",
+  "title": "Savia Vaults Adaptive Connectivity",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1635 (docs/evidence/graduacion-s27/SE-395.md). Con resto: Alcance recortado a F0-F3 (baseline, guidance, shadow, A/B, aislamiento V02). AC07-12 y AC16 se trasladan a SE-489. Slice propio que queda: AC16 (explain determinista) y enlazar el receipt al store de evidencia (AC15).",
+  "phase": "E",
+  "note": "Graduada con resto; el resto queda en la cola S27. Alcance recortado a F0-F3 (baseline, guidance, shadow, A/B, aislamiento V02). AC07-12 y AC16 se trasladan a SE-489. Slice propio que queda: AC16 (explain determinista) y enlazar el receipt al store de evidencia (AC15)."
+}

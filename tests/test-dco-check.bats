@@ -4,7 +4,7 @@
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   WF="$REPO_ROOT/.github/workflows/dco-check.yml"
-  T="$(mktemp -d "${BATS_TMPDIR:-$REPO_ROOT/.tmp-bats}/dco.XXXXXX")"
+  T="$(mktemp -d "$BATS_TEST_TMPDIR/dco.XXXXXX")"
   sed -n '/DCO-SCRIPT-BEGIN/,/DCO-SCRIPT-END/p' "$WF" | sed 's/^          //' > "$T/dco.sh"
   export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
   unset GIT_DIR GIT_WORK_TREE

@@ -1,0 +1,26 @@
+id: agent.context-dome-manager
+version: 1
+description: "Disena, audita y evoluciona cupulas de contexto; propone en modo plan, nunca edita cupulas a mano ni crea N4 sin la persona"
+input:
+  type: object
+  properties: {}
+safety:
+  effect: mutation
+  visibility: visible
+  reversibility: reversible
+  destructive: false
+  external_side_effect: false
+  human_gate: policy
+  scope: [workspace]
+execution:
+  handler: "agent context-dome-manager"
+laws:
+  - LAW-PRIV-001
+  - LAW-HUMAN-001
+enforcement:
+    - dome-guard
+    - vault-frontmatter-gate
+negative_tests:
+    - context-dome-manager-l4.bats
+receipt:
+  - plan de comandos vaults + metricas

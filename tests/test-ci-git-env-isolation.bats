@@ -53,6 +53,8 @@ mk_repo() { # mk_repo [rama]
   cp "$ROOT/scripts/validate-ci-local.sh" "$FX/scripts/"
   cp "$ROOT/scripts/lib/mock-env.sh" "$ROOT/scripts/lib/planning-completion.sh" "$FX/scripts/lib/"
   printf '#!/usr/bin/env bash\necho ok\n' > "$FX/scripts/coherence-gates.sh"
+  # SE-532 S1: el validador del catálogo (fail-closed sin .opencode/agents) se sustituye por un stub; su propio test lo cubre.
+  printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$FX/scripts/validate-agent-catalog.py"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$FX/.claude/hooks/lib/gate-result.sh"
   for f in LICENSE README.md CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md; do echo x > "$FX/$f"; done
   printf '# Changelog\n## [1.1.0]\n## [1.0.0]\n' > "$FX/CHANGELOG.md"
@@ -69,6 +71,15 @@ mk_repo() { # mk_repo [rama]
 
 ci() { # ci [args] — ejecuta en el repo falso sin comprobaciones de frescura
   (cd "$FX" && SAVIA_FRESH_CHECKS_FOR_TESTS=' ' SAVIA_LOCK_DIRS_FOR_TESTS=' ' SAVIA_AUTHORITY_REPORT=off bash "$V" "$@")
+}
+
+@test "S03k ci: un catálogo de agentes inválido bloquea (SE-532, negativo)" {
+  mk_repo
+  printf '#!/usr/bin/env python3\nimport sys\nprint("ERROR: catalogo roto")\nsys.exit(2)\n' > "$FX/scripts/validate-agent-catalog.py"
+  run ci
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Catálogo de agentes"* ]]
+  [[ "$output" == *"BLOCKED"* ]]
 }
 
 @test "S03k ci: repo sano termina en exit 0 con 'safe to push'" {

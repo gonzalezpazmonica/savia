@@ -1,0 +1,81 @@
+{
+  "scenario": "edge",
+  "agent": "recommendation-tribunal-orchestrator",
+  "cases": [
+    {
+      "id": "edge-low-risk-skipped",
+      "input": "risk_class low",
+      "expected": "devuelve PASS con skipped:true sin convocar jueces",
+      "checks": [
+        {"id": "skip-below-medium", "target": "agent", "must_match": "\\*\\*Skip\\*\\* if risk_class < medium"},
+        {"id": "skip-payload", "target": "agent", "must_match": "\\{\"verdict\":\"PASS\",\"skipped\":true\\}"}
+      ]
+    },
+    {
+      "id": "edge-timeout-never-blocks",
+      "input": "los jueces superan 3 s",
+      "expected": "WARN con reason timeout y los veredictos parciales; nunca bloquea el turno",
+      "checks": [
+        {"id": "hard-timeout-3s", "target": "agent", "must_match": "Hard timeout\\*\\* 3s wall-clock"},
+        {"id": "timeout-payload", "target": "agent", "must_match": "\\{\"verdict\":\"WARN\",\"reason\":\"timeout\"\\}"},
+        {"id": "never-block-turn", "target": "agent", "must_match": "NEVER block the turn entirely"}
+      ]
+    },
+    {
+      "id": "edge-veto-confidence-boundary-inclusive",
+      "input": "veto true con confidence exactamente 0.8",
+      "expected": "VETO: el umbral es >= 0.8",
+      "aggregate": {
+        "judges": [
+          {"judge": "memory-conflict", "score": 95, "veto": true, "confidence": 0.8},
+          {"judge": "rule-violation", "score": 95, "veto": false, "confidence": 0.9},
+          {"judge": "hallucination-fast", "score": 95, "veto": false, "confidence": 0.9},
+          {"judge": "expertise-asymmetry", "score": 95, "veto": false, "confidence": 0.9}
+        ],
+        "expect": {"exit": 0, "verdict": "VETO", "veto_judges": ["memory-conflict"]}
+      }
+    },
+    {
+      "id": "edge-veto-below-confidence-threshold",
+      "input": "veto true con confidence 0.79",
+      "expected": "no VETO: por debajo del umbral el veto no cuenta",
+      "aggregate": {
+        "judges": [
+          {"judge": "memory-conflict", "score": 95, "veto": true, "confidence": 0.79},
+          {"judge": "rule-violation", "score": 95, "veto": false, "confidence": 0.9},
+          {"judge": "hallucination-fast", "score": 95, "veto": false, "confidence": 0.9},
+          {"judge": "expertise-asymmetry", "score": 95, "veto": false, "confidence": 0.9}
+        ],
+        "expect": {"exit": 0, "verdict": "PASS", "veto_triggered": false}
+      }
+    },
+    {
+      "id": "edge-consensus-79-is-warn",
+      "input": "media de memory/rule/hallucination = 79",
+      "expected": "WARN (umbral < 80)",
+      "aggregate": {
+        "judges": [
+          {"judge": "memory-conflict", "score": 79, "veto": false, "confidence": 0.9},
+          {"judge": "rule-violation", "score": 79, "veto": false, "confidence": 0.9},
+          {"judge": "hallucination-fast", "score": 79, "veto": false, "confidence": 0.9},
+          {"judge": "expertise-asymmetry", "score": 100, "veto": false, "confidence": 0.9}
+        ],
+        "expect": {"exit": 0, "verdict": "WARN", "consensus_score": 79}
+      }
+    },
+    {
+      "id": "edge-consensus-80-is-pass",
+      "input": "media de memory/rule/hallucination = 80, expertise con 0",
+      "expected": "PASS: el limite 80 no es WARN y expertise-asymmetry no puntua",
+      "aggregate": {
+        "judges": [
+          {"judge": "memory-conflict", "score": 80, "veto": false, "confidence": 0.9},
+          {"judge": "rule-violation", "score": 80, "veto": false, "confidence": 0.9},
+          {"judge": "hallucination-fast", "score": 80, "veto": false, "confidence": 0.9},
+          {"judge": "expertise-asymmetry", "score": 0, "veto": false, "confidence": 0.9}
+        ],
+        "expect": {"exit": 0, "verdict": "PASS", "consensus_score": 80}
+      }
+    }
+  ]
+}
