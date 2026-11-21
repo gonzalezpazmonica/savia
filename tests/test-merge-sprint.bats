@@ -1623,3 +1623,14 @@ HOOK
   [ "$status" -eq 0 ]
   ms_hold_excluded 244
 }
+
+@test "HOLD-impl block: HOLD sobre la cabeza actual retiene aunque después se reapruebe A con el mismo rol" {
+  v2_repo; v2_pr 245 feature.txt contenido
+  local approved; approved=$(ms_hold_head 245)
+  main_moves main-1.txt avance; pr_absorbs_main 245
+  ms_hold_review_at 245 "$(ms_hold_head 245)" HOLD correctness 1
+  ms_hold_review_at 245 "$approved" APPROVE correctness
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  ms_hold_excluded 245
+}
