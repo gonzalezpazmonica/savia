@@ -6,23 +6,15 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   export SCRIPT="$REPO_ROOT/scripts/compile-agent-index.sh"
   AGENTS_DIR="$REPO_ROOT/.claude/agents"
-  INDEX_FILE="$REPO_ROOT/.claude/AGENTS-INDEX.md"
-  TMPDIR_AI=$(mktemp -d)
-
-  # Backup existing index if present
-  if [[ -f "$INDEX_FILE" ]]; then
-    cp "$INDEX_FILE" "${TMPDIR_AI}/AGENTS-INDEX.md.bak"
+  REAL_INDEX="$REPO_ROOT/.claude/AGENTS-INDEX.md"
+  TMPDIR_AI=$(mktemp -d "$BATS_TEST_TMPDIR/ai.XXXXXX")
+  # Cada test trabaja sobre una copia: el índice versionado no se reescribe, corrompe ni borra
+  # (la nocturna corre a la vez otras suites que leen el árbol real).
+  export AGENT_INDEX_FILE="$TMPDIR_AI/AGENTS-INDEX.md"
+  INDEX_FILE="$AGENT_INDEX_FILE"
+  if [[ -f "$REAL_INDEX" ]]; then
+    cp "$REAL_INDEX" "$INDEX_FILE"
   fi
-}
-
-teardown() {
-  # Restore backup
-  if [[ -f "${TMPDIR_AI}/AGENTS-INDEX.md.bak" ]]; then
-    mv "${TMPDIR_AI}/AGENTS-INDEX.md.bak" "$INDEX_FILE"
-  elif [[ -f "$INDEX_FILE" ]]; then
-    rm -f "$INDEX_FILE"
-  fi
-  rm -rf "$TMPDIR_AI"
 }
 
 # ── 1. Script existence and structure ────────────────────────────────────────
@@ -232,4 +224,17 @@ teardown() {
   local lines
   lines=$(wc -l < "$INDEX_FILE")
   [ "$lines" -gt 10 ]
+}
+
+# ── Aislamiento ──────────────────────────────────────────────────────────────
+
+@test "compile con AGENT_INDEX_FILE escribe ahí y no toca el índice versionado" {
+  [ -f "$REAL_INDEX" ]
+  before=$(sha256sum < "$REAL_INDEX")
+  : > "$INDEX_FILE"
+  run bash "$SCRIPT" compile
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"$INDEX_FILE"* ]]
+  grep -q "Auto-generated" "$INDEX_FILE"
+  [ "$(sha256sum < "$REAL_INDEX")" = "$before" ]
 }

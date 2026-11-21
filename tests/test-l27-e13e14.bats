@@ -15,16 +15,36 @@ assert d['revisor_good']['auc'] >= 0.6
 "
 }
 
-@test "L27-E13: piloto real sobre audit log de savia-gates (resumen sin contenido)" {
-  out=$(python3 "$ROOT_DIR/scripts/l27-auditor-auditor.py" 2>/dev/null)
+@test "L27-E13: piloto sobre un audit log de savia-gates (resumen sin contenido)" {
+  # El piloto leía el log real de la persona (carpeta de auditoría del HOME): inexistente en CI y privado.
+  # Se prueba con un log sintético pasado por --audit; sin eventos de gate no hay resumen.
+  log="$BATS_TEST_TMPDIR/savia-gates.jsonl"
+  {
+    echo '{"event":"tool-blocked","tool":"bash","ts":"2026-11-01T10:00:00Z","detail":"SECRETO-NO-DEBE-SALIR"}'
+    echo '{"event":"tool-blocked","tool":"bash","ts":"2026-11-02T10:00:00Z"}'
+    echo '{"event":"post-hook-warning","tool":"edit","ts":"2026-11-02T11:00:00Z"}'
+    echo 'linea que no es json'
+  } > "$log"
+  out=$(python3 "$ROOT_DIR/scripts/l27-auditor-auditor.py" --audit "$log" 2>/dev/null)
+  [[ "$out" != *"SECRETO-NO-DEBE-SALIR"* ]]
   echo "$out" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 g=d.get('gates_savia')
 assert g, 'sin audit'
-assert g['total_eventos_gate'] > 0
-assert 'bloqueos' in g and 'avisos' in g
-assert 'concentracion_top_tool' in g
+assert g['total_eventos_gate'] == 3, g
+assert g['bloqueos'] == {'bash': 2}, g
+assert g['avisos'] == {'edit': 1}, g
+assert g['concentracion_top_tool'] == round(2/3, 3), g
+"
+}
+
+@test "L27-E13: sin audit log no hay resumen de gates (negativo)" {
+  out=$(python3 "$ROOT_DIR/scripts/l27-auditor-auditor.py" --audit "$BATS_TEST_TMPDIR/no-existe.jsonl" 2>/dev/null)
+  echo "$out" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+assert not d.get('gates_savia'), d
 "
 }
 

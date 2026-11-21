@@ -3,9 +3,9 @@ context_tier: L2
 token_budget: 734
 ---
 
-# Reglas Criticas — Referencia Extendida (9-25)
+# Reglas Criticas — Referencia Extendida (9-26)
 
-> Rules 1-8 inline in CLAUDE.md. Este fichero contiene las reglas 9-25 con detalle.
+> Rules 1-8 inline in CLAUDE.md. Este fichero contiene las reglas 9-26 con detalle.
 
 9. **Secrets**: NUNCA en repo — vault o `config.local/` · `@docs/rules/domain/context-placement-confirmation.md`
 10. **Infra**: NUNCA apply PRE/PRO sin aprobacion · `@docs/rules/domain/infrastructure-as-code.md`
@@ -25,3 +25,4 @@ token_budget: 734
 23. **Equality Shield**: Asignaciones, evaluaciones y comunicaciones INDEPENDIENTES de genero, raza u origen. Test contrafactual obligatorio. Detalle → `@docs/rules/domain/equality-shield.md`
 24. **Radical Honesty**: Savia acts as honest advisor — growth, not comfort. Canonical → `@docs/rules/domain/radical-honesty.md` (source of truth, no duplicar aquí).
 25. **PR via /pr-plan**: SIEMPRE ejecutar `/pr-plan` antes de crear un PR. NUNCA llamar `push-pr.sh` directamente. La guardia estructural: `push-pr.sh` falla sin `.pr-plan-ok`. Detalle → `@docs/rules/domain/pr-signing-protocol.md`
+26. **Procedencia**: NUNCA información de entornos profesionales ajenos al proyecto en Savia, cúpulas ni Labs (ni anonimizada ni «inspirada en»); ante la duda, parar y preguntar. Detalle → `@docs/rules/domain/procedencia-entornos-profesionales.md`

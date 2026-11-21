@@ -27,14 +27,14 @@ print(sum(1 for v in b.values() if v == 'deny'))
   [ "$count" -ge 3 ]
 }
 
-@test "AC-01: opencode-sandbox declared in plugin array" {
+@test "AC-01: opencode-sandbox ya no se declara (OpenCode 2 no lo carga, #1323)" {
+  # Decisión deliberada de #1323: un plugin declarado que no carga da falsa sensación de capa B.
   python3 -c "
 import json
 with open('$OC_CONFIG') as f: d = json.load(f)
-assert 'opencode-sandbox' in d.get('plugin',[]), 'opencode-sandbox missing from plugin[]'
+assert 'opencode-sandbox' not in d.get('plugin',[]), 'opencode-sandbox declarado pero V2 no lo carga'
 "
 }
-
 @test "AC-08a: default-readonly.yaml valid with filesystem and network" {
   [ -f "$POLICY_DIR/default-readonly.yaml" ]
   grep -q "filesystem:" "$POLICY_DIR/default-readonly.yaml"
@@ -110,16 +110,15 @@ assert 'opencode-sandbox' in d.get('plugin',[]), 'opencode-sandbox missing from 
   python3 -c "import json; json.load(open('$OC_CONFIG'))"
 }
 
-@test "opencode.json has experimental.sandbox block" {
+@test "opencode.json: experimental sin bloque sandbox muerto y con subagent_depth (#1323)" {
   python3 -c "
 import json
 with open('$OC_CONFIG') as f: d = json.load(f)
-s = d.get('experimental',{}).get('sandbox',{})
-assert 'fail_if_unavailable' in s
-assert 'policy_dir' in s
+e = d.get('experimental',{})
+assert 'sandbox' not in e, 'experimental.sandbox no lo lee OpenCode 2'
+assert e.get('subagent_depth') == 2
 "
 }
-
 # ── S03r: el doctor sobre un árbol aislado, por comportamiento ───────────────
 # Ref: SPEC-149, docs/rules/domain/sandbox-os-policy.md. PATH contiene solo
 # stubs (bwrap, docker, uname) y los binarios que el script necesita, así que

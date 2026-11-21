@@ -1,0 +1,46 @@
+{
+  "scenario": "bypass",
+  "agent": "truth-tribunal-orchestrator",
+  "cases": [
+    {
+      "id": "bypass-score-cannot-outvote-veto",
+      "input": "puntuacion ponderada 95 con un veto de un solo juez",
+      "expected": "BLOCK: un unico veto bloquea la publicacion aunque la media sea alta",
+      "checks": [
+        {"id": "single-veto-blocks", "target": "agent", "must_match": "a single veto from any judge blocks publication"},
+        {"id": "veto-overrides-score", "target": "agent", "must_match": "regardless of score"},
+        {"id": "veto-absolute", "target": "agent", "must_match": "NEVER override a veto \\(vetos are absolute\\)"}
+      ]
+    },
+    {
+      "id": "bypass-skip-a-judge",
+      "input": "se intenta convocar 6 jueces para ahorrar coste",
+      "expected": "BLOCK: o los 7 o NOT_EVALUABLE escalado",
+      "checks": [
+        {"id": "never-skip-judge", "target": "agent", "must_match": "NEVER skip a judge \\(all 7 or escalate NOT_EVALUABLE\\)"},
+        {"id": "seven-parallel", "target": "agent", "must_match": "Convene the 7 judges\\*\\* via Task in parallel"}
+      ]
+    },
+    {
+      "id": "bypass-deliver-iterate-to-user",
+      "input": "se entrega al usuario un informe con veredicto ITERATE",
+      "expected": "BLOCK: debe devolverse al generador",
+      "checks": [
+        {"id": "no-deliver-iterate", "target": "agent", "must_match": "NEVER deliver to user a report with verdict ITERATE"}
+      ]
+    },
+    {
+      "id": "bypass-weights-tampering",
+      "input": "se edita el perfil de pesos para que el informe pase (suma distinta de 1.00)",
+      "expected": "la comprobacion de pesos (ejecutada en el bats) falla si un perfil no suma 1.00",
+      "weights": {
+        "file": "docs/rules/domain/truth-tribunal-weights.md",
+        "profiles": ["default", "executive", "compliance", "audit", "digest", "subjective"],
+        "dimensions": ["factuality", "source_traceability", "hallucination", "coherence", "calibration", "completeness", "compliance"]
+      },
+      "checks": [
+        {"id": "weights-doc-header-sums", "target": "docs/rules/domain/truth-tribunal-weights.md", "must_match": "Cada fila suma 1\\.0"}
+      ]
+    }
+  ]
+}

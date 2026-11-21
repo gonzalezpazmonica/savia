@@ -1,0 +1,42 @@
+{
+  "scenario": "edge",
+  "agent": "truth-tribunal-orchestrator",
+  "cases": [
+    {
+      "id": "edge-majority-abstention",
+      "input": "4 o mas de los 7 jueces se abstienen",
+      "expected": "veredicto NOT_EVALUABLE y escalado a humano; no se publica ni se itera",
+      "checks": [
+        {"id": "abstain-threshold", "target": "agent", "must_match": "If ≥4 of 7 judges abstain, emit `verdict: NOT_EVALUABLE`"},
+        {"id": "abstain-escalates", "target": "agent", "must_match": "escalate\\s*$|and escalate"}
+      ]
+    },
+    {
+      "id": "edge-third-iteration-forces-escalate",
+      "input": "iteration == 3 y el veredicto sigue en ITERATE",
+      "expected": "se fuerza ESCALATE; el bucle no es infinito",
+      "checks": [
+        {"id": "iteration-cap", "target": "agent", "must_match": "After `iteration == 3` with still ITERATE → force verdict ESCALATE"},
+        {"id": "iteration-increments", "target": "agent", "must_match": "`iteration: current\\+1`"}
+      ]
+    },
+    {
+      "id": "edge-timeout",
+      "input": "se supera MAX_TRIBUNAL_TIMEOUT_SEC",
+      "expected": "NOT_EVALUABLE escalado, no PASS por defecto",
+      "checks": [
+        {"id": "timeout-escalates", "target": "agent", "must_match": "MAX_TRIBUNAL_TIMEOUT_SEC exceeded → escalate NOT_EVALUABLE"},
+        {"id": "judge-budget-cap", "target": "agent", "must_match": "if any judge exceeds 2× its budget, emit warning"}
+      ]
+    },
+    {
+      "id": "edge-undeclared-report-type",
+      "input": "informe sin report_type",
+      "expected": "se usa el perfil default, no uno arbitrario",
+      "checks": [
+        {"id": "default-profile", "target": "agent", "must_match": "If `report_type` not declared → default"},
+        {"id": "default-profile-exists", "target": "docs/rules/domain/truth-tribunal-weights.md", "must_match": "^### default \\(sin tipo declarado\\)$"}
+      ]
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# nightly: serial (compara el estado del árbol antes y después; otra suite escribiendo a la vez lo falsea)
 # Ref: SE-339 — test-coverage-ratchet.sh (AC-4: conteo, umbral, detección)
 # Spec: docs/specs/SE-339-test-coverage-ratchet.spec.md
 
