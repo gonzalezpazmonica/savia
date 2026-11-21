@@ -1,1 +1,0 @@
-- learning-recall-hook lee el campo «prompt» que manda Claude Code en UserPromptSubmit; sin él no inyectaba ni registraba lecciones.
