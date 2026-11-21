@@ -37,8 +37,10 @@ fi
 
 if [[ "$STRING_COMMAND" -eq 1 && -n "$COMMAND" ]]; then
   COMMAND_LOWER="${COMMAND,,}"
-  # Sin comillas ni barras: `gi''t co\mmit` es git commit para bash.
-  COMMAND_LOWER_PLAIN=$(printf '%s' "$COMMAND_LOWER" | tr -d "\"'\\\\")
+  # Sin comillas ni barras: `gi''t co\mmit` es git commit para bash. Antes se borran
+  # las continuaciones de línea (`\` + salto), como hace bash: `gi\<salto>t` es `git`.
+  COMMAND_LOWER_PLAIN="${COMMAND_LOWER//$'\\\r\n'/}"; COMMAND_LOWER_PLAIN="${COMMAND_LOWER_PLAIN//$'\\\n'/}"
+  COMMAND_LOWER_PLAIN=$(printf '%s' "$COMMAND_LOWER_PLAIN" | tr -d "\"'\\\\")
   RELEVANCE_ERE='(^|[^a-z0-9_])(git|rm|chmod|curl|gh|sudo|commit)([^a-z0-9_]|$)'
   # The legacy grep rules are intentionally not rewritten in F5A. Keep their
   # historical embedded-word matches on the full path as a conservative guard.
@@ -88,11 +90,13 @@ guard_main_target() {
 # Prefiltro amplio sobre el texto sin comillas ni barras (como el resolvedor y
 # el guard TS: `gi''t co\mmit` también cuenta). `git` solo basta (un alias
 # puede hacer commit) y `commit` solo también (`$x commit` con x=git). Qué es
-# una orden real lo decide el resolvedor.
-_PLAIN=$(printf '%s' "$COMMAND" | tr -d "\"'\\\\")
+# una orden real lo decide el resolvedor. Antes se borran las continuaciones de
+# línea (`\` + salto), como hace bash: `gi\<salto>t` es `git`. `stage` = `add`.
+_PLAIN="${COMMAND//$'\\\r\n'/}"; _PLAIN="${_PLAIN//$'\\\n'/}"
+_PLAIN=$(printf '%s' "$_PLAIN" | tr -d "\"'\\\\")
 _HAS_GIT=""; _HAS_OP=""
 echo "$_PLAIN" | grep -iqE '(^|[^[:alnum:]_])git([^[:alnum:]_]|$)' && _HAS_GIT=1
-echo "$_PLAIN" | grep -iqE '(^|[^[:alnum:]_-])(commit(-tree)?|add)([^[:alnum:]_-]|$)' && _HAS_OP=1
+echo "$_PLAIN" | grep -iqE '(^|[^[:alnum:]_-])(commit(-tree)?|add|stage)([^[:alnum:]_-]|$)' && _HAS_OP=1
 if [[ -n "$_HAS_GIT" ]] || echo "$_PLAIN" | grep -iqE '(^|[^[:alnum:]_-])commit(-tree)?([^[:alnum:]_-]|$)'; then
   GIT_DIR_TARGET="${CLAUDE_PROJECT_DIR:-${OPENCODE_PROJECT_DIR:-$PWD}}"
   if git -C "$ENTRY_PWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -120,9 +124,10 @@ if [[ -n "$_HAS_GIT" ]] || echo "$_PLAIN" | grep -iqE '(^|[^[:alnum:]_-])commit(
         guard_main_target "$GIT_DIR_TARGET"
       fi
     done <<< "$OP_TARGETS"
-  elif [[ -n "$_HAS_GIT" && -n "$_HAS_OP" ]]; then
-    # Sin Python, timeout o fallo del resolvedor: fail-closed (solo lo que dice
-    # git y commit|add; el prefiltro amplio dejaría sin servicio `git status`).
+  elif [[ -n "$_HAS_GIT" && -n "$_HAS_OP" ]] \
+       || echo "$_PLAIN" | grep -iqE '(^|[^[:alnum:]_-])commit(-tree)?([^[:alnum:]_-]|$)'; then
+    # Sin Python, timeout o fallo del resolvedor: fail-closed con git y commit|add|stage,
+    # o con `commit` solo (`"$x" -C … commit`, x=git). `git status` sigue pasando.
     echo "BLOQUEADO: resolvedor de destino no disponible para git commit/add (fail-closed). Forma admitida: git -C <ruta> commit …" >&2
     exit 2
   fi
