@@ -37,6 +37,9 @@ current_wave: 0            # 0 = baseline freeze (curation aún no ejecutada)
 # 24 Calibrated -> deuda 116/140 (sin cambio: promover a stable edita .claude/, pendiente de la
 # operadora). Con las dos en stable la deuda sería 114/140; ambas leen Calibrated en copia temporal
 # con SKILL_AUDIT_ROOT. Ratchet intacto (baseline wave 0 = 133).
+# 2026-11-21 (remedición, S03 grupo 6): onboarding-dev tratada (setup-memory.sh, test 85). La deuda
+# sigue en 116/140 en el repo: promover a stable edita .claude/, pendiente de la operadora.
+# Ratchet intacto (baseline wave 0 = 133).
 waves:
   0: 133                   # baseline +1 2026-09-05 (social-linkedin nueva, no calibrada aun)
   1: 95                    # tras curation wave 1 (DELETE de stubs + REFACTOR rápidos)
