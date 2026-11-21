@@ -103,7 +103,7 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
   Necesidad: media; urgencia: baja; valor: alto; desbloqueo: las lecciones y la evidencia de Savia Viva se sirven desde Vaults; esfuerzo: SE-489 decisión; SE-486 media.
 
 - **S14 · P2 · fase D** — Higiene de contexto, instalación y operación
-  Acción: SE-448 S0 y canario; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-472 se retira si ese bucle ya no se usa. SE-464 sin dependientes: se decide al llegar; SE-506 aplazada. SE-449, SE-450 y SE-454 aparcadas (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): no se ejecutan hasta reactivarlas.
+  Acción: SE-448 S0 y canario; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 retirada el 2026-11-20 (el bucle nocturno que gobernaba no se usa). SE-464 sin dependientes: se decide al llegar; SE-506 aplazada. SE-449, SE-450 y SE-454 aparcadas (DEFERRED desde 2026-11-18, propuesta pendiente de confirmar): no se ejecutan hasta reactivarlas.
   Entrada: Specs aprobadas salvo SE-464 (PROPOSED) y SE-506 (aplazada); se ejecutan por separado, una por vez; sin hueco WIP nuevo.
   Salida: Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición.
   Necesidad: media; urgencia: baja; valor: medio; desbloqueo: reduce superficie sin bloquear otras fases; esfuerzo: slices pequeños independientes.
@@ -185,7 +185,6 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-468 [APPROVED] El gate de evals debe poder fallar — evidencia: docs/specs/SE-468-honest-evals-gate.spec.md
 - SE-470 [APPROVED] Integridad de los artefactos de evaluación — evidencia: docs/specs/SE-470-eval-artifact-integrity.spec.md
 - SE-471 [APPROVED] Relevo nocturno con evidencia: declarado, validado y aceptado — evidencia: docs/specs/SE-471-overnight-handoff-evidence-digest.spec.md
-- SE-472 [APPROVED] Vigencia de la autoridad comprobada antes de cada tarea nocturna — evidencia: docs/specs/SE-472-overnight-per-task-authority-check.spec.md
 - SE-473 [APPROVED] Lecciones contrastables: ámbito, evidencia, revalidación y refutación — evidencia: docs/specs/SE-473-contestable-lessons.spec.md
 - SE-480 [APPROVED] Vaults: RAG autónomo (recarga del registro y sincronización por el servicio) — evidencia: docs/specs/SE-480-vaults-rag-autonomous.spec.md
 - SE-481 [APPROVED] Vaults: clasificación con cierre seguro y polaridad en la búsqueda léxica — evidencia: docs/specs/SE-481-vaults-classification-fail-closed.spec.md

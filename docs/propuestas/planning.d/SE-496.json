@@ -3,7 +3,7 @@
   "status": "APPROVED",
   "priority": "P1",
   "title": "Ontología operativa gobernada: la autoridad vive fuera del modelo",
-  "note": "Contrato único de delegación (Principal/Capability/Authority/Effect) firmado ed25519 contra los firmantes de origin/main, con ámbito cerrado, precondiciones, efectos declarados y vencimiento. Kernel determinista en Python stdlib fuera del LLM, deny por defecto y sin caché; el grafo y las cúpulas solo sugieren. Ontología mínima sobre los descriptores de SE-386 con dueño declarado por atributo. 15 denegaciones con gemelo positivo (revocación local y en main, entre evaluar y ejecutar, datos ambiguos, autoridad inferida). F0 tests, F1 sombra sobre SE-343/SE-491; F2 solo con nueva decisión.",
+  "note": "F0 (kernel, ontología, batería; AC-1..9, 5b, 5c, 6b, 12, 13) fusionada en #1528 (b9b7f5543) y F1 (sombra SE-343; AC-10) en #1617 (3ee954bdd). Pendiente: AC-11 y F2, que solo salen con nueva decisión de la operadora tras el informe de 14 días de F1. Sin consumidor que decida con el kernel. Estado real con código: F0 (#1528, b9b7f5543) y F1 (#1617, 3ee954bdd) fusionadas; se mantiene APPROVED porque pasar a IMPLEMENTING supera el límite de WIP (7 > 6): decisión pendiente de la operadora.",
   "evidence": "docs/specs/SE-496-governed-operational-ontology-authority.spec.md",
   "phase": "B",
   "approval": "Operadora, pregunta interactiva 2026-11-09 («Savia Viva + tokens y efectos»), con escenas confirmadas («Confirmo las escenas»); se formaliza al fusionar la PR (SE-488)"

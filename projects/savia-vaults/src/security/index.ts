@@ -145,34 +145,6 @@ export class VaultSecurity {
       throw new SecurityError(`Path exceeds max depth of ${this.config.maxDepth}`);
     }
   }
-
-  guardRead(relativePath: string): string {
-    const { abs: absPath, rel } = this.contain(relativePath);
-    this.checkDenied(rel);
-
-    if (fs.existsSync(absPath)) {
-      this.checkSymlink(absPath);
-      this.checkExtension(absPath);
-      const stat = fs.statSync(absPath);
-      if (stat.size > this.config.maxFileSize) {
-        throw new SecurityError(`File exceeds max size of ${this.config.maxFileSize}`);
-      }
-    }
-
-    return absPath;
-  }
-
-  guardWrite(relativePath: string): string {
-    const { abs: absPath, rel } = this.contain(relativePath);
-    this.checkDenied(rel);
-
-    const dir = path.dirname(absPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    return absPath;
-  }
 }
 
 
