@@ -1,5 +1,7 @@
 ---
 status: APPROVED
+approved_at: 2026-11-09
+approved_by: "operadora, pregunta interactiva 2026-11-09 («Savia Viva + tokens y efectos»), con escenas confirmadas; formalizada al fusionar #1497"
 priority: P1
 developer_type: agent-single
 created: 2026-11-01

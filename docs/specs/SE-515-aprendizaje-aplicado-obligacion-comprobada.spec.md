@@ -142,3 +142,60 @@ S1 (recall trazado) APPROVED por la operadora el 2026-11-10 por pregunta interac
 - **Reutilizar P10.** El resultado de la ablación recall encendido/apagado (AC-5) es también la evidencia de «con/sin lección» que S09 necesita para valorar la supervisión. Se publica en un formato que S09 pueda leer (caso, decisión con y sin recall, coste observado); no hay S5 ni informe aparte.
 - **Sin comparación de modalidades de supervisión aquí.** Qué estrategia de revisión rinde más dentro de un techo de permisos no es aprendizaje exigible; lo estudia, si procede, S09. Ningún resultado de esa comparación cambia la fuerza `advisory`/`review_required`/`guarded` de una lección.
 - **Dónde se anota la hipótesis.** En la sesión S09 de `docs/propuestas/planning-state.json` (fuente canónica); `docs/propuestas/ROADMAP-CURRENT.md` se regenera con `scripts/roadmap.sh render`, sin edición manual.
+
+## Rediseño 2026-11-20 (propuesto, pendiente de la operadora)
+
+> Estado: **propuesto**. No cambia el `status` de la spec ni desaparca nada: lo aprueba o lo rechaza la operadora. Hasta entonces S3–S4 siguen aparcadas en la cola (`parked` de S34 en `planning-state.json`). Leído en origin/main 6d42ab1bc.
+
+### Qué dependía de SE-493 y SE-513
+
+- **S3** no cita SE-493 en su entrada (S2 con GO y aprobación auténtica). El vínculo venía de dos sitios: la línea de Riesgos («S3 y S4 no empiezan mientras SE-493, SE-497 y SE-498 sigan PROPOSED») y la sesión S34 de la cola, que agrupa S3 y S4. La nota de retirada de SE-513 dice que «SE-515 S3 ya no puede apoyarse en la admisión de SE-513»; leída esta spec, la admisión aparece en **S2** (consulta «en la admisión de trabajo de riesgo»), no en S3.
+- **S4** sí: «SE-493 y SE-498 implementadas en la ruta». SE-493 aportaba el registro del efecto (`prepare`/`dispatch`) donde el recibo de la resolución quedaba atado al efecto concreto y se comprobaba en la transacción del despacho.
+
+### S3 rediseñado — un dominio `guarded` en `push-pr.sh`
+
+Sin cambio de fondo. Se corrigen la entrada y el riesgo.
+
+- **Ruta piloto (verificada).** `scripts/push-pr.sh`: sus pasos 0–5 salen con `exit 1` ante fallo (`:43-46` plan previo, `:61-64` árbol limpio, `:69` CI local, `:74` CHANGELOG, `:79` confidencialidad) y el efecto es `git push` en `:82`. El verificador de la obligación piloto va como un paso más antes de `:82`, con el mismo `exit 1`.
+- **Límite declarado.** `push-pr.sh` no es la única forma de publicar: un `git push` directo lo esquiva. G4 se declara «en `push-pr.sh`», y `git push` directo queda `NOT_GUARANTEED`, como ya dice «G4 se declara por ruta».
+- **Entrada corregida.** S2 con GO y una aprobación auténtica **ya implementada y fusionada** (SE-488 en estado IMPLEMENTED; SE-497 parte 2 solo cuenta cuando deje de estar PROPOSED). Un estado PROPOSED o IMPLEMENTING no vale como entrada. Sin SE-493 y sin SE-498.
+- **AC-12 y AC-13**: sin cambios.
+
+**Qué se pierde:** nada de S3. Los pasos 0–5 de `push-pr.sh` están dentro de `if ! $MERGE` (`:42`): la ruta `--merge` no ejecuta el verificador (ahí no se empuja, SE-343) y queda fuera de la garantía. Además el `git push` de `:82` va en una tubería a `tail` con `set -euo pipefail` (`:6`): un push fallido sí hace fallar la tubería y dispara el reintento, que es un `git push --force-with-lease` automático. Eso fuerza el push sin decisión humana; el verificador va antes y no lo cubre, y decidir si ese reintento debe existir es una cuestión aparte de este rediseño. Lo que S3 nunca tuvo (garantía fuera de `push-pr.sh`) sigue sin tenerlo. La documentación de cara a la persona para un dominio `guarded` repite el límite: `--merge` y el `git push` directo son `NOT_GUARANTEED`, y «guarded» no es una garantía de publicación.
+
+### S4 rediseñado — revalidación sobre el recibo que ya existe
+
+La revalidación no necesita un libro: compara, en el gate y justo antes del efecto, lo que valía al planificar con lo que vale ahora. Las piezas existen o las entrega S2:
+
+| Dimensión | Fuente | Dónde | Campos |
+|---|---|---|---|
+| Recurso (contenido que se publica) | Recibo de revisión v2 | `scripts/receipt-v2.sh:84-85` (`output/receipts/<rama>.receipt.json`), `:170-184` | `branch`, `commit_sha`, `tree_hash`, `paths` (hash por fichero), `signed_at`; `verify` detecta contenido cambiado |
+| Política (lección u obligación aplicada) | Recibo de resolución de S2 | Lo entrega S2 («recibo sin contenido sensible») | Identificador y hash de la entrada de `CRITERIO.md` o de la LP, versión, fuerza |
+| STOP | Plano de control de SE-498 | `savia-control.py epoch` y `check` (SE-498 F0, aún sin implementar) | época efectiva, `stop_seq` del ámbito |
+| Contrato | Kernel de SE-496 | `recheck` (solo si la ruta tiene contrato) | `state_digest` |
+
+**Regla.** El paso nuevo de `push-pr.sh`, antes de `:82`: (1) `receipt-v2.sh verify` debe dar `RECEIPT VALID`; (2) el hash de la política en el recibo de S2 debe coincidir con el de la entrada actual; (3) la época y el `stop_seq` guardados en el recibo de S2 deben coincidir con los de `savia-control.py`. Si algo cambió, falta o no se puede leer, no se publica y se pide repetir la comprobación (fail-closed). No se reutiliza el paso `g0b` de `scripts/pr-plan-gates.sh:22-37`, que deja pasar si falta el script: aquí la ausencia bloquea.
+
+**Rastro.** (Origen de la época y `stop_seq` de la regla (3): el recibo de S2 no los lleva hoy, así que S2 se enmienda para guardarlos en el recibo, leídos de `savia-control.py` al planificar y cubiertos por el hash del recibo. No se admite un fichero aparte junto al recibo: podría quedar obsoleto o ser manipulado sin que `receipt-v2.sh verify` lo vea.) El veredicto de cada revalidación (`PASS`, `STALE_POLICY`, `STALE_CONTENT`, `STALE_EPOCH`, `UNREADABLE`) se anota con `scripts/session-action-log.sh log` (`output/session-action-log.jsonl`, campos `ts`, `action`, `target`, `result`, `detail`), que `push-pr.sh` ya usa en `_supervisor`. No es un libro de efectos ni prueba de integridad: `output/session-action-log.jsonl` no está encadenado ni firmado, a diferencia del ledger del merge-sprint; es una pista, no una garantía.
+
+**Entrada corregida.** S3 con GO y SE-498 F0 implementada (época y `stop_seq`). Sin SE-493. **D3(a) con premisa abierta:** separar S3 no resuelve el punto «preparación de efecto» de S2; hasta que se enmiende, S3 puede empezar solo sobre la admisión de trabajo de riesgo, y S4 queda bloqueada por esa enmienda (consta en D4). **Enmienda a S2 (no hecha aquí):** S4 exige que el recibo de S2 guarde época y `stop_seq`; esa enmienda hay que aprobarla junto con D4. Además, S2 consulta «en la admisión de trabajo de riesgo **y preparación de efecto**»; la preparación de efecto es el `prepare` de SE-493, retirado. Este rediseño no reescribe ese punto de S2 y lo deja como hallazgo abierto: «S3 puede empezar cuando S2 dé GO» (D3a) presupone un S2 cuyo punto de preparación de efecto aún se apoya en SE-493.
+
+**Quién verifica los campos nuevos.** `receipt-v2.sh verify` solo compara `tree_hash` y `paths` (y excluye `CHANGELOG`); el recibo de S2 no pasa por él. La comprobación de la regla (3) la hace el paso nuevo de `push-pr.sh`, que lee época y `stop_seq` del recibo y los compara con `savia-control.py`; ese paso es el único dueño de esa integridad y no se delega en `verify`. Sin esa comprobación, la regla (3) vale lo que un fichero editable.
+
+**Límite del recibo.** `receipt-v2.sh` (`sign`, `verify`) calcula sha256 sin clave y compara con `grep`: no es HMAC ni firma. Quien pueda escribir `output/receipts/` puede forjar un recibo con época y `stop_seq` vigentes y pasar la revalidación. El rediseño no lo cierra: la regla (3) protege contra el olvido y la deriva, no contra un escritor malicioso del directorio. Una firma con clave del recibo es **precondición de S4** (si no, un gate que falla cerrado se presenta como una garantía que no es); sin ella S4 no se implementa. **AC-14′ (nuevo):** caso «recibo forjado» (recibo escrito a mano con época y `stop_seq` vigentes) declarado `NOT_GUARANTEED` en la documentación y en el test, que afirma que S4 no lo detecta; cerrarlo exige firma con clave. **Hallazgo abierto (HA-1):** el reintento automático `git push --force-with-lease` de `push-pr.sh` fuerza el push sin decisión humana y queda fuera de S3–S4; se registra aquí para que la operadora decida si abre tarea (no se abre sin su aprobación).
+
+**Criterios de aceptación rediseñados (sustituyen a AC-14; AC-15 y AC-17 sin cambios).**
+
+- **AC-14′.** Con recibo de S2 y `receipt-v2` válidos, la publicación pasa (positivo: sin él, un gate que bloquease todo cumpliría el AC). Cambiar la entrada de política, cambiar un fichero revisado o hacer `pause` + `resume` entre el recibo y el `push` (época o `stop_seq` distintos) bloquea con su motivo y el stub de `git push` no recibe la llamada. **Negativos:** recibo de S2 ausente, `receipt-v2.sh` ausente o `savia-control.py` saliendo con 2 → bloqueo (`UNREADABLE`), nunca paso. **Mutación:** un gate que solo compare el contenido deja pasar el caso «política cambiada» y el test falla.
+
+### Qué se pierde respecto al diseño anterior
+
+1. **Atadura recibo–efecto duradera.** Con SE-493, cada efecto guardaba el recibo que lo autorizó y el despacho lo comprobaba en la misma transacción. Ahora la comprobación ocurre en el gate, sin registro del efecto: queda la ventana entre la revalidación y `git push` (`:82`), y la auditoría posterior es la línea de `session-action-log`, no un estado del efecto.
+2. **Solo una ruta.** La revalidación vive en `push-pr.sh`. Otras rutas de efecto no la tienen; ya era así en S3–S4, pero SE-493 daba un punto común para ampliarla.
+3. **Dependencia que sigue abierta.** La dimensión de STOP espera a SE-498 F0. Sin ella, S4 solo revalida contenido y política.
+4. **Enmienda a S2 pendiente.** S4 necesita que S2 guarde época y `stop_seq` en su recibo, y el punto «preparación de efecto» de S2 sigue citando el `prepare` de SE-493.
+
+### Decisiones para la operadora
+
+- **D3 — S3.** (a) Separar S3 del aparcado: no depende de SE-493 ni de SE-498; corregir su entrada y la línea de Riesgos (recomendada), **condicionada a la enmienda a S2**: la premisa «sin SE-493» sigue abierta mientras S2 consulte en la «preparación de efecto» (`prepare` de SE-493, retirado); S3 empieza solo sobre la admisión de trabajo de riesgo. (b) Mantenerla aparcada junto a S4.
+- **D4 — S4.** Requisito previo común a (a) y (b): aprobar la enmienda a S2 (época y `stop_seq` en su recibo, y el punto de preparación de efecto sin SE-493). (a) Aprobar el rediseño sobre `receipt-v2`, el recibo de S2 y SE-498 F0, con las pérdidas declaradas (recomendada). (b) Hacer S4 sin la dimensión de STOP para no esperar a SE-498 F0, y añadirla después. (c) Retirar S4: si `receipt-v2` y la entrada de S3 ya fallan cerrado, la revalidación aporta poco hasta que haya una segunda ruta.
