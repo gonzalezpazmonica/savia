@@ -1,5 +1,5 @@
 ---
-status: APPROVED
+status: IMPLEMENTED
 priority: P0
 developer_type: agent-single
 created: 2026-10-30

@@ -1,0 +1,31 @@
+{
+  "id": "SE-444",
+  "status": "IMPLEMENTED",
+  "priority": "P0",
+  "title": "Autoridad del verificador en los criterios de aceptación y cobertura no verificada explícita",
+  "note": "Solo informe: no cambia el resultado del predicado de cierre. Refuerza S03/S04 (no certificar por presencia de ficheros). 2026-10-23 conciliación: todos los AC cubiertos en main (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora.",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1639 (docs/evidence/graduacion-s27/SE-444.md). Entrega: PR #1334.",
+  "phase": "A",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "completion": {
+    "merge_pr": 1334,
+    "acceptance_evidence": [
+      {
+        "criterion": "AC (revisión de graduación S27, PR #1639)",
+        "file": "docs/specs/SE-444-verifier-authority-ac-closure.spec.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "docs/rules/domain/ac-verifier-authority.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "tests/test-planning-completion-authority.bats"
+      }
+    ],
+    "human_review": {
+      "status": "APPROVED",
+      "evidence": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27). Evidencia de revisión: PR #1639."
+    }
+  }
+}

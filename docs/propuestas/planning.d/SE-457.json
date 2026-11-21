@@ -1,0 +1,27 @@
+{
+  "id": "SE-457",
+  "status": "IMPLEMENTED",
+  "priority": "P2",
+  "title": "Skill harness-architecture: arquitectura de harness, metaharness, flujos largos, bucles y sprints",
+  "note": "Skill entregada en la PR #1361; la spec sigue PROPOSED hasta la aprobación de la operadora.",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1633 (docs/evidence/graduacion-s27/SE-457.md). Entrega: PR #1361.",
+  "phase": "D",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "completion": {
+    "merge_pr": 1361,
+    "acceptance_evidence": [
+      {
+        "criterion": "AC (revisión de graduación S27, PR #1633)",
+        "file": "docs/specs/SE-457-harness-architecture-skill.spec.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "tests/test-harness-architecture.bats"
+      }
+    ],
+    "human_review": {
+      "status": "APPROVED",
+      "evidence": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27). Evidencia de revisión: PR #1633."
+    }
+  }
+}
