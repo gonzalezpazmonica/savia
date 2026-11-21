@@ -251,20 +251,21 @@ denied_by() {  # denied_by <comm>: salió 4 por ese ancestro concreto y el ámbi
 }
 
 # En CI la falta de util-linux `script` es un fallo, no un skip: el caso del pseudo-terminal quedaría sin ejercer.
+# $1 opcional: ruta de búsqueda. Solo afecta a `command -v`; `run` de bats conserva el PATH real.
 require_script() {
-  if command -v script >/dev/null; then return 0; fi
+  if PATH="${1:-$PATH}" command -v script >/dev/null; then return 0; fi
   if [ -n "${CI:-}" ]; then echo "falta util-linux script en CI" >&2; return 1; fi
   skip "sin util-linux script"
 }
 
 @test "d82d4d5 security P2-2: en CI, sin util-linux script, la prueba del pseudo-terminal falla en vez de omitirse" {
-  CI=1 PATH="$T/sin-nada" run require_script
+  CI=1 run require_script "$T/sin-nada"
   [ "$status" -eq 1 ]; [[ "$output" == *"falta util-linux script en CI"* ]]
 }
 
 @test "d82d4d5 security P2-2 (negativo): con script disponible, require_script pasa también en CI" {
   mkdir -p "$T/bin"; printf '#!/bin/sh\n' > "$T/bin/script"; chmod +x "$T/bin/script"
-  CI=1 PATH="$T/bin" run require_script
+  CI=1 run require_script "$T/bin"
   [ "$status" -eq 0 ]
 }
 
