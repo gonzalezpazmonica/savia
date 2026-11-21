@@ -5,5 +5,4 @@ section: Fixed
 
 ### Fixed
 
-- El guard de firmantes del grant de fusión ya no bloquea un heredoc de python3 o cat que solo contiene llaves o comodines como datos; sigue bloqueando cualquier escritura real en los firmantes y los heredocs que ejecuta un shell. Nueva medición de decisiones (allow y block, sin la orden) en output/guard-decisions/.
-
+- El guard de firmantes del grant de fusión ya no bloquea un heredoc de `cat` o `python3 -` que solo contiene llaves o comodines como datos. La poda es una lista cerrada: delimitador entre comillas y un solo heredoc por línea, lector por su nombre desnudo, imports de python3 de una lista cerrada y sin indirección, y ninguna otra orden fuera de los cuerpos. Cualquier otra forma se analiza entera, como antes. Nueva medición de decisiones (allow y block, con código de motivo y sin la orden) en output/guard-decisions/, y las suites del guard corren en CI.
