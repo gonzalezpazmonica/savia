@@ -478,9 +478,14 @@ def propagate(ctx, before, op, reason="", targets=None):
             continue
         if op == "resume" and not (mode == "RUNNING" and before.get(name) != "RUNNING"):
             continue
+        # Contrato de adaptadores: `reason` es el tercer argumento posicional, opaco (puede empezar por «-» o llevar
+        # saltos de línea); el adaptador no lo interpreta como opción ni lo parsea por líneas (security P2-3).
         args = ["halt", str(ctx.epoch), mode, reason] if op == "halt" else ["resume", str(ctx.epoch)]
         resp, attempts = call_adapter(ctx, name, spec, args)
-        ctx.append({"op": "ack", "executor": name, "call": op, "attempts": attempts, "ok": resp is not None})
+        # `ordered_epoch` (no `epoch`: el diario no debe empujar la época vigente) es la época de la orden; `status`
+        # la exige en el acuse de un ejecutor RUNNING, porque la época vigente puede subir sin orden local (origin/main).
+        ctx.append({"op": "ack", "executor": name, "call": op, "ordered_epoch": ctx.epoch, "attempts": attempts,
+                    "ok": resp is not None})
         if resp is None:
             lines.append(f"SIN_ACUSE {name}")
             continue
@@ -627,6 +632,26 @@ def weak_resumes(ctx):
     return sorted(weak)
 
 
+def running_ack_missing(ctx, name, ack):
+    """R4 para un ejecutor en RUNNING: ¿falta el acuse de la última orden que recibió?
+
+    Uno que nunca recibió una orden (ni acuse ni registro en el diario) no tiene acuse que dar. Si la recibió, el
+    acuse tiene que ser de modo RUNNING y de la época de esa orden (`ordered_epoch` del último registro `ack`), y la
+    llamada tiene que haber salido bien. No se compara con la época vigente: esa sube también por `origin/main`
+    sin que ningún adaptador reciba nada, y entonces ninguna orden local podría limpiar el 3 (revisión correctness
+    sobre bc883ada2). Un registro sin `ordered_epoch` o un acuse sin diario se comparan con la vigente (fail-closed).
+    """
+    last = next((r for r in reversed(ctx.journal or []) if r.get("op") == "ack" and r.get("executor") == name), None)
+    if last is None and ack is None:
+        return False
+    if last is not None and last.get("ok") is not True:
+        return True
+    want = last.get("ordered_epoch") if last is not None else None
+    if not nat(want):
+        want = ctx.epoch
+    return not ack or ack.get("epoch") != want or ack.get("mode") != "RUNNING"
+
+
 def cmd_status(a):
     ctx = Ctx()
     reg, reg_sha = ctx.executors()
@@ -667,9 +692,7 @@ def cmd_status(a):
         if mode != "RUNNING":
             if stale or native != "STOPPED":
                 rep["propagation_incomplete"].append(name)
-        elif stale and (ack or any(r.get("op") == "ack" and r.get("executor") == name for r in ctx.journal or [])):
-            # R4: en RUNNING también hace falta el acuse de la época y el modo vigentes si el ejecutor ya recibió
-            # alguna orden (hay acuse o consta en el diario). Uno que nunca se paró no tiene acuse que dar.
+        elif running_ack_missing(ctx, name, ack):
             rep["propagation_incomplete"].append(name)
         elif native != "RUNNING":
             pm = (resp or {}).get("pending_manual") or (ack or {}).get("pending_manual") or "(adaptador sin respuesta)"
@@ -717,6 +740,7 @@ def ledger_records(ctx):
     - Estado, sonda, recibo y compensación salen solo de los registros del intento más alto: la sonda definitiva del
       intento 0 no prueba nada sobre el intento 1. Un registro sin `attempt` pertenece al intento vigente.
     - `irreversible` es pegajoso: basta un registro que lo diga.
+    - Un `effect_id` que no cumple ID_RE (con fullmatch) o empieza por «-» hace ilegible el ledger (fail-closed).
     """
     p = ctx.paths["effect_ledger"]
     recs, owners, attempts, cur = {}, {}, {}, {}
@@ -728,6 +752,10 @@ def ledger_records(ctx):
                         continue
                     r = json.loads(line)
                     if not isinstance(r, dict) or not isinstance(r.get("effect_id"), str):
+                        raise ValueError
+                    # El id se imprime (reconcile, «Teclea acepto …») y se pasará como argumento: sin secuencias de
+                    # control ni un «-» inicial que un comando tome por opción (revisión security P2-2 sobre bc883ada2).
+                    if not ID_RE.fullmatch(r["effect_id"]) or r["effect_id"].startswith("-"):
                         raise ValueError
                     eid = r["effect_id"]
                     att = r.get("attempt", cur.get(eid, 0))

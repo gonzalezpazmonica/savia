@@ -563,3 +563,102 @@ resumed_global() {  # revoke global + resume aprobado: a y b acusan RUNNING en l
   [ ! -e "$SAVIA_CONTROL_DIR/acks/b.json" ]
   run sc status; echo "$output"; [ "$status" -eq 0 ]; [[ "$output" != *PROPAGATION_INCOMPLETE* ]]
 }
+
+# ── correctness sobre bc883ada2: en RUNNING el acuse exigido es el de la última orden ─────────
+
+@test "bc883ad P1-1: si la época de origin/main sube sin orden local, los ejecutores RUNNING siguen dando 0" {
+  resumed_global
+  local e; e=$(sc epoch | head -1)
+  origin_put config/control/REVOCATION_EPOCH "$((e + 1))"
+  [ "$(sc epoch | head -1)" -eq "$((e + 1))" ]
+  run sc status; echo "$output"; [ "$status" -eq 0 ]; [[ "$output" != *PROPAGATION_INCOMPLETE* ]]
+}
+
+@test "bc883ad P1-1: tras pause --scope executor:a, b sigue en RUNNING con su acuse y status sale 0" {
+  resumed_global
+  sc pause --scope executor:a --reason x
+  run sc status; echo "$output"; [ "$status" -eq 0 ]; [[ "$output" != *PROPAGATION_INCOMPLETE* ]]
+}
+
+@test "bc883ad P1-1 (negativo): con la época de origin subida, un acuse que no es de la última orden sigue dando 3" {
+  resumed_global
+  local e; e=$(sc epoch | head -1)
+  origin_put config/control/REVOCATION_EPOCH "$((e + 1))"
+  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["epoch"]-=1; open(p,"w").write(json.dumps(d))' \
+    "$SAVIA_CONTROL_DIR/acks/b.json"
+  run sc status; echo "$output"; [ "$status" -eq 3 ]; [[ "$output" == *"PROPAGATION_INCOMPLETE b"* ]]
+}
+
+@test "R1/AC-9: revoke no admite --scope (siempre global) y no toca el estado" {
+  register a b; sc pause --scope executor:a --reason x
+  local before; before=$(state_sha)
+  run sc revoke --scope principal:p --reason x; [ "$status" -eq 2 ]
+  [ "$(state_sha)" = "$before" ]
+}
+
+# Adaptador que contesta a status pero falla en halt y resume (sin $T/ok-<n>) o solo en resume.
+flaky_adapter() {
+  cat > "$T/adapters/$1" <<ADP
+#!/usr/bin/env bash
+case "\$1" in
+  halt) [[ -f "$T/halt-ok-$1" ]] || exit 1 ;;
+  resume) [[ -f "$T/resume-ok-$1" ]] || exit 1 ;;
+esac
+printf '{"native_state":"RUNNING","pending_manual":null}\n'
+ADP
+  chmod +x "$T/adapters/$1"
+}
+
+@test "bc883ad P2-1: halt y resume fallidos dejan a RUNNING sin acuse y status sale 3" {
+  operator_setup; register a b; flaky_adapter a
+  sc revoke --reason prueba; sc reconcile
+  approve global "$(sc epoch | head -1)" "$(seq_of global)"
+  run sc resume --via-pr; echo "$output"; [ "$status" -eq 0 ]; [[ "$output" == *"SIN_ACUSE a"* ]]
+  [ ! -e "$SAVIA_CONTROL_DIR/acks/a.json" ]
+  run sc status; echo "$output"; [ "$status" -eq 3 ]; [[ "$output" == *"PROPAGATION_INCOMPLETE a"* ]]
+  [[ "$output" != *"PROPAGATION_INCOMPLETE a b"* ]]
+}
+
+@test "bc883ad P2-1: un resume fallido tras un halt acusado sigue dando 3 aunque quede un acuse anterior" {
+  operator_setup; register a b; flaky_adapter a; touch "$T/halt-ok-a"
+  sc revoke --reason prueba; sc reconcile
+  [ -e "$SAVIA_CONTROL_DIR/acks/a.json" ]
+  approve global "$(sc epoch | head -1)" "$(seq_of global)"
+  run sc resume --via-pr; echo "$output"; [ "$status" -eq 0 ]; [[ "$output" == *"SIN_ACUSE a"* ]]
+  run sc status; echo "$output"; [ "$status" -eq 3 ]; [[ "$output" == *"PROPAGATION_INCOMPLETE a"* ]]
+}
+
+@test "bc883ad P2-1 (negativo): halt fallido pero resume acusado deja status en 0" {
+  operator_setup; register a b; flaky_adapter a; touch "$T/resume-ok-a"
+  sc revoke --reason prueba; sc reconcile
+  approve global "$(sc epoch | head -1)" "$(seq_of global)"
+  run sc resume --via-pr; echo "$output"; [ "$status" -eq 0 ]
+  run sc status; echo "$output"; [ "$status" -eq 0 ]
+}
+
+@test "bc883ad P2-1: un acuse RUNNING de la misma época no tapa un pause + resume fallidos después" {
+  resumed_global
+  flaky_adapter a
+  sc pause --reason otra; sc reconcile
+  approve global "$(sc epoch | head -1)" "$(seq_of global)"
+  run sc resume --via-pr; echo "$output"; [ "$status" -eq 0 ]; [[ "$output" == *"SIN_ACUSE a"* ]]
+  [ "$(jget "$SAVIA_CONTROL_DIR/acks/a.json" "d['mode']")" = RUNNING ]
+  run sc status; echo "$output"; [ "$status" -eq 3 ]; [[ "$output" == *"PROPAGATION_INCOMPLETE a"* ]]
+  [[ "$output" != *"PROPAGATION_INCOMPLETE a b"* ]]
+}
+
+# ── security P2-2 sobre bc883ada2: effect_id saneado ────────────────────────
+
+@test "bc883ad security P2-2: un effect_id con secuencias de control o «-» inicial hace ilegible el ledger" {
+  sc pause --scope executor:a --reason x
+  for id in 'e1\u001b[2J' 'e1\r' '--accept' 'e1\n'; do
+    ledger "{\"effect_id\":\"$id\",\"state\":\"DISPATCHED\",\"executor\":\"a\"}"
+    run sc reconcile; echo "$id → $output"; [ "$status" -eq 2 ]; [[ "$output" == *LEDGER_UNREADABLE* ]]
+  done
+}
+
+@test "bc883ad security P2-2 (negativo): un effect_id con forma de UUID sigue valiendo" {
+  sc pause --scope executor:a --reason x
+  ledger '{"effect_id":"0b6f3c1e-7d2a-4e8b-9f10-3c5a2b1d4e6f","state":"DISPATCHED","executor":"a"}'
+  run sc reconcile; echo "$output"; [ "$status" -eq 5 ]; [[ "$output" == *"INDETERMINATE 0b6f3c1e-7d2a-4e8b-9f10-3c5a2b1d4e6f"* ]]
+}
