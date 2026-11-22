@@ -55,7 +55,7 @@ verifican contra el código de `space-server` cuando exista (SE-428 sigue IMPLEM
 | Slice | Entrega | Depende de |
 |---|---|---|
 | S1 | Doctrina `docs/rules/domain/mcp-tool-design.md` (≤150 líneas): forma, efectos declarados, catálogo completo, argumentos como datos no confiables, orden del catálogo sin significado. Lint de los esquemas servidos por savia-vaults MCP. | — |
-| S2 | Comprobación de malware al habilitar: subcomando `--osv` de `scripts/mcp-security-audit.sh` (sin script nuevo). Solo se envían nombre y versión públicos del paquete (N1). Se invoca desde `/marketplace-install`, `/mcp-recommend` y el alta de conectores de Space, **nunca al arrancar** (el arranque no usa red). Deja recibo. | — |
+| S2 | Comprobación de malware al habilitar: subcomando `--osv` de `scripts/mcp-security-audit.sh` (sin script nuevo). Solo se envían nombre y versión públicos del paquete (N1). Se invoca desde `/mcp-recommend` y el alta de conectores de Space, **nunca al arrancar** (el arranque no usa red). Deja recibo. | — |
 | S3 | Secretos tipados: `${secret:NAME}` solo en `env` y `headers`; el alta rechaza ese marcador en `command`, `args` y `url`, y rechaza literales con forma de credencial. Extiende el principio 1 de `mcp-security.md`. | SE-429 S14c |
 | S4 | Importación en solo lectura de las configs de OpenCode y Claude Code (sintaxis `${VAR}`, `${env:VAR}`, `{env:VAR}`). Cada entrada queda como borrador `needs_setup`, con nivel de datos desconocido, y pasa por S2 y S3 antes de activarse. Nunca se copia un secreto, solo la referencia. | S2, S3 |
 | S5 | Política por herramienta en Space: tres estados por conector (oculto, preguntar, permitir) y regla «`readOnlyHint` **y** lista curada» para ejecutar sin preguntar. Allowlist firmada opcional para despliegues de equipo (fail-closed si la firma no valida). HMAC de la configuración de conectores, con apartado y aviso en el doctor. | SE-434, SE-446 |
@@ -121,7 +121,7 @@ SE-429 (interop MCP), SE-434 (sandbox, D-MED-4), SE-244 (vulnerabilidades, compl
 
 | Componente | Claude Code | OpenCode v1.14 |
 |---|---|---|
-| `scripts/mcp-security-audit.sh --osv` | invocado desde `/marketplace-install` y `/mcp-recommend` | mismo script desde el plugin `savia-gates` y desde `space-server` |
+| `scripts/mcp-security-audit.sh --osv` | invocado desde `/mcp-recommend` | mismo script desde el plugin `savia-gates` y desde `space-server` |
 | `docs/rules/domain/mcp-tool-design.md` | regla leída bajo demanda | idéntica (fichero común) |
 | Alta de conectores (S3–S5) | no aplica | `space-server` |
 

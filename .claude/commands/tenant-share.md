@@ -135,7 +135,6 @@ Cada compartición registra:
 
 ## Integración
 
-- Base de /marketplace-publish (paso previo)
 - Habilita reutilización sin duplicación
 - Previene drift de configuración
 - Facilita gobernanza corporativa

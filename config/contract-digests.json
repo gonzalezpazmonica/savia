@@ -1,8 +1,8 @@
 {
   "settings-hooks": {
     "current": {
-      "version": 14,
-      "digest": "sha256:6936d6f428c30e2750d535c1f08cd7046946e735a7253c35629ccca5cab701cc",
+      "version": 15,
+      "digest": "sha256:9fe7e4bc952be76e4afd05c9cedd7438f28852cec5a652a44c52c7774d5c5087",
       "path": ".claude/settings.json"
     },
     "previous": [
@@ -93,6 +93,13 @@
       {
         "version": 13,
         "digest": "sha256:926b692a8b356fd6b9475abcdb6174da25d4be440548473542c86ec5c655c9bd",
+        "path": ".claude/settings.json",
+        "compat": true,
+        "authoritative": false
+      },
+      {
+        "version": 14,
+        "digest": "sha256:6936d6f428c30e2750d535c1f08cd7046946e735a7253c35629ccca5cab701cc",
         "path": ".claude/settings.json",
         "compat": true,
         "authoritative": false

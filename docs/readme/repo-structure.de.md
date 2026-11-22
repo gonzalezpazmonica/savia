@@ -3,7 +3,7 @@
 ```
 pm-workspace/
 ├── .claude/
-│   ├── commands/       ← 567 Befehle
+│   ├── commands/       ← 564 Befehle
 │   ├── agents/         ← 90 spezialisierte Agenten (7 mit Decision Trees: SPEC-147)
 │   ├── skills/         ← 139 Domaenen-Skills
 │   ├── hooks/          ← 135 deterministische Hooks
