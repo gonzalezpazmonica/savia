@@ -3,7 +3,7 @@
 ```
 savia/
 ├── .claude/
-│   ├── commands/       ← 567 comandos
+│   ├── commands/       ← 564 comandos
 │   ├── agents/         ← 65 agentes especializados (7 con decision trees: SPEC-147)
 │   ├── skills/         ← 86 skills de dominio
 │   ├── hooks/          ← 58 hooks deterministas

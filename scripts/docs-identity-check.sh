@@ -122,11 +122,12 @@ for f in "$ROOT"/README.en.md "$ROOT"/README.ca.md "$ROOT"/README.gl.md "$ROOT"/
     echo "FAIL: contadores stale en $(basename "$f")"; FAILS=$((FAILS+1))
   fi
 done
-# canonical: README y traducciones deben tener 567 ... 89 ... 136 ... 124
+# canonical: README y traducciones deben citar el recuento real de órdenes
+# (derivado en el punto 3, no un literal que haya que acordarse de cambiar).
 for f in "$ROOT"/README*.md; do
   [[ -f "$f" ]] || continue
-  if ! grep -qE "567" "$f"; then
-    echo "FAIL: $(basename "$f") sin contador canonical 567"; FAILS=$((FAILS+1))
+  if ! grep -qE "(^|[^0-9])${c_cmds}([^0-9]|$)" "$f"; then
+    echo "FAIL: $(basename "$f") sin contador canonical ${c_cmds}"; FAILS=$((FAILS+1))
   fi
 done
 
