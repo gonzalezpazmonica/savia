@@ -1,9 +1,10 @@
 {
   "id": "SE-535",
-  "status": "PROPOSED",
+  "status": "APPROVED",
   "priority": "P2",
   "phase": "D",
-  "title": "Entrada de skills externas: retirar la integración externa sin uso y las órdenes de marketplace sin implementación; puerta en reserva (2 slices)",
+  "title": "Entrada de skills externas: retirar la integración externa sin uso, las órdenes de marketplace sin implementación y un guion de experimentos sin consumidor; puerta en reserva (3 slices)",
   "evidence": "docs/specs/SE-535-puerta-de-entrada-de-skills-externas.spec.md",
-  "note": "Encargo de la operadora del 2026-11-22 tras el estudio de un proyecto público de tutoría con agentes. Hallazgos verificados en main f58dd82ce: el instalador de la integración externa clona sin commit fijado y enlaza skills sin leerlas; las tres órdenes de marketplace no tienen implementación ni registro; SE-443 S2 se apoya en una de ellas. Decisiones de la operadora por pregunta interactiva el 2026-11-22: retirar la integración externa y retirar las órdenes de marketplace. Sin consumidor, la puerta no se construye y queda como diseño en reserva. Dos slices de retirada, cada uno en su PR. Sigue PROPOSED: decidir el alcance no es aprobar la spec."
+  "note": "Encargo de la operadora del 2026-11-22 tras el estudio de un proyecto público de tutoría con agentes. Hallazgos verificados en main f58dd82ce: el instalador de la integración externa clona sin commit fijado y enlaza skills sin leerlas; las tres órdenes de marketplace no tienen implementación ni registro; SE-443 S2 se apoya en una de ellas. Decisiones de la operadora por pregunta interactiva el 2026-11-22: retirar la integración externa (D1), retirar las órdenes de marketplace (D2) y retirar scripts/memory-experiments.py, sin consumidor (D3). Sin nada que entre, la puerta no se construye y queda como diseño en reserva. Tres slices de retirada, cada uno en su PR; S1 toca settings.json. Solo spec: nada se retira todavía.",
+  "approval": "operadora, pregunta interactiva 2026-11-22 («Aprobarla (Recommended)»); se formaliza al fusionar (SE-488)"
 }

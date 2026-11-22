@@ -1,5 +1,7 @@
 ---
-status: PROPOSED
+status: APPROVED
+approved_at: 2026-11-22
+approved_by: "operadora, pregunta interactiva 2026-11-22"
 priority: P2
 developer_type: agent-single
 created: 2026-11-22
@@ -14,6 +16,10 @@ timeline:
     learned: "2026-11-22"
     value: "PROPOSED"
     source: "orquestadora; encargo de la operadora en el chat del 2026-11-22"
+  - from: "2026-11-22"
+    learned: "2026-11-22"
+    value: "APPROVED"
+    source: "operadora, pregunta interactiva; «Aprobarla (Recommended)»"
 ---
 # SE-535 — Entrada de skills externas: retirar lo que no se usa; la puerta queda en reserva
 
@@ -35,19 +41,22 @@ Una skill es texto que un agente obedece. Savia tiene una regla contra el envene
 |---|---|---|
 | D1 | Integración externa Understand-Anything: ¿qué hacemos con ella? | «Retirarlo (Recommended)» |
 | D2 | Órdenes `marketplace-*` sin implementación: ¿qué hacemos? | «Retirarlas (Recommended)» |
+| D3 | `scripts/memory-experiments.py`, sin más uso que su propio test: ¿qué hacemos? | «Retirarlo en SE-535 (Recommended)» |
+| — | ¿Apruebas la spec? | «Aprobarla (Recommended)» |
 
-Son decisiones de alcance, no la aprobación de la spec.
+D1 y D2 se respondieron en una primera pregunta; D3 y la aprobación, en una segunda el mismo día.
 
 **Consecuencia.** Con D1 no queda ningún camino por el que entre una skill externa. Por la regla «conectar antes de construir», la puerta no se construye: una puerta sin nada que entre por ella es código sin consumidor. Esta spec pasa a ser de retirada; el diseño de la puerta se conserva en reserva al final.
 
 ## Qué decide esta spec
 
-Retirar los dos caminos, en dos slices independientes, y dejar escrito con qué condiciones se reabriría uno.
+Retirar los dos caminos y un guion sin uso hallado en la misma revisión, en tres slices independientes, y dejar escrito con qué condiciones se reabriría una entrada de skills externas.
 
 | Slice | Entrega | Tier |
 |---|---|---|
 | S1 | **Retirada de las órdenes de marketplace.** Se eliminan `.claude/commands/marketplace-{install,search,publish}.md` y sus referencias en `.claude/profiles/context-map.md`, `.claude/settings.json`, `.claude/commands/tenant-create.md`, `.claude/commands/tenant-share.md`, `scripts/test-multi-tenant.sh` y `vault/00-Index/Commands.md`. SE-443 S2 deja de citar `/marketplace-install` y se queda con sus otros dos puntos de invocación (`/mcp-recommend` y el alta de conectores de Space). | previsible 4 (toca `settings.json`); se calcula al implementar |
 | S2 | **Retirada de la integración externa.** Se eliminan `scripts/ua-install.sh`, `scripts/ua-bridge.sh`, las siete órdenes `.claude/commands/ua-*.md`, la skill `.claude/skills/understand-anything/` y sus dos suites (`tests/test-understand-anything.bats`, `tests/test-spec-se-088-ua-adopt.bats`). Se limpian catálogos e índices (`SKILLS.md`, `docs/RESOLVER.md`, `skills-manifest.json`, `skills-registry/INDEX.json`, `vault/00-Index/`), la línea 9 de `scripts/pinned-installs-exceptions.txt` y la mención en SE-465 D1. `SPEC-SE-088-UA-ADOPT` pasa a RETIRED por su ciclo de vida, con esta spec como motivo. | previsible 3; se calcula al implementar |
+| S3 | **Retirada del guion de experimentos de memoria.** Se eliminan `scripts/memory-experiments.py` y `tests/evals/test-memory-experiments.bats`, y su línea en `vault/00-Index/Scripts.md`. **No** se toca `tests/evals/memory-benchmark-store.jsonl`: lo usan `scripts/benchmark-context-pipeline.py` y otras tres suites. Ajeno a las skills externas; va aquí por decisión D3. | previsible 2; se calcula al implementar |
 
 Cada slice va en su PR. Los recuentos de órdenes y skills que citan `CLAUDE.md` y los README se actualizan en la misma PR que los cambia.
 
@@ -64,7 +73,13 @@ Cada slice va en su PR. Los recuentos de órdenes y skills que citan `CLAUDE.md`
 | AC-5 | `scripts/pinned-installs-exceptions.txt` no contiene la excepción y el comprobador de SE-465 pasa sin ella | S2 | real |
 | AC-6 | **Negativo:** ningún guion del repositorio contiene `ln -s` hacia un directorio de skills ni clona un repositorio de skills sin commit fijado; el comprobador lo detecta sobre un caso sembrado | S2 | real |
 | AC-7 | Los recuentos de órdenes y skills declarados en la documentación coinciden con el árbol; la auditoría de deriva pasa | S1, S2 | real |
-| AC-8 | Cada slice se revierte con una sola PR de reversión, sin pasos manuales | S1, S2 | estatica |
+| AC-8 | Cada slice se revierte con una sola PR de reversión, sin pasos manuales | S1, S2, S3 | estatica |
+| AC-9 | No existen `scripts/memory-experiments.py` ni su suite; ningún índice los lista | S3 | estatica |
+| AC-10 | **Negativo:** las suites que usan `tests/evals/memory-benchmark-store.jsonl` siguen pasando y el fichero no cambia | S3 | real |
+
+## Entregables de planificación (rutas)
+
+La aprobación y el registro de esta spec tocan, además de este fichero: `docs/propuestas/planning.d/SE-535.json`, `docs/propuestas/LOG.d/SE-535-PROPOSED.md`, `docs/propuestas/LOG.d/SE-535-APPROVED.md` y la vista generada `docs/propuestas/ROADMAP-CURRENT.md` (salida de `scripts/roadmap.sh render`; no se edita a mano).
 
 ## Fuera de alcance
 
@@ -120,4 +135,4 @@ Si se reabre, la spec que la construya tiene superficie humana (una pregunta ant
 
 ## Aprobación
 
-Pendiente. PROPOSED: la operadora decidió el alcance (D1 y D2) el 2026-11-22; la aprobación de la spec es un acto aparte. Sin superficie humana en lo que se construye, no requiere escenas.
+**Aprobada por la operadora el 2026-11-22** por pregunta interactiva («Aprobarla (Recommended)»), con las decisiones D1 a D3 de la tabla. Sin superficie humana en lo que se construye, no requiere escenas. Cada slice se fusiona con la revisión de su PR concreta. Se formaliza al fusionar esta PR (SE-488).
