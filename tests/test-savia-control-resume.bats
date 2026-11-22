@@ -75,7 +75,10 @@ paused_a() { sc pause --scope executor:a --reason x; sc reconcile --scope execut
 
 @test "AC-6 gobernanza: la PR de la aprobación tier 3 según el risk-tier.py de origin/main → 4 sin consumir" {
   paused_a
-  sed 's|, "config/control/")|)|' "$R/scripts/risk-tier.py" > "$T/rt.py"
+  # config/control/ puede figurar en varias listas de gobernanza (desde #1630 también en las del freno):
+  # se neutralizan todas, y se comprueba que el clasificador mutado de verdad saca la aprobación de tier 4.
+  sed 's|"config/control/"|"config/control-sin-gobernanza/"|g' "$R/scripts/risk-tier.py" > "$T/rt.py"
+  [ "$(python3 -I "$T/rt.py" --diff config/control/resume/0-1-0123456789abcdef.json --json | jget /dev/stdin 'd["tier"]')" != 4 ]
   origin_put scripts/risk-tier.py "$(cat "$T/rt.py")"
   approve executor:a 0 "$(seq_of executor:a)"
   run sc resume --scope executor:a --via-pr; [ "$status" -eq 4 ]; [[ "$output" == *TIER_NOT_4* ]]
