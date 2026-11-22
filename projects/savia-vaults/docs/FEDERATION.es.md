@@ -100,6 +100,7 @@ La configuracion de federacion vive en `savia-vaults.config.json`:
 - **Timeout**: 5s por cupula remota (configurable)
 - **Degradacion controlada**: Cupulas caidas se omiten, resultados locales siempre
 - **Seguimiento de salud**: Las cupulas pasan automaticamente healthy → degraded → unhealthy
+- **Sin verificacion de integridad**: Los resultados remotos no van firmados y `contentHash` lo calcula el cliente local a partir del snippet recibido; solo sirve para deduplicar. La proteccion en transito depende de TLS y del token Bearer. Federa solo cupulas de confianza.
 
 ## Mejores Practicas
 

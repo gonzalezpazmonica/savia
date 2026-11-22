@@ -9,6 +9,7 @@
 - **PBI padre:** Era 200 — Savia Intelligence Layer
 - **developer_type:** agent-single
 - **status:** DONE — Implemented: circuit-breaker, audit-logger, hash-verify (3 modules, 6 tests passing on real code). Not implemented: TLS support, client-side rate limiting, token rotation CLI (see SE-286 S3).
+- **nota 2026-11-20:** `hash-verify` retirado (ver nota al final y SE-287 AC-4.5); hoy quedan circuit-breaker y audit-logger.
 - **stack:** TypeScript + Node.js 22+ + bash
 - **estimacion:** 10h (5 slices)
 
@@ -119,7 +120,7 @@ savia-vaults federate rotate-token specs
 # Generates new token, updates config, logs rotation event
 ```
 
-**Content hash verification**: Tras recibir resultados federados, verificar que el content hash coincide con el snippet. Si no coincide → descartar resultado + warning log.
+**Content hash verification** (RETIRADO 2026-11-20, ver nota al final; el código de abajo es solo histórico): Tras recibir resultados federados, verificar que el content hash coincide con el snippet. Si no coincide → descartar resultado + warning log.
 
 ```typescript
 function verifyContentHash(result: FederatedSearchResult): boolean {
@@ -152,13 +153,15 @@ function verifyContentHash(result: FederatedSearchResult): boolean {
 |---|---|
 | CREATE | `projects/savia-vaults/src/federation/circuit-breaker.ts` |
 | CREATE | `projects/savia-vaults/src/federation/audit-logger.ts` |
-| CREATE | `projects/savia-vaults/src/federation/hash-verify.ts` |
-| MODIFY | `projects/savia-vaults/src/federation/a2a-client.ts` (TLS + rate limit + hash verify) |
+| CREATE | `projects/savia-vaults/src/federation/hash-verify.ts` (retirado 2026-11-20, ver nota) |
+| MODIFY | `projects/savia-vaults/src/federation/a2a-client.ts` (TLS + rate limit + ~~hash verify~~ retirado) |
 | MODIFY | `projects/savia-vaults/src/server/a2a.ts` (TLS support) |
 | MODIFY | `projects/savia-vaults/src/cli/index.ts` (--tls, rotate-token) |
 | MODIFY | `projects/savia-vaults/src/config/schema.json` (tls, clientRateLimit) |
 | CREATE | `projects/savia-vaults/tests/unit/federation/circuit-breaker.test.ts` |
 | CREATE | `projects/savia-vaults/tests/unit/federation/audit-logger.test.ts` |
-| CREATE | `projects/savia-vaults/tests/unit/federation/hash-verify.test.ts` |
+| CREATE | `projects/savia-vaults/tests/unit/federation/hash-verify.test.ts` (retirado 2026-11-20) |
 | MODIFY | `projects/savia-vaults/docs/FEDERATION.md` (security hardening section) |
 | MODIFY | `projects/savia-vaults/docs/FEDERATION.es.md` (seccion hardening) |
+
+**Retirada/enmienda 2026-11-20 por decisión de la operadora (pregunta interactiva):** `hash-verify.ts` y su test se retiran (hash de 32 bits que el cliente local recalcula sobre el mismo snippet que comprobaría: salía bien por construcción, no protegía nada y no tenía consumidor; la integridad de resultados remotos queda sin cubrir). Ver SE-287 AC-4.5.

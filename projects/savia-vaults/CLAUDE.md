@@ -8,7 +8,7 @@
 
 Local-first context dome server. MCP + A2A transports. Git-backed, BM25, Ed25519 signing, 6-layer security.
 
-### Modules (16 source files) — ALL IMPLEMENTED
+### Modules (15 source files) — ALL IMPLEMENTED
 
 | Module | File | Purpose |
 |---|---|---|
@@ -27,9 +27,10 @@ Local-first context dome server. MCP + A2A transports. Git-backed, BM25, Ed25519
 | Federation Search | `src/federation/search.ts` | Parallel queries, merge, dedup, interleave |
 | Circuit Breaker | `src/federation/circuit-breaker.ts` | CLOSED->OPEN->HALF_OPEN lifecycle |
 | Audit Logger | `src/federation/audit-logger.ts` | JSONL audit trail, daily rotation |
-| Hash Verify | `src/federation/hash-verify.ts` | Content integrity verification |
 
-### Test Matrix (89 tests)
+### Test Matrix (89 tests, snapshot SE-286 2026-08-01)
+
+> Histórico. A 2026-11-20 la suite tiene 142 ficheros y 1380 tests (`npx vitest run`); `hash-verify.test.ts` (5) se retiró y `no-weak-hash.test.ts` (5) lo sustituye.
 
 | Layer | Files | Status |
 |---|---|---|
