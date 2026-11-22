@@ -728,11 +728,6 @@
       "description": "Usar cuando se necesita extraer o consolidar el glosario de términos de dominio de un proyecto. T...",
       "maturity": "stable"
     },
-    "understand-anything": {
-      "path": ".opencode/skills/understand-anything/SKILL.md",
-      "description": "Usar cuando se necesita analizar un codebase con Understand-Anything para generar knowledge graph...",
-      "maturity": "beta"
-    },
     "verification-lattice": {
       "path": ".opencode/skills/verification-lattice/SKILL.md",
       "description": "Usar cuando se necesita verificación multi-capa más allá del code review estándar.",

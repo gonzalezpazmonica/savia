@@ -91,9 +91,10 @@ S1 S, S2 M, S3 S, S4 S, S5 M, S6 S. Total M.
 
 ## Decisiones pendientes de la operadora
 
-- **D1**: `.opencode`, `savia-monitor`, `savia-web` y el repo de `ua-install.sh` — ¿versionar lockfile
+- **D1**: `.opencode`, `savia-monitor` y `savia-web` — ¿versionar lockfile
   (como SE-425) o dejar `npm install` como excepción razonada? Propuesta: versionar en `.opencode`
-  (la CI lo instala) y excepción para `ua-install.sh` (repo externo clonado).
+  (la CI lo instala). El cuarto caso, `ua-install.sh`, dejó de existir: se retiró en SE-535 S2
+  (alertas #98 y #99 cerradas por eliminación del guion).
 - **D2**: antigüedad máxima de un pin manual antes de avisar (propuesta: 90 días).
 
 ## Referencias cruzadas
