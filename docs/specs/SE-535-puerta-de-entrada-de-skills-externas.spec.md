@@ -77,6 +77,10 @@ Cada slice va en su PR. Los recuentos de órdenes y skills que citan `CLAUDE.md`
 | AC-9 | No existen `scripts/memory-experiments.py` ni su suite; ningún índice los lista | S3 | estatica |
 | AC-10 | **Negativo:** las suites que usan `tests/evals/memory-benchmark-store.jsonl` siguen pasando y el fichero no cambia | S3 | real |
 
+## Entregables de planificación (rutas)
+
+La aprobación y el registro de esta spec tocan, además de este fichero: `docs/propuestas/planning.d/SE-535.json`, `docs/propuestas/LOG.d/SE-535-PROPOSED.md`, `docs/propuestas/LOG.d/SE-535-APPROVED.md` y la vista generada `docs/propuestas/ROADMAP-CURRENT.md` (salida de `scripts/roadmap.sh render`; no se edita a mano).
+
 ## Fuera de alcance
 
 - Servidores MCP y conectores (SE-443), salvo corregir su punto de invocación.
