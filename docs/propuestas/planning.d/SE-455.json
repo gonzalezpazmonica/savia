@@ -1,0 +1,27 @@
+{
+  "id": "SE-455",
+  "status": "IMPLEMENTED",
+  "priority": "P2",
+  "title": "Ingeniería inversa para la soberanía tecnológica: REA como herramienta externa opcional con puerta de autorización",
+  "note": "Graduada con resto; el resto queda en la cola S27. RESTO-455-a (S): emergency-status.sh no debe morir si nvidia-smi falla (|| true en la línea de GPU) y test-sovereignty-auditor.bats debe simular un nvidia-smi que falle, con caso que falle antes y pase después. RESTO-455-b (decisión de la operadora): revisión legal D1 de las citas y retirada de las marcas de pendiente.",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1638 (docs/evidence/graduacion-s27/SE-455.md). Entrega: PR #1358. Con resto: RESTO-455-a (S): emergency-status.sh no debe morir si nvidia-smi falla (|| true en la línea de GPU) y test-sovereignty-auditor.bats debe simular un nvidia-smi que falle, con caso que falle antes y pase después. RESTO-455-b (decisión de la operadora): revisión legal D1 de las citas y retirada de las marcas de pendiente.",
+  "phase": "D",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "completion": {
+    "merge_pr": 1358,
+    "acceptance_evidence": [
+      {
+        "criterion": "AC (revisión de graduación S27, PR #1638)",
+        "file": "docs/specs/SE-455-reverse-engineering-sovereignty.spec.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "tests/test-se-455-reverse-engineering-sovereignty.bats"
+      }
+    ],
+    "human_review": {
+      "status": "APPROVED",
+      "evidence": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27). Evidencia de revisión: PR #1638."
+    }
+  }
+}

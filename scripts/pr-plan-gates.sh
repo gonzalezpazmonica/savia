@@ -318,8 +318,12 @@ g10() {
 # G_SUMMARY: PR natural-language summary required (rule pr-natural-language-summary.md)
 g_summary() {
   local f="$ROOT/.pr-summary.md"
+  # SE-510 AC-10 (F4): el encabezado exigido se anuncia antes de gh pr create, no solo al bloquear.
+  local heading='## Qué hace este PR (en lenguaje no técnico)'
   if [[ ! -f "$f" ]]; then
     echo "FAIL: missing .pr-summary.md (write a non-technical paragraph for the PR — see docs/rules/domain/pr-natural-language-summary.md)"
+    echo "  required heading: $heading"
+    echo "  template: cp docs/templates/pr-summary.md .pr-summary.md"
     return
   fi
   local size; size=$(wc -c < "$f" | tr -d ' ')
@@ -328,7 +332,7 @@ g_summary() {
     return
   fi
   if ! grep -q '^## Qué hace este PR (en lenguaje no técnico)' "$f"; then
-    echo "FAIL: .pr-summary.md missing required heading '## Qué hace este PR (en lenguaje no técnico)'"
+    echo "FAIL: .pr-summary.md missing required heading '$heading' (template: docs/templates/pr-summary.md)"
     return
   fi
 }

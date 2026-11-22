@@ -1,0 +1,27 @@
+{
+  "id": "SE-480",
+  "status": "IMPLEMENTED",
+  "priority": "P0",
+  "title": "Vaults: RAG autónomo (recarga del registro y sincronización por el servicio)",
+  "note": "El MCP leía el registro una sola vez; tras reactivar el RAG seguía viendo enabled:false. Recarga en caliente + autosync en el servicio A2A + Restart=always.",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1633 (docs/evidence/graduacion-s27/SE-480.md). Entrega: PR #1418.",
+  "phase": "D",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "completion": {
+    "merge_pr": 1418,
+    "acceptance_evidence": [
+      {
+        "criterion": "AC (revisión de graduación S27, PR #1633)",
+        "file": "docs/specs/SE-480-vaults-rag-autonomous.spec.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "projects/savia-vaults/tests/e2e/mcp-registry-reload.test.ts"
+      }
+    ],
+    "human_review": {
+      "status": "APPROVED",
+      "evidence": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27). Evidencia de revisión: PR #1633."
+    }
+  }
+}

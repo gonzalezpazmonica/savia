@@ -113,8 +113,10 @@ RAM_FREE_GB=$(( ${RAM_FREE_KB:-0} / 1048576 ))
 echo -e "  RAM total: ${BOLD}${RAM_GB}GB${NC} · Libre: ${BOLD}${RAM_FREE_GB}GB${NC}"
 
 if command -v nvidia-smi &>/dev/null; then
-  GPU=$(nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader 2>/dev/null | head -1)
-  echo -e "  GPU: ${BOLD}$GPU${NC}"
+  # nvidia-smi puede estar instalado sin driver cargado (sale 9): con pipefail+set -e
+  # abortaba el informe sin resumen. Un fallo aqui no es un problema del modo emergencia.
+  GPU=$(nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader 2>/dev/null | head -1 || true)
+  [[ -n "$GPU" ]] && echo -e "  GPU: ${BOLD}$GPU${NC}"
 fi
 
 # ── Resumen ─────────────────────────────────────────────────────────────────
