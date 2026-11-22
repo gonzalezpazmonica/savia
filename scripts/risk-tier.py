@@ -45,7 +45,9 @@ GOVERNANCE_EXACT = (
     # las reglas de autonomía y honestidad, y el generador que decide qué regiones entran en él.
     "docs/rules/domain/savia-core.md", "scripts/generate-savia-core.py",
 )
-GOVERNANCE_PREFIXES = ("config/merge-sprint", ".opencode/", ".github/workflows/")
+# SE-498 F0 (R6.1): plano de control (aprobaciones de resume, operator.json, executors-remote.json,
+# REVOCATION_EPOCH, gate.json). Solo llegan a main por fusión manual de la operadora.
+GOVERNANCE_PREFIXES = ("config/merge-sprint", ".opencode/", ".github/workflows/", "config/control/")
 # SE-510 D1: corpus de órdenes que ninguna guarda puede bloquear. Cada entrada es una exención:
 # cambiarlo exige revisión humana explícita (tier 3), para que no sea una vía de exenciones sueltas.
 TIER_3_EXACT = ("config/guard-allow-corpus.json",)

@@ -171,6 +171,16 @@ plan_and_grant() {
   [[ "$output" == *"#34(t2)"* ]]
 }
 
+@test "boundary: el plano de control (SE-498, config/control/**) es tier 4 y nunca entra en el manifiesto" {
+  # Una aprobación de resume solo llega a main por fusión manual de la operadora (R6.1).
+  mkpr 35 "config/control/resume/1-2-0123456789abcdef.json"; mkpr 36 "config/control/operator.json"
+  mkpr 37 "scripts/control-helper.sh"
+  for n in 35 36 37; do review $n APPROVE correctness; review $n APPROVE security rev-sec; done
+  run bash "$SCRIPT" plan
+  [[ "$output" != *"#35"* && "$output" != *"#36"* ]]
+  [[ "$output" == *"#37(t2)"* ]]
+}
+
 @test "fail: CI roja aparca el PR y no mergea" {
   mkpr 19 "scripts/g.sh"; review 19 APPROVE correctness; echo fail > "$FAKE/19.checks"
   plan_and_grant

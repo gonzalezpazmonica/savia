@@ -1,0 +1,54 @@
+name: control-epoch-monotonic
+
+# SE-498 R2: una PR solo puede subir config/control/REVOCATION_EPOCH a exactamente main + 1.
+# Se ejecuta con pull_request_target para que el test y este workflow salgan de la BASE (main):
+# una PR que cambie a la vez la época y el test sigue evaluada por el test de main.
+# Salvaguardas contra pwn-request (verificadas por tests/test-control-epoch-ci.bats):
+#   - permissions: contents: read y ningún secreto;
+#   - la cabeza de la PR solo se trae como datos (git fetch de su ref), nunca se ejecuta ni se hace source;
+#   - todo checkout lleva persist-credentials: false.
+# Supuesto: repo público. El fetch de refs/pull/N/head va sin credenciales; en un repo privado haría falta
+# un token de solo lectura para ese fetch o el check quedaría siempre en rojo (fail-closed, no abierto).
+# Se evalúa exactamente head.sha del evento: si la PR recibe otro push entre el evento y el fetch, este
+# job falla y el evento synchronize de ese push lo vuelve a evaluar.
+# Para que proteja, la operadora lo añade como check obligatorio de main (EPOCH_CHECK_NOT_REQUIRED si no).
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  control-epoch-monotonic:
+    name: control-epoch-monotonic
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout de la base (main), nunca de la cabeza
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Traer la cabeza de la PR solo como datos
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: git -C base fetch --no-tags origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/pr/head" && test "$(git -C base rev-parse refs/remotes/pr/head)" = "$HEAD_SHA"
+
+      - name: Instalar bats
+        run: |
+          git clone --depth 1 --branch v1.9.0 https://github.com/bats-core/bats-core.git /tmp/bats
+          test "$(git -C /tmp/bats rev-parse HEAD)" = 6636e2c2ef5ffe361535cb45fc61682c5ef46b71
+          sudo /tmp/bats/install.sh /usr/local
+
+      - name: Época monótona (test de la base)
+        env:
+          CONTROL_EPOCH_REPO: ${{ github.workspace }}/base
+          CONTROL_EPOCH_BASE: ${{ github.event.pull_request.base.sha }}
+          CONTROL_EPOCH_HEAD: refs/remotes/pr/head
+        run: bats base/tests/test-control-epoch-monotonic.bats

@@ -183,7 +183,7 @@ Reglas:
 
 ### R5 — Clasificación de lo que estaba en vuelo
 
-`reconcile` lee el Effect Ledger (SE-493) y deja cada efecto abierto **que cubre un ámbito parado** (o el `--scope` pedido) en una de cuatro clases. Los efectos de ámbitos en `RUNNING` no se clasifican ni cuentan para su exit: un `PREPARED` legítimo de `executor:a` con solo `executor:b` parado no bloquea el `resume` de `b`. Cada `reconcile` deja en el diario los ámbitos que cubrió y el `stop_seq` de cada uno; eso es lo que comprueba R6.2. La clasificación es total: lo que no casa con una fila concreta es `INDETERMINATE`.
+`reconcile` lee el Effect Ledger (SE-493) y deja cada efecto abierto **que cubre un ámbito parado** (o el `--scope` pedido) en una de cuatro clases. Los efectos de ámbitos en `RUNNING` no se clasifican ni cuentan para su exit: un `PREPARED` legítimo de `executor:a` con solo `executor:b` parado no bloquea el `resume` de `b`. Un efecto cubre el ámbito `tipo:x` si su atribución de ese tipo es `x`, o si no tiene atribución fiable de ese tipo (ausente o fuera de `^[A-Za-z0-9._-]{1,64}$`): un efecto con solo `executor:b` cuenta en un `principal:p` parado, y uno con solo `contract:k` en un `executor:a` parado. Es fail-closed a propósito: lo que no se sabe de quién es no se da por ajeno; se descarga aceptándolo en el `resume`. Cada `reconcile` deja en el diario los ámbitos que cubrió y el `stop_seq` de cada uno; eso es lo que comprueba R6.2. La clasificación es total: lo que no casa con una fila concreta es `INDETERMINATE`.
 
 | Clase | Estado de SE-493 | Significado |
 |---|---|---|
