@@ -498,6 +498,18 @@ fake_replace() {
   run sc reconcile --scope executor:a; echo "$output"; [ "$status" -eq 0 ]; [[ "$output" != *e1* ]]
 }
 
+@test "63a2f6b correctness P2-1: un efecto con solo executor:b cuenta en principal:p (principal desconocido)" {
+  sc pause --scope principal:p --reason x
+  ledger '{"effect_id":"e1","state":"DISPATCHED","executor":"b"}'
+  run sc reconcile --scope principal:p; echo "$output"; [ "$status" -eq 5 ]; [[ "$output" == *"INDETERMINATE e1 [principal:p]"* ]]
+}
+
+@test "63a2f6b correctness P2-1 (negativo): con principal válido de otro principal sigue fuera de principal:p" {
+  sc pause --scope principal:p --reason x
+  ledger '{"effect_id":"e1","state":"DISPATCHED","executor":"b","principal":"q"}'
+  run sc reconcile --scope principal:p; echo "$output"; [ "$status" -eq 0 ]; [[ "$output" != *e1* ]]
+}
+
 @test "fb2597a correctness P2-b: si una segunda PR cambia la aprobación, cuenta esa PR y su blob nuevo" {
   operator_setup
   sc pause --scope executor:a --reason x; sc reconcile --scope executor:a
@@ -515,4 +527,39 @@ fake_replace() {
   gh_api repos_owner_repo_pulls_777_files "[{\"filename\":\"$APPROVAL_PATH\",\"sha\":\"$new_blob\"}]"
   run sc resume --scope executor:a --via-pr; echo "$output"; [ "$status" -eq 0 ]
   grep '"op":"resume"' "$SAVIA_CONTROL_DIR/control.jsonl" | grep -q '"pr":777'
+}
+
+# ── refutación sobre 63a2f6b4d: status en RUNNING sin acuse vigente ─────────
+
+resumed_global() {  # revoke global + resume aprobado: a y b acusan RUNNING en la época nueva
+  operator_setup; register a b
+  sc revoke --reason prueba; sc reconcile
+  approve global "$(sc epoch | head -1)" "$(seq_of global)"
+  run sc resume --via-pr; echo "$output"; [ "$status" -eq 0 ]
+}
+
+@test "63a2f6b refutación P2: tras resume con acuse vigente, status sale 0" {
+  resumed_global
+  run sc status --json; echo "$output"; [ "$status" -eq 0 ]
+}
+
+@test "63a2f6b refutación P2: un ejecutor RUNNING cuyo acuse falta tras la parada da 3 PROPAGATION_INCOMPLETE" {
+  resumed_global
+  unlink "$SAVIA_CONTROL_DIR/acks/a.json"
+  run sc status; echo "$output"; [ "$status" -eq 3 ]; [[ "$output" == *"PROPAGATION_INCOMPLETE a"* ]]
+  [[ "$output" != *"PROPAGATION_INCOMPLETE a b"* ]]
+}
+
+@test "63a2f6b refutación P2: un acuse viejo (modo REVOKED) con el ejecutor RUNNING da 3" {
+  resumed_global
+  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["mode"]="REVOKED"; open(p,"w").write(json.dumps(d))' \
+    "$SAVIA_CONTROL_DIR/acks/b.json"
+  run sc status; echo "$output"; [ "$status" -eq 3 ]; [[ "$output" == *"PROPAGATION_INCOMPLETE b"* ]]
+}
+
+@test "63a2f6b refutación P2 (negativo): un ejecutor que nunca recibió una orden no necesita acuse" {
+  register a b
+  sc pause --scope executor:a --reason x
+  [ ! -e "$SAVIA_CONTROL_DIR/acks/b.json" ]
+  run sc status; echo "$output"; [ "$status" -eq 0 ]; [[ "$output" != *PROPAGATION_INCOMPLETE* ]]
 }

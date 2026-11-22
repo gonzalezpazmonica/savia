@@ -663,9 +663,14 @@ def cmd_status(a):
             pass
         rep["executors"].append({"executor": name, "expected": mode, "native_state": native,
                                  "ack_epoch": (ack or {}).get("epoch")})
+        stale = not ack or ack.get("epoch") != ctx.epoch or ack.get("mode") != mode
         if mode != "RUNNING":
-            if not ack or ack.get("epoch") != ctx.epoch or ack.get("mode") != mode or native != "STOPPED":
+            if stale or native != "STOPPED":
                 rep["propagation_incomplete"].append(name)
+        elif stale and (ack or any(r.get("op") == "ack" and r.get("executor") == name for r in ctx.journal or [])):
+            # R4: en RUNNING también hace falta el acuse de la época y el modo vigentes si el ejecutor ya recibió
+            # alguna orden (hay acuse o consta en el diario). Uno que nunca se paró no tiene acuse que dar.
+            rep["propagation_incomplete"].append(name)
         elif native != "RUNNING":
             pm = (resp or {}).get("pending_manual") or (ack or {}).get("pending_manual") or "(adaptador sin respuesta)"
             rep["resume_incomplete"].append({"executor": name, "pending_manual": pm})
