@@ -447,3 +447,39 @@ EOF
   run env PATH="$P" bash -c "jq -n --arg c 'git -C $WT commit -m x' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
   blocked_unsure_vbg
 }
+
+@test "vbg: continuación de línea dentro de git y add (gi\\<salto>t ... ad\\<salto>d) no esquiva el prefiltro" {
+  # Revisión de Codex en #1596: el prefiltro bash no borraba `\`+salto y la orden pasaba sin resolvedor.
+  run vbg $'gi\\\nt -C "$X" ad\\\nd -A' "$WT"
+  blocked_unsure_vbg
+  # negativo: con destino literal en un worktree agent/* pasa
+  run vbg $'gi\\\nt -C '"$WT"$' ad\\\nd -A' "$WT"
+  [ "$status" -eq 0 ]
+}
+
+@test "vbg: continuación con CRLF (gi\\<CR><LF>t ... ad\\<CR><LF>d) tampoco esquiva el prefiltro" {
+  # Revisión de corrección a15100d (P2): la rama `\`+CRLF del prefiltro no tenía test.
+  run vbg $'gi\\\r\nt -C "$X" ad\\\r\nd -A' "$WT"
+  blocked_unsure_vbg
+  # negativo: con destino literal en un worktree agent/* pasa
+  run vbg $'gi\\\r\nt -C '"$WT"$' ad\\\r\nd -A' "$WT"
+  [ "$status" -eq 0 ]
+}
+
+@test "vbg sin python3: git stage cuenta como add (fail-closed); git status pasa" {
+  P=$(no_python_path)
+  run env PATH="$P" bash -c "jq -n --arg c 'git -C $WT stage -A' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
+  blocked_unsure_vbg
+  run env PATH="$P" bash -c "jq -n --arg c 'git -C $WT status' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
+  [ "$status" -eq 0 ]
+}
+
+@test "vbg sin python3: un ejecutable variable seguido de commit bloquea (paridad con el guard TS)" {
+  # Codex P1-2 en #1596: \"\$x\" -C \$WT commit (x=git) pasaba sin resolvedor.
+  P=$(no_python_path)
+  run env PATH="$P" bash -c "jq -n --arg c '\"\$x\" -C $WT commit -m x' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
+  blocked_unsure_vbg
+  # negativo: el mismo ejecutable variable con status no bloquea
+  run env PATH="$P" bash -c "jq -n --arg c '\"\$x\" -C $WT status' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
+  [ "$status" -eq 0 ]
+}
