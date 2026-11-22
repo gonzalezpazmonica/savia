@@ -5,4 +5,4 @@ section: Added
 
 ### Added
 
-- SE-535 (PROPOSED): puerta de entrada de skills externas. Un único guion por el que pasa toda skill de terceros: origen fijado por commit, copia defensiva en lugar de enlace, cabecera reducida a claves permitidas, recibo de procedencia y fallo en cerrado sin confirmación de la persona. Incluye dos decisiones previas (conservar o retirar la integración externa existente y las órdenes de marketplace sin implementación) y un criterio de no construcción. Solo spec; ningún script ni orden cambia.
+- SE-535 (PROPOSED): entrada de skills externas. El instalador de la integración externa enlaza skills de terceros sin leerlas y sin versión fijada, y las tres órdenes de marketplace no tienen implementación. Por decisión de la operadora se retiran ambos caminos en dos slices; el diseño de una puerta de entrada (origen fijado, copia defensiva, cabecera reducida, recibo y fallo en cerrado) queda en reserva y no se construye mientras no haya nada que entre por ella. Solo spec; ningún script ni orden cambia todavía.
