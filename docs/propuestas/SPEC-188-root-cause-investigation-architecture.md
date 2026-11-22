@@ -2,7 +2,7 @@
 spec_id: SPEC-188
 title: Root-Cause Investigation Architecture — meta-spec del sistema causal
 status: IMPLEMENTED
-status_note: "F1 failure-pattern-memory.sh DONE. F2 Sealed Contracts DONE. F3 DONE: causal-confidence-scorer.py + decision-trace-writer.py + decision-trace-capture.sh hook + test-causal-confidence-channel.bats (10/10) + decision-trace-protocol.md. F4 DONE: diagnostic-metrics-tracker.py + fix-survival-check.sh + monthly-diagnostic-report.sh + test-spec188-f4-survival.bats (10/10). All components present. 2026-06-24."
+status_note: "F1 failure-pattern-memory.sh DONE. F2 Sealed Contracts DONE. F3: decision-trace-writer.py + decision-trace-capture.sh hook + test-causal-confidence-channel.bats + decision-trace-protocol.md presentes; causal-confidence-scorer.py RETIRADO en la poda #1609 (sin consumidor). F4: diagnostic-metrics-tracker.py + fix-survival-check.sh + test-spec188-f4-survival.bats presentes; monthly-diagnostic-report.sh RETIRADO en #1609. Trazas de decisión apagadas por defecto (SAVIA_DECISION_TRACE). Nota original del 2026-06-24 («All components present») corregida el 2026-11-22 al comprobar main."
 tier: 1
 priority: P0
 effort: 6-8h (spec doc) · ~80-120h implementacion completa via sub-specs

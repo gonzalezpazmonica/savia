@@ -164,4 +164,8 @@ No manual intervention needed for recovery.
 
 ### Content Integrity
 
-Federated results are verified for content integrity. Results with tampered content hashes are silently discarded and logged as warnings. This prevents MITM attacks on federated search results.
+Federated results are **not** verified for content integrity. Remote results are not
+signed, and `contentHash` is computed locally by the client from the received snippet:
+it is only a deduplication key, not an integrity check. Protection of results in transit
+depends on TLS (see "TLS Encryption") and on the per-dome Bearer token. Only federate
+domes you trust: a remote dome can return any content it wants.
