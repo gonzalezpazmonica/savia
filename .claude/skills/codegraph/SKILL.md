@@ -40,8 +40,7 @@ CodeGraph **no** se instala con Savia. Se activa cuando aporta valor
 
 ```bash
 # 1. Instalar
-npm i -g @colbymchenry/codegraph
-# o: curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh
+npm i -g @colbymchenry/codegraph@1.5.0   # versión fijada; subirla es un cambio revisado
 
 # 2. Indexar
 cd <proyecto>
