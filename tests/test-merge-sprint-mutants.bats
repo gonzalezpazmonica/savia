@@ -56,6 +56,7 @@ case "$1 $2" in
           expr=""; prev=""; for x in "$@"; do [[ "$prev" == --jq ]] && expr="$x"; prev="$x"; done
           jq -r "$expr" "$F/main_ci.json"
         else cat "$F/main_ci" 2>/dev/null || echo pass; fi ;;
+      "api graphql"*isInMergeQueue*) echo false ;;   # sin cola de GitHub: ninguna PR está dentro
       "api user"*) echo executor ;;
       "api -X POST repos/"*"/issues/"*"/labels"*|"api -X DELETE repos/"*"/issues/"*"/labels/"*) exit 0 ;;
       *) exit 1 ;;
