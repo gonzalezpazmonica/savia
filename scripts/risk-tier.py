@@ -58,6 +58,10 @@ GOVERNANCE_EXEC_PREFIXES = (
     ".claude/hooks/", ".claude/enterprise/hooks/",   # guardas de Claude Code (.opencode/ ya está arriba)
     "scripts/savia-control", "config/control/",      # freno de emergencia y su estado
     "scripts/savia-bridge", "scripts/install-savia-bridge",  # puente: servicio, unidad systemd e instalador
+    # Hallazgo P1-1 de #1593: las suites del freno también son gobernanza; si no, una PR podía
+    # debilitar sus tests (tier 2) sin lectura humana aunque el código del freno fuese tier 4.
+    "tests/test-savia-control", "tests/fixtures/savia-control/",  # suites y fixtures del freno
+    "tests/test-control-epoch",                                    # suites de la época monótona del freno
 )
 GOVERNANCE_EXEC_EXACT = ("scripts/bridge_auth.py",)  # autenticación del puente
 

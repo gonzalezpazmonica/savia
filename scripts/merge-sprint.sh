@@ -6,6 +6,7 @@
 #   grant <manifest-digest>          emite el grant (regla «ask»: la operadora lo aprueba desde el frontend)
 #   run                              ejecuta el sprint del grant vigente, en serie y en el orden del manifiesto (SE-500 S3)
 #   status | stop | revoke | report | verify-ledger
+#   policy-plan | policy-request | policy-verify   SE-512 S1: grant de política (scripts/merge-sprint-policy.py)
 #
 # Estado: ${MERGE_SPRINT_HOME:-$HOME/.savia/merge-sprint} (fuera del repo). Política: config/merge-sprint-policy.conf.
 # Nunca: rebase, force-push, revert automático, tier 4, reintento de CI.
@@ -114,6 +115,40 @@ sys.exit(0 if not hold and need <= roles else 1)
 PY
 }
 
+hold_blocks() {  # hold_blocks <pr> <sha_usado> <cabeza_actual> → 0 si un HOLD retiene la PR (incidente #1642)
+  # reviews_ok solo mira (pr, sha_usado): una cabeza equivalente posterior con HOLD pasaba con la APPROVE antigua.
+  # Retiene: cualquier HOLD sobre la cabeza actual o sobre el sha usado; y cualquier otro HOLD de la PR que no
+  # tenga detrás, en el registro, una APPROVE íntegra del mismo rol sobre el sha usado, siendo ese sha posterior
+  # al retenido (no ancestro suyo: re-aprobar un sha antiguo equivalente no levanta nada, PR #1653 P1-1).
+  # Un HOLD con el informe ilegible o alterado sigue reteniendo. Error, registro ausente o git dudoso: retiene.
+  # Límites conocidos: el rol lo declara la revisora (mismo modelo de confianza que reviews_ok) y un HOLD
+  # registrado entre esta comprobación y merge_at no se ve (ventana TOCTOU mínima, --match-head-commit acota).
+  python3 - "$REG" "$1" "$2" "$3" "$GITROOT" <<'PY'
+import hashlib, json, subprocess, sys
+def intact(d):
+    try: return hashlib.sha256(open(d["file"], "rb").read()).hexdigest() == d["hash"]
+    except OSError: return False
+def predates(a, b):  # True salvo que git confirme que a NO es ancestro de b (exit 1); igual o error: True
+    try: return a == b or subprocess.run(["git", "-C", gitroot, "merge-base", "--is-ancestor", a, b],
+                                         capture_output=True).returncode != 1
+    except Exception: return True
+try:   # cualquier excepción sale con 1 («libre»): todo error de argumentos o registro retiene (2)
+    reg, pr, used, cur, gitroot = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]
+    entries = [json.loads(l) for l in open(reg).read().splitlines()]
+    holds, approves = [], []
+    for i, d in enumerate(entries):
+        if d["pr"] != pr: continue
+        if d["verdict"] != "APPROVE": holds.append((i, d["sha"], d["role"]))
+        elif d["sha"] == used and intact(d): approves.append((i, d["role"]))
+except Exception: sys.exit(2)
+for i, s, role in holds:
+    if s in (cur, used) or predates(used, s): sys.exit(0)
+    if not any(j > i and r == role for j, r in approves): sys.exit(0)
+sys.exit(1)
+PY
+  [[ $? -ne 1 ]]
+}
+
 pr_tier() {  # tier calculado por risk-tier.py sobre los ficheros del PR
   local files; files=$($GH pr diff "$1" -R "$REPO" --name-only 2>/dev/null | tr '\n' ' ')
   [[ -n "$files" ]] || { echo 4; return; }
@@ -220,6 +255,7 @@ cmd_plan() {
   local out="[]" n head tier refs
   for n in $($GH pr list -R "$REPO" --state open --limit 200 --json number --jq '[.[].number]|sort|.[]'); do
     head=$($GH pr view "$n" -R "$REPO" --json headRefOid --jq .headRefOid)
+    local cur_head="$head"
     tier=$(pr_tier "$n")
     [[ ",$allowed," == *",$tier,"* ]] || continue
     # El workflow remoto integra main en las ramas tras cada merge: si el head actual no tiene revisión
@@ -238,6 +274,10 @@ cmd_plan() {
         continue
       fi
       head="$found"
+    fi
+    # Incidente #1642: la revisión usada no basta si hay un HOLD sobre la cabeza actual o posterior a ella.
+    if hold_blocks "$n" "$head" "$cur_head"; then
+      echo "excluida PR $n: HOLD registrado sobre la cabeza actual o posterior a la revisión usada" >&2; continue
     fi
     local meta files; meta=$(pr_meta "$n") || continue
     # Los checks congelados son los de $BASE: un PR hacia otra rama no los tiene, no entra al manifiesto.
@@ -855,6 +895,8 @@ try_merge() {  # try_merge <pr> <head> <tier> [to] → RESULT=merged|awaiting_ju
       judge_request "$pr" "$head" "$cur" "$tt" "$tier" || anomaly judge_solicitud_fallo "$pr"
       AWAIT_TO="$cur"; RESULT=awaiting_judge; return
     fi
+    # Último punto antes del merge: la cabeza que se va a fusionar (tras resync o espera de CI) no puede tener HOLD.
+    hold_blocks "$pr" "$head" "$cur" && { RESULT=revision; return; }
     if merge_at "$pr" "$cur"; then CUR="$cur"; RESULT=merged; return; fi
     RESULT=$FAIL
     if [[ "$RESYNC" == 1 && ( "$FAIL" == *:DIRTY || "$FAIL" == *:BEHIND ) ]]; then
@@ -941,6 +983,8 @@ for n in o: p=by[n]; print(p["pr"],p["head"],p["tier"],p["base_ref"],p["head_rep
     # Solicitud al juez de este grant para el head actual: se espera su veredicto, sin re-sincronizar.
     # Si el head se movió después, la solicitud es obsoleta y el head nuevo se evalúa de cero (§2.7).
     local h_now; h_now=$($GH pr view "$pr" -R "$REPO" --json headRefOid --jq .headRefOid)
+    # Incidente #1642: un HOLD registrado tras el plan (sobre la cabeza de ahora u otra posterior a la revisión) aparca.
+    hold_blocks "$pr" "$head" "$h_now" && { park "$pr" revision; continue; }
     [[ -f "$JDIR/$pr-$h_now.request.json" ]] && { awaiting="$awaiting $pr:$tier:$h_now"; continue; }
     try_merge "$pr" "$head" "$tier"
     case "$RESULT" in
@@ -1041,6 +1085,9 @@ case "${1:-}" in
   stop) touch "$STOPF"; ledger event=STOP_REQUEST; echo "STOP solicitado" ;;
   revoke) ( flock -x 7 && mv "$GRANT" "$HOME_MS/grant.revoked.$(date +%s)" 2>/dev/null ) 7>"$GRANT.lock"; ledger event=REVOKE; echo "grant revocado" ;;
   report) cmd_report ;;
+  # SE-512 S1: grant de política (plan, petición de aprobación SE-488 y verificación). Sin run ni fusiones.
+  policy-plan|policy-request|policy-verify) sub="${1#policy-}"; shift
+    MERGE_SPRINT_HOME="$HOME_MS" MERGE_SPRINT_GIT_ROOT="$GITROOT" GH="$GH" exec python3 "$ROOT/scripts/merge-sprint-policy.py" "$sub" "$@" ;;
   verify-ledger) verify_chain "$LEDGER" && verify_chain "$REG" && verify_chain "$JREG" && echo "íntegro" || die "cadena rota" 4 ;;
-  *) die "uso: merge-sprint.sh review-register|plan|grant|run|status|stop|revoke|report|verify-ledger" ;;
+  *) die "uso: merge-sprint.sh review-register|plan|grant|run|status|stop|revoke|report|verify-ledger|policy-plan|policy-request|policy-verify" ;;
 esac

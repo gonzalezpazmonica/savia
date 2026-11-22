@@ -1,0 +1,46 @@
+{
+  "scenario": "golden",
+  "agent": "context-dome-manager",
+  "cases": [
+    {
+      "id": "golden-decision-table",
+      "input": "disenar una cupula nueva con ~30 notas internas y otra con ~200 notas confidenciales",
+      "expected": "estructura plana (<50) vs jerarquica con INDEX.md y MAP.md (>50); N3-N4 locales, N1-N2 federables; backup diario para N3-N4",
+      "checks": [
+        {"id": "structure-threshold", "target": "agent", "must_match": "<50 notas → plana; >50 → INDEX\\.md \\+ MAP\\.md \\+ carpetas"},
+        {"id": "federation-by-level", "target": "agent", "must_match": "N3-N4 → local; N1-N2 → federable"},
+        {"id": "backup-by-level", "target": "agent", "must_match": "N3-N4 diario; N1-N2 semanal"},
+        {"id": "note-size-cap", "target": "agent", "must_match": "Max 500 lineas por nota"},
+        {"id": "levels-defined", "target": "agent", "must_match": "N1=publico, N2=interno, N3=confidencial, N4=restringido"}
+      ]
+    },
+    {
+      "id": "golden-output-contract",
+      "input": "cualquier intervencion",
+      "expected": "diagnostico -> propuesta -> plan -> metricas; los cambios van al plan, el terminal es de solo lectura",
+      "checks": [
+        {"id": "output-sequence", "target": "agent", "must_match": "diagnostico → propuesta → plan \\(comandos vaults\\) → metricas"},
+        {"id": "terminal-read-only", "target": "agent", "must_match": "Terminal: solo lectura y auditoria de `vaults`"},
+        {"id": "plan-mode", "target": "agent", "must_match": "^permissionMode: plan$"}
+      ]
+    },
+    {
+      "id": "golden-delegation-targets-exist",
+      "input": "auditoria de cupulas existentes",
+      "expected": "delega solo en drift-auditor y reconciler, que existen como agentes",
+      "checks": [
+        {"id": "allowlist", "target": "agent", "must_match": "allowlist: \\[drift-auditor, reconciler\\]$"},
+        {"id": "drift-auditor-exists", "target": ".claude/agents/drift-auditor.md", "must_match": "^name: drift-auditor$"},
+        {"id": "reconciler-exists", "target": ".claude/agents/reconciler.md", "must_match": "^name: reconciler$"}
+      ]
+    },
+    {
+      "id": "golden-real-consumer",
+      "input": "la skill savia-vaults",
+      "expected": "existe un consumidor real que delega en este agente las decisiones de arquitectura de conocimiento",
+      "checks": [
+        {"id": "skill-delegates", "target": ".claude/skills/savia-vaults/SKILL.md", "must_match": "delegar al agente `context-dome-manager`"}
+      ]
+    }
+  ]
+}

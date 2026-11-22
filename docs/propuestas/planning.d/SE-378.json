@@ -1,0 +1,9 @@
+{
+  "id": "SE-378",
+  "status": "IMPLEMENTED",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1635 (docs/evidence/graduacion-s27/SE-378.md). Con resto: Resto de tres líneas: (1) comprobar «prioridades contradictorias» en validate o retirar ese requisito de los AC; (2) marcar ROADMAP-UNIFIED-20260827.md como histórico; (3) test o regla para «no volver de IMPLEMENTED».",
+  "title": "Planning State Machine",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "phase": "A",
+  "note": "Graduada con resto; el resto queda en la cola S27. Resto de tres líneas: (1) comprobar «prioridades contradictorias» en validate o retirar ese requisito de los AC; (2) marcar ROADMAP-UNIFIED-20260827.md como histórico; (3) test o regla para «no volver de IMPLEMENTED»."
+}

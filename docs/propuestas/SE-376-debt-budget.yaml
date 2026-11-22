@@ -28,6 +28,18 @@ current_wave: 0            # 0 = baseline freeze (curation aún no ejecutada)
 # y rbac-management en stable la deuda sería 114/140, medido en copia temporal con SKILL_AUDIT_ROOT.
 # verification-lattice queda sin tratar (bloqueo del juez de responsabilidad al escribir sus tests).
 # Ratchet intacto (baseline wave 0 = 133).
+# 2026-11-21 (remedición, S03 grupo 7): auditor en vivo 140 skills, 24 Calibrated -> deuda 116/140
+# (sin cambio: promover a stable edita .claude/, pendiente de la operadora). Con sovereignty-auditor,
+# write-a-skill y transcriptor-digest en stable la deuda sería 113/140, medido en copia temporal con
+# SKILL_AUDIT_ROOT. Ratchet intacto (baseline wave 0 = 133).
+# 2026-11-21 (remedición, S03 grupo 5, piezas a-h con comportamiento ejecutable: feasibility-probe y
+# codegraph; el resto de la franja es prosa sin código que probar): auditor en vivo 140 skills,
+# 24 Calibrated -> deuda 116/140 (sin cambio: promover a stable edita .claude/, pendiente de la
+# operadora). Con las dos en stable la deuda sería 114/140; ambas leen Calibrated en copia temporal
+# con SKILL_AUDIT_ROOT. Ratchet intacto (baseline wave 0 = 133).
+# 2026-11-21 (remedición, S03 grupo 6): onboarding-dev tratada (setup-memory.sh, test 85). La deuda
+# sigue en 116/140 en el repo: promover a stable edita .claude/, pendiente de la operadora.
+# Ratchet intacto (baseline wave 0 = 133).
 waves:
   0: 133                   # baseline +1 2026-09-05 (social-linkedin nueva, no calibrada aun)
   1: 95                    # tras curation wave 1 (DELETE de stubs + REFACTOR rápidos)

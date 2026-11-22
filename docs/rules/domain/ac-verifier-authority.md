@@ -1,3 +1,7 @@
+---
+context_tier: L2
+token_budget: 518
+---
 # Autoridad del verificador en los criterios de aceptación
 
 > SE-444. Un criterio de aceptación (AC) no se da por verificado solo porque exista un fichero de evidencia que pasa: importa con qué autoridad se verificó.

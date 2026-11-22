@@ -1,0 +1,27 @@
+{
+  "id": "SE-487",
+  "status": "IMPLEMENTED",
+  "priority": "P0",
+  "title": "Clon limpio neutral y arranque en Windows",
+  "note": "critical-facts versionado llevaba el perfil de quien lo generó; CLAUDE.md con rutas personales; Windows sin Git Bash bloquea todo. Guardia de CI contra datos personales en ficheros de arranque.",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1635 (docs/evidence/graduacion-s27/SE-487.md). Entrega: PR #1429.",
+  "phase": "D",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "completion": {
+    "merge_pr": 1429,
+    "acceptance_evidence": [
+      {
+        "criterion": "AC (revisión de graduación S27, PR #1635)",
+        "file": "docs/specs/SE-487-clean-clone-neutral-and-windows.spec.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "tests/test-se487-clean-clone.bats"
+      }
+    ],
+    "human_review": {
+      "status": "APPROVED",
+      "evidence": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27). Evidencia de revisión: PR #1635."
+    }
+  }
+}

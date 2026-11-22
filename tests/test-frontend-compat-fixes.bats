@@ -55,14 +55,23 @@ print([h.get('model') for a in d['hooks'].values() for g in a for h in g['hooks'
   [[ "$output" != *"error sintáctico"* && "$output" != *"syntax error"* ]]
 }
 
+# El hook sale pronto con CI=true (runner de GitHub): el test fija su entorno, no hereda el del runner.
 @test "shield-autostart: opt-in via SAVIA_SHIELD_AUTOSTART=on; never keyed on stdin; headless skips" {
   ! grep -q '\[\[ ! -t 0 \]\]' .claude/hooks/shield-autostart.sh
-  run bash -c "echo '{}' | HOME='$TMP' CLAUDE_CODE_ENTRYPOINT=cli bash .claude/hooks/shield-autostart.sh"
+  run bash -c "unset CI GITHUB_ACTIONS; echo '{}' | HOME='$TMP' CLAUDE_CODE_ENTRYPOINT=cli bash .claude/hooks/shield-autostart.sh"
   [ "$status" -eq 0 ]
   grep -q 'autostart off (SAVIA_SHIELD_AUTOSTART=off' "$TMP/.savia/shield-autostart.log"
-  run bash -c "echo '{}' | HOME='$TMP' SAVIA_SHIELD_AUTOSTART=on CLAUDE_CODE_ENTRYPOINT=sdk-cli bash .claude/hooks/shield-autostart.sh"
+  run bash -c "unset CI GITHUB_ACTIONS; echo '{}' | HOME='$TMP' SAVIA_SHIELD_AUTOSTART=on CLAUDE_CODE_ENTRYPOINT=sdk-cli bash .claude/hooks/shield-autostart.sh"
   [ "$status" -eq 0 ]
   grep -q 'entrypoint=sdk-cli' "$TMP/.savia/shield-autostart.log"
+}
+
+@test "shield-autostart: con CI=true sale pronto y no arranca nada" {
+  run bash -c "echo '{}' | HOME='$TMP' CI=true CLAUDE_CODE_ENTRYPOINT=cli bash .claude/hooks/shield-autostart.sh"
+  [ "$status" -eq 0 ]
+  grep -q 'CI/GHA=true, skipping' "$TMP/.savia/shield-autostart.log"
+  run grep -q 'entrypoint=' "$TMP/.savia/shield-autostart.log"
+  [ "$status" -ne 0 ]
 }
 
 @test "settings.json: no http hooks that fail when the Shield daemon is down" {
