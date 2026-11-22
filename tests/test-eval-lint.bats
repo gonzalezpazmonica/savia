@@ -193,8 +193,10 @@ lint() { bash "$SCRIPT" --check "$EVAL_TMP" "$@"; }
   sed -i '2s/"route_to":"none"/"route_to":"skill:no-existe-abc"/' "$(CASES)"
   run lint --json
   [ "$status" -eq 1 ]
-  run jq -e '.verdict=="FAIL" and .files==1 and .cases==5 and (.violations|length)==1 and (.violations[0]|test("case-2.*no-existe-abc"))' <<< "$output"
-  [ "$status" -eq 0 ]
+  local lint_out="$output"
+  run jq -e '.verdict=="FAIL" and .files==1 and .cases==5 and (.violations|length)==1 and (.violations[0]|test("case-2.*no-existe-abc"))' <<< "$lint_out"
+  # Diagnóstico (falló una vez en la nocturna y nunca en local): sin esto el TAP no dice qué salió.
+  [ "$status" -eq 0 ] || { printf 'salida de eval-lint --json:\n%s\njq: %s\n' "$lint_out" "$output"; false; }
 }
 
 @test "FAIL cuenta las violaciones y las lista con guion" {

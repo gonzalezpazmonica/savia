@@ -1,0 +1,27 @@
+{
+  "id": "SE-471",
+  "status": "IMPLEMENTED",
+  "priority": "P1",
+  "title": "Relevo nocturno con evidencia: declarado, validado y aceptado",
+  "note": "159 marcas de fin de referencia, 21 % no OK; el OK es autodeclarado y el ledger SE-349 tiene 3 entradas. Script de solo lectura con tope de decisiones y kill criterion.",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1633 (docs/evidence/graduacion-s27/SE-471.md). Entrega: PR #1486.",
+  "phase": "A",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "completion": {
+    "merge_pr": 1486,
+    "acceptance_evidence": [
+      {
+        "criterion": "AC (revisión de graduación S27, PR #1633)",
+        "file": "docs/specs/SE-471-overnight-handoff-evidence-digest.spec.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "tests/test-se471-overnight-handoff-digest.bats"
+      }
+    ],
+    "human_review": {
+      "status": "APPROVED",
+      "evidence": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27). Evidencia de revisión: PR #1633."
+    }
+  }
+}

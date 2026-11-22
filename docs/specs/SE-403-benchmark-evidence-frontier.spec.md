@@ -1,5 +1,5 @@
 ---
-status: APPROVED
+status: IMPLEMENTED
 approved_at: 2026-09-27
 approval: "Operadora 2026-09-27: 'Redacta todas las specs que necesites y adelante con todas las propuestas en sprint nocturno'"
 priority: P2

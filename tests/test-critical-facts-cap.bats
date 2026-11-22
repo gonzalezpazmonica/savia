@@ -78,16 +78,22 @@ teardown() {
 # ── AC4: generator is deterministic ──────────────────────────────────────────
 
 @test "AC4: generator produces deterministic output (same input → same output)" {
-  local copy="$TMPDIR_TEST/copy.md"
-  cp "$FACTS" "$copy"
-  bash "$GENERATOR" >/dev/null
+  # El generador escribe docs/critical-facts.md relativo al cwd: corre sobre una copia, nunca sobre el
+  # fichero versionado (en la nocturna otras suites lo leen a la vez y lo verían a medio escribir).
+  local repo="$PWD" ws="$TMPDIR_TEST/ws" real_before
+  real_before=$(sha256sum < "$FACTS")
+  mkdir -p "$ws/docs"; cp "$FACTS" "$ws/docs/critical-facts.md"
+  touch "$TMPDIR_TEST/marker"
+  (cd "$ws" && bash "$repo/$GENERATOR" >/dev/null)
   local first_hash
-  first_hash=$(sha256sum "$FACTS" | awk '{print $1}')
-  bash "$GENERATOR" >/dev/null
+  first_hash=$(sha256sum "$ws/docs/critical-facts.md" | awk '{print $1}')
+  (cd "$ws" && bash "$repo/$GENERATOR" >/dev/null)
   local second_hash
-  second_hash=$(sha256sum "$FACTS" | awk '{print $1}')
+  second_hash=$(sha256sum "$ws/docs/critical-facts.md" | awk '{print $1}')
   [ "$first_hash" = "$second_hash" ]
-  cp "$copy" "$FACTS"
+  grep -q 'CRITICAL_FACTS_START' "$ws/docs/critical-facts.md"
+  [ "$(sha256sum < "$FACTS")" = "$real_before" ]
+  [ -z "$(find "$FACTS" -newer "$TMPDIR_TEST/marker")" ]   # ni siquiera reescrito con el mismo contenido
 }
 
 # ── AC5: 6 canonical fields present ──────────────────────────────────────────

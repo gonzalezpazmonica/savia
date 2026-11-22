@@ -114,7 +114,7 @@ Reglas del tipo Python-backed:
 5. El SKILL.md documenta el contrato en `## Usage` (args con nombres y defaults).
 6. TDD: escribe el test del callable antes que la implementación (`__init__.test.py`).
 
-Los skills de digestión/análisis (pdf-digest, excel-digest, tabular-analyst)
+Los skills de digestión/análisis (pdf-digest, excel-digest, tabular-intelligence)
 son candidatos a migrar a Python-backed progresivamente.
 
 ## Memory hooks

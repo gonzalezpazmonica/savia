@@ -1,0 +1,3 @@
+## 2026-11-21 SE-442 IMPLEMENTED
+
+Graduada por aprobación de la operadora 2026-11-21, pregunta interactiva «12 + 5 con resto». Evidencia: PR #1639. Con resto: RESTO-442-a (S): enmendar AC5, Scorecard no corre en el PR (solo en main por push y semanal): «CodeQL en el PR; Scorecard en main». RESTO-442-b (S): enmendar AC9, hay tres pip install sin hash (evals-ci.yaml:60 y :62, templates/pr-agent-review.yml:96); registrarlos como excepción con motivo o fijarlos con hash. RESTO-442-c (decisión de la operadora): triaje de las alertas abiertas de code scanning (59 al corte: 1 crítica, 19 altas), cada una corregida o descartada con motivo.

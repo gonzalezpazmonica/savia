@@ -29,68 +29,26 @@
 // Reference: SPEC-OC-01 (Savia Shield adaptation)
 // Reference: docs/rules/domain/provider-agnostic-env.md
 
-import { toV1After, toV1Before } from "./lib/v2-compat.ts";
+import { stripSaviaKeys, toV1After, toV1Before } from "./lib/v2-compat.ts";
 
-import { validateBashGlobal } from "./guards/validate-bash-global.ts";
-import { autoRedactSecrets } from "./guards/auto-redact-credentials.ts";
-import { blockCredentialLeak } from "./guards/block-credential-leak.ts";
-import { blockForcePush } from "./guards/block-force-push.ts";
 import { applyModelTiers } from "./lib/model-tiers.ts";
-import { blockBranchSwitchDirty } from "./guards/block-branch-switch-dirty.ts";
-import { blockCommitToMain } from "./guards/block-commit-to-main.ts";
-import { blockInfraDestructive } from "./guards/block-infra-destructive.ts";
-import { toolCallHealing } from "./guards/tool-call-healing.ts";
-import { dataSovereigntyGate } from "./guards/data-sovereignty-gate.ts";
-import { blockGitignoredReferences } from "./guards/block-gitignored-references.ts";
-import { promptInjectionGuard } from "./guards/prompt-injection-guard.ts";
-import { tddGate } from "./guards/tdd-gate.ts";
 import { dataSovereigntyAudit } from "./guards/data-sovereignty-audit.ts";
-// SE-405 Slice 2: snapshot of watched config files before edit/write
-import { configSnapshot } from "./guards/config-snapshot.ts";
 // SE-402: attributed edit ledger (path + hash, never content)
 import { editLedgerRecord } from "./guards/edit-ledger-record.ts";
-import { autoGrillMe } from "./guards/auto-grill-me.ts";
-import { autoZoomOut } from "./guards/auto-zoom-out.ts";
 // SE-221: context-engineering guards (port of bash hooks)
 import { contextOriginStamp } from "./guards/context-origin-stamp.ts";
 import { contextDropAfterUse } from "./guards/context-drop-after-use.ts";
-import { subagentAudienceFilter } from "./guards/subagent-audience-filter.ts";
 // SPEC-150 Slice 2: sycophancy detection (TS port of sycophancy-strip.sh)
 import { sycophancyGuard } from "./guards/sycophancy-guard.ts";
-// SE-229: block blind signing of confidentiality signature without prior audit
-import { blockBlindSigning } from "./guards/block-blind-signing.ts";
-// SE-313 S7c: dispatch tracing — resolves subagent model + emits telemetry
-import { dispatchTrace } from "./guards/dispatch-trace.ts";
 // SCL-003/SCL-008: inject human-authorized criteria at chat.message
 import { learningRecallGuard } from "./guards/learning-recall-guard.ts";
 import { runGuardsOnVariants } from "./lib/sandbox.ts";
+// SE-510 D2: cada bloqueo de un guard TS deja una línea en output/guard-blocks.jsonl
+import { recordGuardBlock } from "./lib/guard-blocks.ts";
 
-const BEFORE_GUARDS = [
-  // Cheap guards first — fail fast.
-  toolCallHealing,
-  validateBashGlobal,
-  autoRedactSecrets,
-  blockCredentialLeak,
-  blockForcePush,
-  blockBranchSwitchDirty,
-  blockCommitToMain,
-  blockInfraDestructive,
-  dataSovereigntyGate,
-  blockGitignoredReferences,
-  promptInjectionGuard,
-  tddGate,
-  // SE-229: confidentiality signature must follow real audit, not CI shortcuts
-  blockBlindSigning,
-  // SE-091: caveman always-on reminders (non-blocking)
-  autoGrillMe,
-  autoZoomOut,
-  // SE-221 Slice 3: audience filter (PreToolUse `task`, non-blocking audit)
-  subagentAudienceFilter,
-  // SE-313 S7c: dispatch tracing (PreToolUse `task`, non-blocking telemetry)
-  dispatchTrace,
-  // SE-405 Slice 2: last, so a blocked edit never snapshots (never throws)
-  configSnapshot,
-] as const;
+// SE-510 AC-7: la lista vive en lib/before-guards.ts (sin exports con nombre en un
+// fichero de plugin: OpenCode carga cada export como plugin).
+import { BEFORE_GUARDS } from "./lib/before-guards.ts";
 
 const AFTER_GUARDS = [
   dataSovereigntyAudit,
@@ -108,7 +66,12 @@ const AFTER_GUARDS = [
 
 async function runBeforeGuards(input: any, output: any): Promise<void> {
   // Si un plugin de sandbox ya envolvió la orden, los guards ven también la de dentro.
-  await runGuardsOnVariants(BEFORE_GUARDS, input, output);
+  try {
+    await runGuardsOnVariants(BEFORE_GUARDS, input, output);
+  } catch (err) {
+    recordGuardBlock(err, input, output); // nunca lanza: registrar no cambia el veredicto
+    throw err;
+  }
 }
 
 async function runAfterGuards(input: any, output: any): Promise<void> {
@@ -162,14 +125,7 @@ async function setupV2(ctx: any): Promise<void> {
 
   // Saneamiento: V2 copia claves desconocidas de un agente a request.body
   // (p. ej. `model_tier`). Se eliminan antes de enviar la petición.
-  await register("session", "model.request", (event: any) => {
-    const body = event?.body;
-    if (body && typeof body === "object") {
-      for (const key of Object.keys(body)) {
-        if (key === "model_tier" || key.startsWith("x_savia_")) delete body[key];
-      }
-    }
-  });
+  await register("session", "model.request", (event: any) => stripSaviaKeys(event?.body));
 }
 
 // ── V1 adapter (OpenCode 1.18.29+) ─────────────────────────────────────────

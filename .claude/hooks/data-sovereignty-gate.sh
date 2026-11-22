@@ -227,6 +227,17 @@ if [[ -x "$CLASSIFY" ]] && [[ -x "$DECIDE" ]] && [[ ${#NORM_CONTENT} -gt 50 ]]; 
           reason="$REASON" target="$NORM_PATH" retention_days=180 >/dev/null 2>&1 || true
       fi
     fi
+    # Destino N3/N4 protegido (Labs/cúpulas, privados): solo se exime
+    # confidential_high_confidence; hard_block_deterministic y las regex de
+    # secretos de arriba siguen bloqueando. Nunca en un destino N1 (público).
+    if [[ "$ACTION" == "BLOCK" && "$REASON" == "confidential_high_confidence" && "$IS_N1_DEST" != "true" ]] \
+       && is_protected_tier_dest "$NORM_PATH"; then
+      echo "WARNING [Savia Shield]: ${LABEL} (conf ${CONF}) en $FILE_PATH (destino protegido, permitido)" >&2
+      printf '{"ts":"%s","layer":"fallback","verdict":"WARN","reason":"classifier_confidential_protected","dest":"protected","label":"%s","confidence":"%s","file":"%s"}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "unknown")" "$LABEL" "$CONF" "$FILE_PATH" \
+        >> "$AUDIT_LOG" 2>/dev/null
+      exit 0
+    fi
     case "$ACTION" in
       BLOCK)
         block_fallback "classifier_${REASON}"

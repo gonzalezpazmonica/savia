@@ -260,16 +260,6 @@ judges:
     escalation: null
     rationale: "Triggered by recommendation-tribunal-orchestrator"
 
-  - agent: fiction-framing-judge
-    trigger_event: PostToolUse
-    condition: "Output contains persona-shift framing over sensitive domain"
-    mode: disabled
-    model_tier: mid
-    latency_budget_ms: 0
-    blocking: false
-    escalation: null
-    rationale: "SE-273 decision (2026-07-26): tombstoned. No concrete trigger condition identified. SPEC-193 pattern is valuable but detection surface is too broad for reliable auto-wiring. Revisit when persona-tracking model is available."
-
   - agent: memory-conflict-judge
     trigger_event: PostToolUse
     condition: "Output contradicts active user's auto-memory (feedback_*, user_*)"
@@ -299,16 +289,6 @@ judges:
     blocking: true
     escalation: null
     rationale: "SE-273 mandatory auto wiring: catches rule violations before they execute. Blocking because rule violations are executable."
-
-  - agent: structural-framing-judge
-    trigger_event: PostToolUse
-    condition: "Output with manual/protocol form over CBRN or sensitive domain"
-    mode: disabled
-    model_tier: mid
-    latency_budget_ms: 0
-    blocking: false
-    escalation: null
-    rationale: "SE-273 decision (2026-07-26): tombstoned. No concrete trigger condition identified. SPEC-193 framing pattern requires domain-specific classifiers not yet built. Revisit with domain classifier infrastructure."
 
   - agent: sycophancy-judge
     trigger_event: PostToolUse

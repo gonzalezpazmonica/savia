@@ -1,6 +1,6 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterAll, afterEach, expect, test } from "bun:test"
 import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises"
-import { realpathSync } from "node:fs"
+import { existsSync, mkdtempSync, realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { UNKNOWN_CWD_NOTICE, UNKNOWN_TOOL_NOTICE, decidePayload, domeGuardVerdict, strictest, localRegistryPath, parseShell, bashReadsOnly } from "../lib/dome-guard"
@@ -12,6 +12,10 @@ import { SaviaGates } from "../index"
 
 const CASES = join(import.meta.dir, "../../../../tests/hooks/fixtures/dome-guard-cases.json")
 const dirs: string[] = []
+// SE-462 S1: las marcas de lectura de cúpula van a un directorio temporal, nunca al HOME real (revisión de la
+// PR #1611). Se fija antes de copiar el entorno, así que el plugin (que lee process.env) también lo usa.
+const MARKS = join(realpathSync(mkdtempSync(join(tmpdir(), "dome-read-ts-"))), "dome-read")
+process.env.SAVIA_DOME_READ_DIR = MARKS
 const savedEnv = { ...process.env }
 
 const locked: string[] = []
@@ -20,6 +24,10 @@ afterEach(async () => {
   process.env = { ...savedEnv }
   await Promise.all(locked.splice(0).map((p) => chmod(p, 0o755)))
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })))
+})
+
+afterAll(async () => {
+  await rm(join(MARKS, ".."), { recursive: true, force: true })
 })
 
 function sub(v: any, ws: string): any {
@@ -61,7 +69,7 @@ function payloadText(c: any, ws: string): string {
 async function runCase(table: any, c: any): Promise<{ decision: string; reason: string }> {
   const ws = await workspace(table, c)
   const env = sub(c.env ?? {}, ws) as Record<string, string>
-  return decidePayload(payloadText(c, ws), ws, { SAVIA_SPACE_DOMES_FILE: env.SAVIA_SPACE_DOMES_FILE })
+  return decidePayload(payloadText(c, ws), ws, { SAVIA_SPACE_DOMES_FILE: env.SAVIA_SPACE_DOMES_FILE, SAVIA_DOME_READ_DIR: MARKS })
 }
 
 test("every shared case gives the expected decision and reason", async () => {
@@ -77,6 +85,8 @@ test("every shared case gives the expected decision and reason", async () => {
     if ("reason_lacks" in c && got.reason.includes(c.reason_lacks)) failures.push(`${c.name}: con ${c.reason_lacks}`)
   }
   expect(failures).toEqual([])
+  // Las lecturas N2+ de la tabla dejan su marca en el directorio de pruebas (sin él caerían en el HOME real).
+  expect(existsSync(join(MARKS, "s1"))).toBe(true)
   // ~500 casos, cada uno con su workspace en disco: el tope de 5 s de bun no alcanza con la máquina cargada.
 }, 60_000)
 
@@ -141,6 +151,8 @@ test("savia-gates enforces the rule in tool.execute.before, also on the sandbox-
   expect(await before(hooks, "bash", { command: "cargo test" })).toBe("PASS")
   const wrapped = `bwrap --ro-bind / / -- bash -c 'echo x > vaults/gallinero/a.md'`
   expect(await before(hooks, "bash", { command: wrapped })).toContain("DOME_ASK")
+  // El plugin lee process.env: su marca de la sesión «s» también cae en el directorio de pruebas.
+  expect(existsSync(join(MARKS, "s"))).toBe(true)
 })
 
 test("review P1s: inline scripts, key=value paths, workdir, session cwd in a dome and the registry itself", async () => {

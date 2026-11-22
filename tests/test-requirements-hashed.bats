@@ -28,7 +28,8 @@ while i < len(lines):
 PY
 }
 
-setup() { TMP="$(mktemp -d "$ROOT/.tmp-hashed.XXXXXX")"; }
+# Fixtures fuera del árbol: dentro del repo las verían las suites que lo recorren en paralelo (nocturna).
+setup() { TMP="$(mktemp -d "$BATS_TEST_TMPDIR/hashed.XXXXXX")"; }
 teardown() { [[ -n "${TMP:-}" && -d "$TMP" ]] && python3 -c 'import shutil,sys;shutil.rmtree(sys.argv[1])' "$TMP"; }
 
 @test "AC8: los locks reales llevan hash en cada requisito" {

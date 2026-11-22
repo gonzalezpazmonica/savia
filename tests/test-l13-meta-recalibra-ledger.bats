@@ -94,6 +94,8 @@ assert a==b, (a,b)
   python3 -c "
 import json
 a=json.load(open('$FIXDIR/cal1.json')); b=json.load(open('$FIXDIR/cal2.json'))
-assert a['runs']==b['runs']
+# `ts` es la hora de cada ejecución (segundos): dos runs que cruzan un segundo difieren solo en ella
+strip=lambda runs:[{k:v for k,v in r.items() if k!='ts'} for r in runs]
+assert strip(a['runs'])==strip(b['runs']) and len(a['runs'])>0
 "
 }
