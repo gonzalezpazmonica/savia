@@ -10,7 +10,25 @@ setup() {
   cd "$BATS_TEST_DIRNAME/.."
   export TMPDIR="${BATS_TEST_TMPDIR:-/tmp}"
   TEST_DIR=$(mktemp -d "$TMPDIR/pel-XXXXXX")
+  # Linters falsos delante en el PATH: el resultado no depende de lo que traiga la
+  # máquina (en el runner `dotnet format` sin proyecto no terminaba) y cada test de
+  # extensión comprueba que el hook llama al linter correcto con el fichero.
+  STUBS="$TEST_DIR/stubs"
+  CALLS="$TEST_DIR/calls.log"
+  mkdir -p "$STUBS"
+  for tool in dotnet ruff gofmt rustfmt rubocop php-cs-fixer terraform; do
+    printf '#!/bin/bash\necho "%s $*" >> "%s"\nexit 0\n' "$tool" "$CALLS" > "$STUBS/$tool"
+    chmod +x "$STUBS/$tool"
+  done
+  export PATH="$STUBS:$PATH"
 }
+
+# Aserción: el linter `$1` se invocó con el fichero `$2`; si `$2` va vacío, no se invocó ninguno.
+# Línea completa: nombre del linter y ruta en la misma invocación.
+assert_linter_called() {
+  [[ -f "$CALLS" ]] && grep -E "^$1 .*" "$CALLS" | grep -qF "$2"
+}
+assert_no_linter() { [[ ! -s "$CALLS" ]]; }
 teardown() {
   rm -rf "$TEST_DIR" 2>/dev/null || true
   cd /
@@ -38,7 +56,7 @@ teardown() {
 @test "pass-through: empty JSON exits 0" {
   run bash "$HOOK" <<< ''
   # jq returns empty for empty input, FILE_PATH empty → exit 0
-  [ "$status" -eq 0 ] || [[ "$status" -ge 0 ]]
+  [ "$status" -eq 0 ]
 }
 
 @test "pass-through: unknown extension exits 0" {
@@ -46,6 +64,7 @@ teardown() {
   run bash "$HOOK" <<< "{\"tool_input\":{\"file_path\":\"$TEST_DIR/file.xyz\"}}"
   [ "$status" -eq 0 ]
   [[ -z "$output" ]]
+  assert_no_linter
 }
 
 @test "pass-through: no extension exits 0" {
@@ -65,12 +84,14 @@ teardown() {
   echo 'class X {}' > "$TEST_DIR/code.cs"
   run bash "$HOOK" <<< "{\"tool_input\":{\"file_path\":\"$TEST_DIR/code.cs\"}}"
   [ "$status" -eq 0 ]
+  assert_linter_called dotnet "$TEST_DIR/code.cs"
 }
 
 @test "ext: .py file triggers ruff check" {
   echo 'def foo(): pass' > "$TEST_DIR/script.py"
   run bash "$HOOK" <<< "{\"tool_input\":{\"file_path\":\"$TEST_DIR/script.py\"}}"
   [ "$status" -eq 0 ]
+  assert_linter_called ruff "$TEST_DIR/script.py"
 }
 
 @test "ext: .ts extension matches TS case" {
@@ -98,39 +119,51 @@ teardown() {
   echo 'package main' > "$TEST_DIR/main.go"
   run bash "$HOOK" <<< "{\"tool_input\":{\"file_path\":\"$TEST_DIR/main.go\"}}"
   [ "$status" -eq 0 ]
+  assert_linter_called gofmt "$TEST_DIR/main.go"
 }
 
 @test "ext: .rs file triggers rustfmt" {
   echo 'fn main() {}' > "$TEST_DIR/lib.rs"
   run bash "$HOOK" <<< "{\"tool_input\":{\"file_path\":\"$TEST_DIR/lib.rs\"}}"
   [ "$status" -eq 0 ]
+  assert_linter_called rustfmt "$TEST_DIR/lib.rs"
 }
 
 @test "ext: .rb file triggers rubocop" {
   echo 'def foo; end' > "$TEST_DIR/code.rb"
   run bash "$HOOK" <<< "{\"tool_input\":{\"file_path\":\"$TEST_DIR/code.rb\"}}"
   [ "$status" -eq 0 ]
+  assert_linter_called rubocop "$TEST_DIR/code.rb"
 }
 
 @test "ext: .php file triggers php-cs-fixer" {
   echo '<?php function foo() {}' > "$TEST_DIR/code.php"
   run bash "$HOOK" <<< "{\"tool_input\":{\"file_path\":\"$TEST_DIR/code.php\"}}"
   [ "$status" -eq 0 ]
+  assert_linter_called php-cs-fixer "$TEST_DIR/code.php"
 }
 
 @test "ext: .tf file triggers terraform fmt" {
   echo 'resource "x" "y" {}' > "$TEST_DIR/main.tf"
   run bash "$HOOK" <<< "{\"tool_input\":{\"file_path\":\"$TEST_DIR/main.tf\"}}"
   [ "$status" -eq 0 ]
+  assert_linter_called terraform "$TEST_DIR/main.tf"
 }
 
 # ── Missing linter tool ─────────────────────────────────
 
-@test "missing: unknown linter skipped gracefully (PATH=empty)" {
+@test "missing: linter ausente se omite sin error (solo jq en el PATH)" {
   echo 'def x(): pass' > "$TEST_DIR/x.py"
-  PATH="" run bash -c "bash $HOOK <<< '{\"tool_input\":{\"file_path\":\"$TEST_DIR/x.py\"}}'"
-  # With empty PATH, command -v ruff fails → skipped → exit 0
-  [ "$status" -eq 0 ] || [[ "$status" -ge 0 ]]
+  mkdir -p "$TEST_DIR/onlyjq"
+  for t in jq cat; do ln -s "$(command -v "$t")" "$TEST_DIR/onlyjq/$t"; done
+  # Un linter de otro lenguaje sí está en el PATH: el stub prueba que la ausencia de ruff
+  # no hace que el hook invoque otro linter (y que assert_no_linter puede fallar).
+  ln -s "$STUBS/gofmt" "$TEST_DIR/onlyjq/gofmt"
+  local bash_bin; bash_bin="$(command -v bash)"
+  PATH="$TEST_DIR/onlyjq" run "$bash_bin" "$HOOK" <<< "{\"tool_input\":{\"file_path\":\"$TEST_DIR/x.py\"}}"
+  [ "$status" -eq 0 ]
+  [[ -z "$output" ]]
+  assert_no_linter
 }
 
 # ── ESLint local-only check ─────────────────────────────
@@ -181,6 +214,7 @@ teardown() {
   echo 'x' > "$TEST_DIR/code.PY"
   run bash "$HOOK" <<< "{\"tool_input\":{\"file_path\":\"$TEST_DIR/code.PY\"}}"
   [ "$status" -eq 0 ]
+  assert_no_linter
 }
 
 @test "edge: large empty-content file handled" {

@@ -1,6 +1,6 @@
 # SE-378 — Planning State Machine
 
-**Estado:** DEFERRED — Mónica (operadora), 2026-09-05: "Apruebo todas, implementa, pr y merge"
+**Estado:** IMPLEMENTED — aprobada por la operadora 2026-09-05; graduada 2026-11-21 (pregunta interactiva, PR de evidencia #1635)
 **Prioridad:** P1 · **Developer Type:** agent-single · **Context Risk:** medium
 **Origen:** auditoría externa §9 (PARTIALLY_ALREADY_SOLVED — extiende SE-222)
 

@@ -1,0 +1,27 @@
+{
+  "id": "SE-485",
+  "status": "IMPLEMENTED",
+  "priority": "P2",
+  "title": "Vaults: cinco fallos de la auditoría SVTC-00",
+  "note": "Backlinks por nombre, A2A /stats por cúpula y usuario, /context oculto igual que inexistente (sin oráculo), identificadores inexistentes marcados, includeStale en todas las vistas.",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1637 (docs/evidence/graduacion-s27/SE-485.md). Entrega: PR #1427.",
+  "phase": "D",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "completion": {
+    "merge_pr": 1427,
+    "acceptance_evidence": [
+      {
+        "criterion": "AC (revisión de graduación S27, PR #1637)",
+        "file": "docs/specs/SE-485-vaults-audit-fixes.spec.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "projects/savia-vaults/tests/unit/federation/search.test.ts"
+      }
+    ],
+    "human_review": {
+      "status": "APPROVED",
+      "evidence": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27). Evidencia de revisión: PR #1637."
+    }
+  }
+}

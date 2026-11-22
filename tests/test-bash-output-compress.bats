@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# nightly: serial (cuenta los ficheros del repo antes y después; otra suite escribiendo a la vez lo falsea)
 # BATS tests for .opencode/hooks/bash-output-compress.sh
 # PostToolUse async — compresses verbose Bash output to reduce token consumption.
 # Ref: batch 48 hook coverage — SPEC-rtk-ai inspired token reduction

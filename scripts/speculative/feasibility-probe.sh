@@ -23,7 +23,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-DB_PATH="${HOME}/.local/share/opencode/opencode.db"
+DB_PATH="${FEASIBILITY_DB:-${HOME}/.local/share/opencode/opencode.db}"
 OUTPUT_DIR="${ROOT_DIR}/output"
 DATE=$(date +%Y%m%d)
 
@@ -57,31 +57,43 @@ echo "  DB: $DB_PATH"
 echo ""
 
 # Extract sequences from DB
+PROBE_DB_PATH="$DB_PATH" PROBE_TARGET_CMD="$TARGET_CMD" PROBE_RUNS="$RUNS" PROBE_REPORT_PATH="$REPORT_PATH" \
 python3 - << 'PYEOF'
 import sqlite3, json, sys, os, re
 from datetime import datetime
 from pathlib import Path
 
-db_path = "${DB_PATH}"
-target_cmd = "${TARGET_CMD}"
-runs_target = int("${RUNS}")
-output_path = "${REPORT_PATH}"
+db_path = os.environ["PROBE_DB_PATH"]
+target_cmd = os.environ["PROBE_TARGET_CMD"]
+output_path = os.environ["PROBE_REPORT_PATH"]
+try:
+    runs_target = int(os.environ["PROBE_RUNS"])
+    if runs_target < 1:
+        raise ValueError
+except ValueError:
+    print(json.dumps({"error": "--runs must be a positive integer", "decision": "ABORT"}))
+    sys.exit(2)
 
 if not Path(db_path).exists():
     print(json.dumps({"error": f"DB not found: {db_path}", "decision": "ABORT",
                       "reason": "No session data available"}))
     sys.exit(1)
 
-conn = sqlite3.connect(f"file://{db_path}?mode=ro", uri=True)
-cur = conn.cursor()
-
-# Extract tool-call sequences from recent sessions (all, not just target cmd)
-cur.execute("""SELECT p.session_id, p.time_created, p.data
-               FROM part p
-               WHERE p.data LIKE '%"type":"tool"%'
-               ORDER BY p.time_created ASC""")
-rows = cur.fetchall()
-conn.close()
+# as_uri() codifica ?, # y % de la ruta (FEASIBILITY_DB la fija el entorno) y resuelve rutas relativas
+try:
+    conn = sqlite3.connect(Path(db_path).resolve().as_uri() + "?mode=ro", uri=True)
+    cur = conn.cursor()
+    # Extract tool-call sequences from recent sessions (all, not just target cmd)
+    cur.execute("""SELECT p.session_id, p.time_created, p.data
+                   FROM part p
+                   WHERE p.data LIKE '%"type":"tool"%'
+                   ORDER BY p.time_created ASC""")
+    rows = cur.fetchall()
+    conn.close()
+except sqlite3.Error as e:
+    print(json.dumps({"error": f"DB unreadable: {e}", "decision": "ABORT",
+                      "reason": "Session database is corrupt or has no part table"}))
+    sys.exit(1)
 
 # Group by session
 from collections import defaultdict
@@ -139,7 +151,9 @@ last_to_next = defaultdict(Counter)
 for d in dataset:
     last_to_next[d['context'][-1]][d['actual_next']] += 1
 
-# Evaluate on dataset (leave-last-out)
+# Evaluate on the last `total` samples with leave-one-out: each sample is
+# removed from the frequency table before it is predicted, so a pair seen only
+# once can never "predict itself" (it inflated the acceptance rate to 100%).
 correct = 0
 total = min(runs_target, len(dataset))
 eval_set = dataset[-total:]
@@ -147,8 +161,13 @@ eval_set = dataset[-total:]
 predictions = []
 for sample in eval_set:
     last_tool = sample['context'][-1]
-    predicted = last_to_next[last_tool].most_common(1)[0][0] if last_to_next[last_tool] else 'bash'
     actual = sample['actual_next']
+    counts = last_to_next[last_tool]
+    # restar y sumar sin borrar la clave: el orden de inserción (desempate) no cambia
+    counts[actual] -= 1
+    remaining = [(t, c) for t, c in counts.items() if c > 0]
+    predicted = max(remaining, key=lambda tc: tc[1])[0] if remaining else 'bash'
+    counts[actual] += 1
     hit = predicted == actual
     if hit: correct += 1
     predictions.append({'ctx': sample['context'], 'predicted': predicted, 'actual': actual, 'hit': hit})

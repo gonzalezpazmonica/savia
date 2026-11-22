@@ -325,3 +325,44 @@ EOF
   [ "$status" -eq 3 ]
   [ ! -e "$M/vacia/meta.json" ]
 }
+
+# ── SE-376 S03 grupo 7: mutantes de mark-digested que sobrevivían ──
+
+@test "mark: opcion desconocida se rechaza con exit 1, mensaje y sin tocar nada" {
+  meeting a '{"digested": false, "transcribed": true}'
+  run bash "$MARK_SH" --nope a
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"opcion desconocida: --nope"* ]]
+  grep -q '"digested": false' "$M/a/meta.json"
+}
+
+@test "mark: --confirm sin valor es un error de uso (exit 1) y no marca nada" {
+  meeting a '{"digested": false, "transcribed": true}'
+  run bash "$MARK_SH" --force --confirm
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Usage:"* ]]
+  grep -q '"digested": false' "$M/a/meta.json"
+}
+
+@test "mark: SAVIA_TRANSCRIPTOR_ACTIVE_SECS no entero se rechaza con exit 1" {
+  meeting a '{"digested": false, "transcribed": true}'
+  SAVIA_TRANSCRIPTOR_ACTIVE_SECS=abc run bash "$MARK_SH" a
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no es un entero"* ]]
+  grep -q '"digested": false' "$M/a/meta.json"
+}
+
+@test "mark: entero valido en SAVIA_TRANSCRIPTOR_ACTIVE_SECS no se rechaza (negativo del anterior)" {
+  meeting a '{"digested": false, "transcribed": true}'
+  SAVIA_TRANSCRIPTOR_ACTIVE_SECS=0 run bash "$MARK_SH" a
+  [ "$status" -eq 0 ]
+}
+
+@test "mark: nombres . y .. se rechazan con exit 1 y mensaje" {
+  local n
+  for n in . ..; do
+    run bash "$MARK_SH" "$n"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"nombre de reunion invalido"* ]]
+  done
+}

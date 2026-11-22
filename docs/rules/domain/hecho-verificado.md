@@ -1,3 +1,7 @@
+---
+context_tier: L2
+token_budget: 1366
+---
 # Hecho verificado — declarado, verificado, refutado
 
 > SE-530 S1. Carga bajo demanda (no `@import`). Lo deriva `scripts/hecho-verificado.py` en lectura; nada se guarda.
