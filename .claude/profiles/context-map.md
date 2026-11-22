@@ -25,7 +25,7 @@
 | Repos & Git | repos-branches, repos-list, repos-pr-create, repos-pr-list, repos-pr-review, repos-search, github-activity, github-issues | identity, tools, projects | workflow, preferences, tone |
 | Observability | obs-connect, obs-query, obs-dashboard, obs-status, trace-search, trace-analyze, error-investigate, incident-correlate, sentry-bugs, sentry-health | identity, projects, tools | workflow, preferences, tone |
 | Audit & Compliance | audit-trail, audit-export, audit-search, audit-alert, credential-scan, security-alerts, dependencies-audit | identity, projects | workflow, tools, preferences, tone |
-| Multi-Tenant | tenant-create, tenant-share, marketplace-publish, marketplace-install | identity, projects | workflow, tools, preferences, tone |
+| Multi-Tenant | tenant-create, tenant-share | identity, projects | workflow, tools, preferences, tone |
 | Verticals | vertical-education, vertical-finance, vertical-healthcare, vertical-legal, vertical-propose | identity, projects, preferences | workflow, tools, tone |
 | Banking | banking-detect, banking-bian, banking-eda-validate, banking-data-governance, banking-mlops-audit | identity, projects, preferences, tools | workflow, tone |
 | Savia Flow | flow-setup, flow-board, flow-intake, flow-metrics, flow-spec | identity, workflow, projects, tools | preferences, tone |

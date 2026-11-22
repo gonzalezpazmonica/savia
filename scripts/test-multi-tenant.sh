@@ -35,28 +35,28 @@ log_info() {
 # Test 1: Check command files exist (at least 2 of them)
 test_files_exist() {
   log_info "Test 1: Checking command files exist..."
-  # Check for tenant and marketplace commands (not all may be present)
+  # Check for tenant commands
   if [ -f "${COMMANDS_DIR}/tenant-create.md" ]; then
     log_pass "File exists: tenant-create.md"
   else
     log_fail "File missing: tenant-create.md"
   fi
-  if [ -f "${COMMANDS_DIR}/marketplace-publish.md" ]; then
-    log_pass "File exists: marketplace-publish.md"
-  else
-    log_fail "File missing: marketplace-publish.md"
-  fi
-  if [ -f "${COMMANDS_DIR}/marketplace-install.md" ]; then
-    log_pass "File exists: marketplace-install.md"
-  else
-    log_fail "File missing: marketplace-install.md"
-  fi
+  # SE-535 S1: las órdenes de marketplace se retiraron por no tener
+  # implementación (citaban un registro inexistente). No deben reaparecer
+  # como fichero de instrucciones sin código detrás.
+  for cmd in marketplace-install marketplace-publish marketplace-search; do
+    if [ -e "${COMMANDS_DIR}/${cmd}.md" ]; then
+      log_fail "Retired command reappeared: ${cmd}.md (SE-535 S1)"
+    else
+      log_pass "Retired command absent: ${cmd}.md"
+    fi
+  done
 }
 
 # Test 2: Check YAML frontmatter for tenant-create at minimum
 test_frontmatter() {
   log_info "Test 2: Checking YAML frontmatter..."
-  for cmd in tenant-create marketplace-publish marketplace-install; do
+  for cmd in tenant-create; do
     file="${COMMANDS_DIR}/${cmd}.md"
     if [ -f "$file" ]; then
       if grep -q "^---$" "$file"; then
@@ -75,7 +75,7 @@ test_frontmatter() {
 # Test 3: Check line counts (≤150)
 test_line_counts() {
   log_info "Test 3: Checking line counts (max 150)..."
-  for cmd in tenant-create marketplace-publish marketplace-install; do
+  for cmd in tenant-create; do
     file="${COMMANDS_DIR}/${cmd}.md"
     if [ -f "$file" ]; then
       lines=$(wc -l < "$file")
@@ -100,28 +100,6 @@ test_concepts() {
       log_pass "tenant-create.md contains: $concept"
     else
       log_fail "tenant-create.md missing: $concept"
-    fi
-  done
-
-  # marketplace-publish: marketplace, publish
-  file="${COMMANDS_DIR}/marketplace-publish.md"
-  concepts=("marketplace" "publish")
-  for concept in "${concepts[@]}"; do
-    if grep -qi "$concept" "$file"; then
-      log_pass "marketplace-publish.md contains: $concept"
-    else
-      log_fail "marketplace-publish.md missing: $concept"
-    fi
-  done
-
-  # marketplace-install: marketplace, install
-  file="${COMMANDS_DIR}/marketplace-install.md"
-  concepts=("marketplace" "install")
-  for concept in "${concepts[@]}"; do
-    if grep -qi "$concept" "$file"; then
-      log_pass "marketplace-install.md contains: $concept"
-    else
-      log_fail "marketplace-install.md missing: $concept"
     fi
   done
 }

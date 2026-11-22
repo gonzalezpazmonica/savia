@@ -129,7 +129,7 @@ Próximos pasos:
 ## Integración
 
 - Habilita multi-tenancy en pm-workspace
-- Base para /tenant-share y /marketplace-publish
+- Base para /tenant-share
 - Permite gobernanza por departamento
 - Facilita delegación de administración
 

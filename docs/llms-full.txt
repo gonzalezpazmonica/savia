@@ -1,5 +1,5 @@
 # Savia — Contexto Consolidado
-# Generado: 2026-11-14T06:59:21Z
+# Generado: 2026-11-22T17:31:53Z
 
 ## docs/critical-facts.md
 
@@ -451,7 +451,7 @@ Identidad del humano al volante + memoria auto persistida fuera del repo.
 
 ## Estructura
 
-`.claude/{agents(86), commands(571), profiles, hooks(127/135reg), rules/{domain,languages}, skills(140), settings.json}` · `docs/` · `projects/` · `scripts/` · `tests/`
+`.claude/{agents(86), commands(568), profiles, hooks(127/135reg), rules/{domain,languages}, skills(140), settings.json}` · `docs/` · `projects/` · `scripts/` · `tests/`
 
 ## Reglas Críticas (Rules 1-8, inline)
 
@@ -1037,10 +1037,12 @@ la consolidación. Cuatro clases:
 
 Reglas:
 - **Fail-safe**: una entrada sin `--origin` ni source confiable se clasifica `untrusted`. NUNCA `owner` por defecto.
-- **Taint de turno**: tras una tool de red (webfetch, curl, git fetch...), las siguientes entradas del turno se degradan a `untrusted` (hook `memory-origin-gate.sh`).
-- **Consolidación**: `memory-store.sh consolidate` excluye `untrusted`/`system` de la promoción (`--dry-run` para previsualizar). Una entrada recuperada nunca promueve su propio nivel de confianza.
+- **Taint de turno**: tras una tool de red (webfetch, curl, git fetch...), las siguientes entradas del turno se degradan a `untrusted` (hook `memory-origin-gate.sh`). El guardado identifica la sesión con `CLAUDE_CODE_SESSION_ID` (o `SESSION_ID`); sin identificador y con una marca vigente, degrada igualmente (fallo cerrado).
+- **Consolidación**: `memory-store.sh consolidate` excluye `untrusted`/`system` de la promoción (`--dry-run` para previsualizar). Excluir no es borrar: las entradas excluidas, y las antiguas sin campo `origin`, pasan a `output/.memory-store-quarantine.jsonl` y siguen recuperables. Una entrada recuperada nunca promueve su propio nivel de confianza.
 - **Filtro de búsqueda**: `memory-store.sh search "..." --min-origin owner|agent|untrusted`.
 - **Auditoría**: `memory-store.sh audit-origins` reporta la distribución de orígenes.
+
+Integridad: `save` serializa con `json.dumps`, trabaja bajo cerrojo (`<almacén>.lock`) y escribe de forma atómica; si el dato no puede quedar íntegro y recuperable, sale con error y no escribe nada. `--type` solo admite letras, números, `-` y `_`.
 
 Persistencia: el campo `origin` se guarda en el JSONL y en el índice `MEMORY.md` como sufijo `· src:{origin}`.
 
@@ -1246,7 +1248,6 @@ Tests: `tests/test-speckit-aliases.bats`.
 - SE-269-bmad-patterns.spec.md: SE-269 — Patrones BMAD: forja de ideas, veredicto ternario, revision humana guiada y calibracion adversarial
 - SE-332-handback-obligation.spec.md: Spec: SE-332 — Handback Obligation: escalación normativa de agentes autónomos bloqueados
 - SE-333-agent-plugins-compliance.spec.md: Spec: SE-333 — Cumplimiento Agent Plugins / Agent Skills: skills portables + package manifest
-- SE-334-telemetry-intelligence.spec.md: Spec: SE-334 — Telemetry Intelligence: fingerprinting, incident grouping y auto-remediación (inspirado en superlog)
 - SE-334-vaults-scl-criteria-hardening.spec.md: SPEC-334 - Hardening verificable de Vaults, SCL y Criteria
 - SE-335-prioridad-descubrimiento-arranque.spec.md: SE-335 — Prioridad de descubrimiento de conocimiento en el arranque (cúpulas → memoria → grep)
 - SE-336-turn-sdlc.spec.md: SE-336 — Turn-SDLC: ciclo de vida de una ejecución LLM con gates de entrada, salida y telemetría
@@ -1432,5 +1433,12 @@ Tests: `tests/test-speckit-aliases.bats`.
 - SE-519-cvss-determinista-y-severidad-por-precondiciones.spec.md: ---
 - SE-520-reglas-de-guarda-en-texto.spec.md: ---
 - SE-527-recorte-de-agentes-sobrantes.spec.md: ---
+- SE-528-seguridad-web-puente-cupulas.spec.md: ---
 - SE-529-compactacion-que-conserva-y-reinyecta.spec.md: ---
+- SE-530-hecho-verificado.spec.md: ---
+- SE-531-ficha-de-harness-ejecutable.spec.md: ---
+- SE-532-catalogo-de-agentes-con-esquema-y-retirada.spec.md: ---
+- SE-533-limites-compartidos-de-delegacion.spec.md: ---
+- SE-534-telemetry-intelligence.spec.md: Spec: SE-534 — Telemetry Intelligence: fingerprinting, incident grouping y auto-remediación (inspirado en superlog)
+- SE-535-puerta-de-entrada-de-skills-externas.spec.md: ---
 - SE-GRC-001-grc-auditor.spec.md: SE-GRC-001 — GRC Auditor
