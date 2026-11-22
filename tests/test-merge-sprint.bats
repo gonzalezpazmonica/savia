@@ -50,6 +50,7 @@ case "$1 $2" in
       api*protection/required_status_checks*) cat "$F/required" 2>/dev/null ;;
       api*/issues/*/events*) n=$(sed -E 's|.*/issues/([0-9]+)/events.*|\1|' <<<"$a"); cat "$F/$n.reopens" 2>/dev/null || echo 0 ;;
       api*check-runs*) cat "$F/main_ci" 2>/dev/null || echo pass ;;
+      "api graphql"*isInMergeQueue*) echo false ;;   # sin cola de GitHub: ninguna PR está dentro
       "api user"*) echo executor ;;
       "api -X POST repos/"*"/issues/"*"/labels"*|"api -X DELETE repos/"*"/issues/"*"/labels/"*) exit 0 ;;
       *) exit 1 ;;

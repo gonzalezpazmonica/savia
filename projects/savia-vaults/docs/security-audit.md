@@ -80,7 +80,7 @@
 1. **TLS by default**: Add `--tls` flag to CLI for automatic HTTPS in production
 2. **Token rotation**: Add `savia-vaults federate rotate-token <id>` command
 3. **Federation audit log**: Log all federated queries to `output/federation-audit.jsonl`
-4. **Content hash verification**: After receiving federated results, verify content hash integrity
+4. ~~**Content hash verification**: After receiving federated results, verify content hash integrity~~ Withdrawn 2026-11-20 (SE-287 AC-4.5): a 32-bit hash recomputed by the client over the same snippet cannot detect tampering. Real integrity of remote results would need signed results; not implemented.
 5. **Circuit breaker**: After N consecutive failures, disable a federated dome automatically (already partially implemented via health states)
 
 ## Compliance

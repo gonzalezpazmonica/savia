@@ -18,6 +18,10 @@ SE-510 D1 (subcomando ``guard-corpus``): el mismo despachador ejecuta el corpus
 de órdenes legítimas (``config/guard-allow-corpus.json``) con sus fixtures; un
 caso ALLOW bloqueado es ``FALSE_BLOCK`` (umbral 0, exit 1) y un par peligroso
 que pasa es ``FALSE_ALLOW`` (exit 3). ``--hooks-rev`` reproduce hooks antiguos.
+S2 (AC-7): ``--ts`` corre la misma entrada contra los guards TS de OpenCode; un
+veredicto distinto es ``PARITY_MISMATCH`` (exit 4, por delante de ``FALSE_BLOCK``: un
+bloqueo falso conocido de bash no puede tapar una divergencia) y un hook bash
+bloqueante sin clasificar en ``config/guard-ts-parity.json`` también lo es (fallo cerrado).
 """
 from __future__ import annotations
 
@@ -501,10 +505,70 @@ def overlay_hooks(root: Path, snap: Path, rev: str) -> str:
     return sha
 
 
+# SE-510 AC-7: paridad de veredicto con los guards TS de OpenCode (BEFORE_GUARDS).
+PARITY_PATH = "config/guard-ts-parity.json"
+TS_CLI = ".opencode/plugins/__tests__/guard-corpus-cli.ts"
+
+
+def find_bun() -> str | None:
+    found = shutil.which("bun")
+    if found:
+        return found
+    home = Path(os.environ.get("HOME", "")) / ".bun/bin/bun"
+    return str(home) if home.is_file() else None
+
+
+def load_parity(path: Path) -> dict:
+    """Mapa hook bash → guard TS (``ported``) y hooks sin guard TS con su motivo (``not_exposed``)."""
+    doc = load_json(path)
+    ported, hidden = doc.get("ported"), doc.get("not_exposed")
+    if not isinstance(ported, dict) or not ported or not isinstance(hidden, dict):
+        raise InventoryError("PARITY_SCHEMA", str(path))
+    if set(ported) & set(hidden):
+        raise InventoryError("PARITY_SCHEMA", "un hook no puede estar portado y no expuesto")
+    if any(not isinstance(v, str) or len(v.strip()) < 10 for v in hidden.values()):
+        raise InventoryError("PARITY_SCHEMA", "not_exposed sin motivo")
+    return doc
+
+
+def run_ts_guards(snap: Path, workdir: Path, jobs: list[dict], ts_entry: str | None) -> dict:
+    """Corre los guards TS del snapshot con la misma orden y el mismo directorio que bash."""
+    bun = find_bun()
+    if not bun:
+        raise InventoryError("TS_RUNTIME", "bun no disponible: la paridad no se puede medir")
+    argv = [bun, "run", str(snap / TS_CLI)] + (["--entry", ts_entry] if ts_entry else [])
+    env = _env(snap, workdir / "home-ts") | GUARD_ENV
+    env["PATH"] = os.pathsep.join([str(Path(bun).parent), env["PATH"]])
+    proc = subprocess.run(argv, input=json.dumps(jobs), text=True, capture_output=True,
+                          cwd=snap, env=env, timeout=300)
+    if proc.returncode != 0:
+        raise InventoryError("TS_RUNTIME", (proc.stderr or proc.stdout).strip()[-300:])
+    out = {}
+    for line in proc.stdout.splitlines():
+        if line.startswith("{"):
+            row = json.loads(line)
+            out[row["id"]] = row
+    if set(out) != {j["id"] for j in jobs}:
+        raise InventoryError("TS_RUNTIME", "faltan casos en la salida TS")
+    return out
+
+
+def parity_of(case: dict, ts_row: dict, parity: dict) -> tuple[str, str]:
+    """(veredicto bash restringido a hooks portados, estado de paridad)."""
+    blockers = [b["hook"].removesuffix(".sh") for b in case["blocked_by"]]
+    unknown = [h for h in blockers if h not in parity["ported"] and h not in parity["not_exposed"]]
+    if unknown:
+        return "UNKNOWN", "PARITY_UNCLASSIFIED:" + ",".join(unknown)
+    bash_ported = "BLOCK" if any(h in parity["ported"] for h in blockers) else "ALLOW"
+    return bash_ported, "MATCH" if bash_ported == ts_row["decision"] else "PARITY_MISMATCH"
+
+
 def run_guard_corpus(root: Path, corpus: dict, workdir: Path, hooks_rev: str | None = None,
-                     seed: bool = True) -> dict:
+                     seed: bool = True, ts: bool = False,
+                     ts_entry: str | None = None) -> dict:
     root = root.resolve()
     validate_guard_corpus(corpus, seed=seed)
+    parity = load_parity(root / PARITY_PATH) if ts else None
     files = tracked_files(root)
     snap = materialize(root, files, sorted(files), workdir / "full", None)
     hooks_sha = overlay_hooks(root, snap, hooks_rev) if hooks_rev else None
@@ -522,21 +586,45 @@ def run_guard_corpus(root: Path, corpus: dict, workdir: Path, hooks_rev: str | N
                       "blocked_by": [{"hook": h["hook"], "reason": h.get("reason", "")}
                                      for h in run["hooks"] if h["exit"] == 2],
                       "ms": run["ms"]})
+    ts_false_blocks, mismatches = [], []
+    if ts:
+        _write_summary(snap / ".pr-summary.md", heading=True, fresh=False)
+        jobs = [{"id": c["id"], "tool": c["tool"], "command": str(c["input"].get("command", "")),
+                 "cwd": str(fixtures[c["fixture"]])} for c in corpus["cases"]]
+        rows = run_ts_guards(snap, workdir, jobs, ts_entry)
+        for c in cases:
+            row = rows[c["id"]]
+            bash_ported, state = parity_of(c, row, parity)
+            c["ts"] = {"observed": row["decision"], "guard": row.get("guard", ""),
+                       "reason": row.get("reason", ""), "bash_ported": bash_ported, "parity": state}
+            if c["expected"] == "ALLOW" and row["decision"] == "BLOCK":
+                ts_false_blocks.append(c["id"])
+            if state != "MATCH":
+                mismatches.append(f"{c['id']}:{state}")
     allow = [c for c in cases if c["expected"] == "ALLOW"]
     false_blocks = [c["id"] for c in cases if c["verdict"] == "FALSE_BLOCK"]
     false_allows = [c["id"] for c in cases if c["verdict"] == "FALSE_ALLOW"]
     matched = all(c["verdict"] == "MATCH" for c in cases) and len(cases) == len(corpus["cases"])
-    decision = "FALSE_ALLOW" if false_allows else "FALSE_BLOCK" if false_blocks \
-        else "PASS" if matched else "INCONCLUSIVE"
+    decision = "FALSE_ALLOW" if false_allows else "PARITY_MISMATCH" if mismatches \
+        else "FALSE_BLOCK" if false_blocks or ts_false_blocks else "PASS" if matched else "INCONCLUSIVE"
+    limitations = ["SIMULATED_DISPATCHER_NOT_A_LIVE_RUNTIME", "PROMPT_AND_ASYNC_HOOKS_NOT_EVALUATED"]
+    if not ts:
+        limitations.append("TS_GUARDS_NOT_COMPARED")
+    else:
+        # La paridad compara BLOCK/ALLOW, no qué guard bloquea; los casos que solo bloquean
+        # hooks not_exposed cuentan como ALLOW en bash (se confía en el puente savia-gates);
+        # y el corpus es pequeño: «0 diferencias» es una señal débil, no una prueba.
+        limitations += ["PARITY_COMPARES_DECISION_NOT_GUARD",
+                        "NOT_EXPOSED_HOOKS_RELY_ON_SAVIA_GATES_BRIDGE",
+                        f"PARITY_CORPUS_SMALL_N={len(cases)}"]
     receipt = {"schema": 1, "spec": "SE-510", "unit": "guard-allow-corpus",
                "model_invocations": 0, "corpus_sha256": sha256(canonical(corpus)),
                "hooks_rev": hooks_sha, "threshold_false_blocks": 0,
                "false_block_rate": f"{len(false_blocks)}/{len(allow)}",
                "false_blocks": false_blocks, "false_allows": false_allows,
-               "decision": decision, "cases": cases,
-               "limitations": ["SIMULATED_DISPATCHER_NOT_A_LIVE_RUNTIME",
-                               "PROMPT_AND_ASYNC_HOOKS_NOT_EVALUATED",
-                               "TS_GUARDS_NOT_COMPARED_UNTIL_S2"]}
+               "ts_compared": ts, "ts_false_blocks": ts_false_blocks,
+               "parity_mismatches": mismatches,
+               "decision": decision, "cases": cases, "limitations": limitations}
     receipt["receipt_sha256"] = sha256(canonical(receipt))
     return receipt
 
@@ -548,7 +636,8 @@ def render_guard_md(r: dict) -> str:
              "| Caso | Fixture | Esperado | Observado | Veredicto | Bloquea |", "|---|---|---|---|---|---|"]
     for c in r["cases"]:
         who = ", ".join(b["hook"] for b in c["blocked_by"]) or "—"
-        lines.append(f"| {c['id']} | {c['fixture']} | {c['expected']} | {c['observed']} "
+        ts = f" · TS {c['ts']['observed']} ({c['ts']['parity']})" if "ts" in c else ""
+        lines.append(f"| {c['id']} | {c['fixture']} | {c['expected']} | {c['observed']}{ts} "
                      f"| {c['verdict']} | {who} |")
     return "\n".join(lines + ["", "Limitaciones: " + ", ".join(r["limitations"]) + ".", ""])
 
@@ -560,7 +649,8 @@ def guard_main(args) -> int:
     workdir = Path(tempfile.mkdtemp(prefix="se510-guard-"))
     try:
         receipt = run_guard_corpus(root, load_json(corpus_path), workdir, args.hooks_rev,
-                                   seed=args.corpus is None)
+                                   seed=args.corpus is None,
+                                   ts=args.ts, ts_entry=args.ts_entry)
     except (InventoryError, subprocess.CalledProcessError) as exc:
         print(f"GUARD-CORPUS: INVALID {exc}", file=sys.stderr)
         return 2
@@ -573,8 +663,10 @@ def guard_main(args) -> int:
     (out / f"{GUARD_REPORT_NAME}.md").write_text(render_guard_md(receipt), encoding="utf-8")
     print(f"GUARD-CORPUS: {receipt['decision']} falsos bloqueos {receipt['false_block_rate']} "
           f"{receipt['false_blocks']} falsos permisos {receipt['false_allows']} "
-          f"-> {out / GUARD_REPORT_NAME}.json")
-    return {"PASS": 0, "FALSE_ALLOW": 3}.get(receipt["decision"], 1)
+          + (f"TS falsos bloqueos {receipt['ts_false_blocks']} paridad {receipt['parity_mismatches']} "
+             if receipt["ts_compared"] else "")
+          + f"-> {out / GUARD_REPORT_NAME}.json")
+    return {"PASS": 0, "FALSE_ALLOW": 3, "PARITY_MISMATCH": 4}.get(receipt["decision"], 1)
 
 
 def render_md(r: dict) -> str:
@@ -609,6 +701,10 @@ def main(argv: list[str] | None = None) -> int:
                     help=f"guard-corpus: otro corpus (sin exigir la semilla); por defecto {GUARD_CORPUS_PATH}")
     ap.add_argument("--hooks-rev", default=None,
                     help="guard-corpus: hooks y scripts/lib de esta revisión (p. ej. un main antiguo)")
+    ap.add_argument("--ts", action="store_true",
+                    help="guard-corpus: compara también con los guards TS de OpenCode (AC-7; exit 4 si difieren)")
+    ap.add_argument("--ts-entry", default=None,
+                    help="guard-corpus --ts: módulo TS que exporta BEFORE_GUARDS (por defecto .opencode/plugins/lib/before-guards.ts)")
     args = ap.parse_args(argv)
     if args.command == "guard-corpus":
         return guard_main(args)
