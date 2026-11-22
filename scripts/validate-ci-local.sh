@@ -105,10 +105,19 @@ echo ""
 # ── Check functions (each writes result to tmpfile) ──────────────────────
 check_coherence() {
   local out="$TMPDIR_CI/9-coherence"
-  local g
-  g=$(bash "$(dirname "${BASH_SOURCE[0]}")/coherence-gates.sh" 2>&1)
-  if echo "$g" | grep -q "WARN coherence"; then
-    echo "WARN Coherence: $(echo "$g" | grep -c WARN) gate(s) en advisory" > "$out"
+  local g rc=0 blocks
+  g=$(bash "$(dirname "${BASH_SOURCE[0]}")/coherence-gates.sh" 2>&1) || rc=$?
+  # Falla cerrado: un BLOCK (en cualquier posición de línea) o un código ≠ 0
+  # nunca pueden acabar en PASS/WARN. FAIL prevalece sobre WARN.
+  blocks=$(printf '%s\n' "$g" | grep -E '^BLOCK|BLOCK coherence' | paste -sd'|' - | sed 's/|/ | /g')
+  if [ -n "$blocks" ]; then
+    echo "FAIL Coherence: $blocks" > "$out"
+  elif [ "$rc" -ne 0 ]; then
+    local last
+    last=$(printf '%s\n' "$g" | grep -v '^[[:space:]]*$' | tail -n 1)
+    echo "FAIL Coherence: coherence-gates.sh terminó con código $rc${last:+ (última línea: $last)}" > "$out"
+  elif printf '%s\n' "$g" | grep -q "WARN coherence"; then
+    echo "WARN Coherence: $(printf '%s\n' "$g" | grep -c WARN) gate(s) en advisory" > "$out"
   else
     echo "PASS Coherence: negative-tests, chaos, entropy, debt-budget" > "$out"
   fi

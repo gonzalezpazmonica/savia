@@ -16,12 +16,12 @@ setup() {
 teardown() { rm -rf "$TMP"; }
 
 @test "un README largo que no va en el cambio no bloquea" {
-  run bash "$ROOT/$CHECK" "scripts/x.sh docs/y.md"
+  run bash "$ROOT/$CHECK" scripts/x.sh docs/y.md
   [ "$status" -eq 0 ]
 }
 
 @test "un README largo que sí va en el cambio bloquea" {
-  run bash "$ROOT/$CHECK" "README.md scripts/x.sh"
+  run bash "$ROOT/$CHECK" README.md scripts/x.sh
   [ "$status" -eq 1 ]
   [[ "$output" == *"README.md: 200"* ]]
 }
@@ -34,7 +34,7 @@ teardown() { rm -rf "$TMP"; }
 
 @test "un README dentro de límites en el cambio pasa" {
   seq 1 100 > README.md
-  run bash "$ROOT/$CHECK" "README.md README.en.md"
+  run bash "$ROOT/$CHECK" README.md README.en.md
   [ "$status" -eq 0 ]
 }
 

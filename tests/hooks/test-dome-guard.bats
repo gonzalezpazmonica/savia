@@ -10,6 +10,8 @@ setup() {
   WS="$(cd "$(mktemp -d)" && pwd -P)"
   mkdir -p "$WS/projects/savia-vaults" "$WS/vaults/gallinero/00-Index" "$WS/vaults/secreta" "$WS/src/sub"
   unset SAVIA_DOME_GUARD SAVIA_GATES_PIN SAVIA_SPACE_DOMES_FILE SAVIA_HOOK_PROFILE
+  # SE-462 S1: una lectura N2+ deja marca de sesión; que nunca caiga en el HOME real.
+  export SAVIA_DOME_READ_DIR="$WS/.dome-read"
 }
 
 teardown() {

@@ -49,12 +49,39 @@ GOVERNANCE_PREFIXES = ("config/merge-sprint", ".opencode/", ".github/workflows/"
 # SE-510 D1: corpus de órdenes que ninguna guarda puede bloquear. Cada entrada es una exención:
 # cambiarlo exige revisión humana explícita (tier 3), para que no sea una vía de exenciones sueltas.
 TIER_3_EXACT = ("config/guard-allow-corpus.json",)
+# Decisión de la operadora 2026-11-18: lo que frena, guarda o autentica a los agentes también es
+# gobernanza (tier 4): las guardas, las instrucciones que cargan los agentes, el freno de emergencia
+# y el puente. Sin esto un lote podía fusionar el debilitamiento de la propia guarda sin su lectura.
+GOVERNANCE_EXEC_PREFIXES = (
+    ".claude/hooks/", ".claude/enterprise/hooks/",   # guardas de Claude Code (.opencode/ ya está arriba)
+    "scripts/savia-control", "config/control/",      # freno de emergencia y su estado
+    "scripts/savia-bridge", "scripts/install-savia-bridge",  # puente: servicio, unidad systemd e instalador
+    # Hallazgo P1-1 de #1593: las suites del freno también son gobernanza; si no, una PR podía
+    # debilitar sus tests (tier 2) sin lectura humana aunque el código del freno fuese tier 4.
+    "tests/test-savia-control", "tests/fixtures/savia-control/",  # suites y fixtures del freno
+    "tests/test-control-epoch",                                    # suites de la época monótona del freno
+)
+GOVERNANCE_EXEC_EXACT = ("scripts/bridge_auth.py",)  # autenticación del puente
+
+
+def _is_exec_governance(p: str) -> bool:
+    """p ya en minúsculas. Guardas, CLAUDE.md, freno y puente (decisión 2026-11-18)."""
+    if p in GOVERNANCE_EXEC_EXACT or p.startswith(GOVERNANCE_EXEC_PREFIXES):
+        return True
+    name = p.rsplit("/", 1)[-1]
+    # CLAUDE.md a cualquier profundidad (los fixtures de tests no cargan en ningún agente).
+    if name == "claude.md" and not p.startswith("tests/"):
+        return True
+    # Guardas sueltas en scripts/ (repeat-tool-guard.py, budget-guard.sh…); no «guardrail-*» ni «guardian».
+    return p.startswith("scripts/") and ("-guard." in name or "-guard-" in name)
 
 
 def is_governance(path: str) -> bool:
     """True si el path pertenece a la gobernanza del workspace (SE-433 §2.8)."""
     p = path.lower()
     if p in GOVERNANCE_EXACT or p.startswith(GOVERNANCE_PREFIXES):
+        return True
+    if _is_exec_governance(p):
         return True
     if p.startswith(".claude/settings") and p.endswith(".json") and "/" not in p[len(".claude/"):]:
         return True

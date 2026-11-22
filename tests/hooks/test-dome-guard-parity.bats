@@ -22,6 +22,8 @@ setup() {
   unset SAVIA_DOME_GUARD SAVIA_GATES_PIN SAVIA_SPACE_DOMES_FILE SAVIA_HOOK_PROFILE
   WS="$(cd "$(mktemp -d)" && pwd -P)"
   mkdir -p "$WS/projects/savia-vaults" "$WS/vaults/g" "$WS/src"
+  # SE-462 S1: una lectura N2+ deja marca de sesión; que nunca caiga en el HOME real.
+  export SAVIA_DOME_READ_DIR="$WS/.dome-read"
 }
 
 teardown() {
@@ -246,7 +248,7 @@ PY
 @test "parity: dome_context with the dome attached or granted lifts the read question in both bindings" {
   require_ts
   printf '{"version":1,"domes":{"g":{"path":"%s/vaults/g"}}}' "$WS" > "$WS/projects/savia-vaults/savia-vaults.domes.json"
-  local read="{\"tool_name\":\"read\",\"tool_input\":{\"filePath\":\"$WS/vaults/g/a\"},\"cwd\":\"$WS\""
+  local read="{\"tool_name\":\"read\",\"tool_input\":{\"filePath\":\"$WS/vaults/g/a\"},\"session_id\":\"s1\",\"cwd\":\"$WS\""
   run both "$read}"
   [ "$output" = "bash=ask ts=ask" ]
   run both "$read,\"dome_context\":{\"attached\":[\"g\"]}}"

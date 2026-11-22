@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# nightly: serial (mide la latencia real de los hooks; la carga paralela del runner la falsea)
 # BATS integrity guard for .ci-baseline/ files (SE-046 closure).
 #
 # Rule: baseline must NEVER exceed current measurement + margin.

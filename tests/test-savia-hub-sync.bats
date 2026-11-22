@@ -50,9 +50,11 @@ commit_in() { (cd "$1" && git add -A && git commit -qm "$2"); }
            docs/rules/domain/savia-hub-config.md docs/rules/domain/savia-hub-offline.md; do
     n=$(wc -l < "$REPO_ROOT/$f"); [ "$n" -le 150 ] || { echo "$f: $n líneas > 150"; return 1; }
   done
+  # Sin -q: con pipefail, grep -q cierra la tubería al primer acierto y cat muere por SIGPIPE
+  # según el reparto de tiempos (fallaba solo en CI con «Broken pipe»).
   for sub in status push pull "flight on" "flight off"; do
     cat "$REPO_ROOT/.claude/commands/savia-hub.md" "$REPO_ROOT/.claude/skills/savia-hub-sync/SKILL.md" \
-        "$REPO_ROOT/docs/rules/domain/savia-hub-offline.md" | grep -qF "savia-hub-sync.sh $sub" \
+        "$REPO_ROOT/docs/rules/domain/savia-hub-offline.md" | grep -F "savia-hub-sync.sh $sub" >/dev/null \
       || { echo "subcomando sin documentar: $sub"; return 1; }
     grep -qE "^${sub%% *}\)" "$REPO_ROOT/$SYNC" || { echo "documentado pero no implementado: $sub"; return 1; }
   done

@@ -24,8 +24,21 @@ import { FilesService, FILES_TOOL, callFilesTool } from '../files/service.js';
 import { FilesError } from '../files/types.js';
 import { UserStore, AccessController, AuthError, AuditLogger, UserQuotaStore } from '../auth/index.js';
 import type { AuthAction, Authorization } from '../auth/index.js';
+import { howToProceed } from './how-to-proceed.js';
+import { writeWarningsResult } from './write-warnings.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+
+/** Error de herramienta: texto y código intactos; si hay orientación, `how_to_proceed` (campo y segundo bloque de texto). */
+function errorResult(e: unknown) {
+  const msg = e instanceof Error ? e.message : String(e);
+  const how = howToProceed(e);
+  return {
+    content: [{ type: 'text' as const, text: `Error: ${msg}` }, ...(how ? [{ type: 'text' as const, text: `how_to_proceed: ${how}` }] : [])],
+    ...(how ? { how_to_proceed: how } : {}),
+    isError: true,
+  };
+}
 
 const AUTH_TOKEN_ENV = 'SAVIA_AUTH_TOKEN';
 
@@ -201,7 +214,7 @@ export class MCPVaultServer {
         },
         {
           name: 'vault_write',
-          description: 'Create or update a note. Git-committed with content hash.',
+          description: 'Create or update a note. Git-committed with content hash. The response adds non-blocking `warnings` (duplicate title, broken links, orphan note, open conflicts, up to 5 neighbour notes) or `warnings_unavailable`.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -374,7 +387,7 @@ export class MCPVaultServer {
           case 'vault_read': {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
-            try { await this.authorize(dome, 'read', 'vault_read'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'read', 'vault_read'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             const note = await inst.storage.read(args.path as string);
 
             // Resolve wikilink backlinks
@@ -406,16 +419,18 @@ export class MCPVaultServer {
           case 'vault_write': {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
-            try { await this.authorize(dome, 'write', 'vault_write'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'write', 'vault_write'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             const receipt = await inst.storage.write(args.path as string, args.content as string, args.message as string);
             this.rag.scheduleSync(dome);
-            return { content: [{ type: 'text', text: JSON.stringify(receipt, null, 2) }] };
+            // Avisos: nunca bloquean ni cambian la escritura ya hecha; fail-open solo en ellos.
+            const extra = await writeWarningsResult(inst.storage, receipt.path, inst.dome.confidentiality ?? 'N2');
+            return { content: [{ type: 'text', text: JSON.stringify({ ...receipt, ...extra }, null, 2) }] };
           }
 
           case 'vault_search': {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
-            try { await this.authorize(dome, 'read', 'vault_search'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'read', 'vault_search'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             inst.search.buildIndex();
             const results = inst.search.search({
               query: args.query as string,
@@ -461,7 +476,7 @@ export class MCPVaultServer {
           case 'vault_rag_status': {
             const names = (args.domes as string[] | undefined) ?? (this.domeRegistry ? this.domeRegistry.listActive().map(d => d.name) : [this.config.name]);
             for (const n of names) {
-              try { await this.authorize(n, 'read', 'vault_rag_status'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+              try { await this.authorize(n, 'read', 'vault_rag_status'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             }
             // Sin ruta del registro; el error (puede nombrar otras cúpulas) solo a quien lee todas las activas.
             const registry = this.domeRegistry ? await this.publicRegistryState('vault_rag_status') : undefined;
@@ -471,7 +486,7 @@ export class MCPVaultServer {
 
           case 'vault_rag_sync': {
             const dome = String(args.dome ?? '');
-            try { await this.authorize(dome, 'write', 'vault_rag_sync'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'write', 'vault_rag_sync'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             const report = await this.rag.sync(dome, { rebuild: Boolean(args.rebuild) });
             return { content: [{ type: 'text', text: JSON.stringify(report, null, 2) }] };
           }
@@ -479,7 +494,7 @@ export class MCPVaultServer {
           case 'vault_list': {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
-            try { await this.authorize(dome, 'read', 'vault_list'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'read', 'vault_list'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             const files = await inst.storage.list();
             const prefix = args.path as string | undefined;
             const filtered = prefix ? files.filter(f => f.startsWith(prefix)) : files;
@@ -489,7 +504,7 @@ export class MCPVaultServer {
           case 'vault_stats': {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
-            try { await this.authorize(dome, 'read', 'vault_stats'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'read', 'vault_stats'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             const stats = await inst.storage.stats();
             return { content: [{ type: 'text', text: JSON.stringify(stats, null, 2) }] };
           }
@@ -497,7 +512,7 @@ export class MCPVaultServer {
           case 'vault_index': {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
-            try { await this.authorize(dome, 'write', 'vault_index'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'write', 'vault_index'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             inst.search.buildIndex();
             const tags = inst.search.getTags();
             return { content: [{ type: 'text', text: `Index rebuilt. ${tags.size} unique tags indexed.` }] };
@@ -506,7 +521,7 @@ export class MCPVaultServer {
           case 'vault_diff': {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
-            try { await this.authorize(dome, 'read', 'vault_diff'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'read', 'vault_diff'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             const diff = await inst.storage.diff(args.path as string);
             return { content: [{ type: 'text', text: diff || '(no changes)' }] };
           }
@@ -514,7 +529,7 @@ export class MCPVaultServer {
           case 'vault_log': {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
-            try { await this.authorize(dome, 'read', 'vault_log'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'read', 'vault_log'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             const log = await inst.storage.log(args.path as string, (args.maxCount as number) || 20);
             return { content: [{ type: 'text', text: JSON.stringify(log, null, 2) }] };
           }
@@ -522,7 +537,7 @@ export class MCPVaultServer {
           case 'vault_tags': {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
-            try { await this.authorize(dome, 'read', 'vault_tags'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'read', 'vault_tags'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             inst.search.buildIndex();
             const tags = inst.search.getTags();
             return { content: [{ type: 'text', text: JSON.stringify([...tags.entries()]) }] };
@@ -531,7 +546,7 @@ export class MCPVaultServer {
           case 'vault_introspect': {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
-            try { await this.authorize(dome, 'read', 'vault_introspect'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'read', 'vault_introspect'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             if (!inst.config.schemaDir) return { content: [{ type: 'text', text: 'No schema configured.' }], isError: true };
             const introspector = new Introspector(inst.config);
             if (args.entity) {
@@ -545,7 +560,7 @@ export class MCPVaultServer {
           case 'vault_graph': {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
-            try { await this.authorize(dome, 'read', 'vault_graph'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'read', 'vault_graph'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             if (!inst.config.schemaDir) return { content: [{ type: 'text', text: 'No schema configured.' }], isError: true };
             const graph = new KnowledgeGraph(inst.config);
             await graph.build();
@@ -565,7 +580,7 @@ export class MCPVaultServer {
           case 'vault_query': {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
-            try { await this.authorize(dome, 'read', 'vault_query'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'read', 'vault_query'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             if (!inst.config.schemaDir) return { content: [{ type: 'text', text: 'No schema configured.' }], isError: true };
             const queryEngine = new QueryEngine(inst.config);
             await queryEngine.ensureLoaded();
@@ -576,7 +591,7 @@ export class MCPVaultServer {
           case 'vault_wikilink_health': {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
-            try { await this.authorize(dome, 'read', 'vault_wikilink_health'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'read', 'vault_wikilink_health'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             try {
               const { computeWikiLinkHealth, buildEntityIndex } = await import('../knowledge/wikilink-validator.js');
               const allNotes = await inst.storage.list();
@@ -598,7 +613,7 @@ export class MCPVaultServer {
           case 'vault_health': {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
-            try { await this.authorize(dome, 'read', 'vault_health'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
+            try { await this.authorize(dome, 'read', 'vault_health'); } catch (e) { if (e instanceof AuthError) return errorResult(e); throw e; }
             const registryError = this.domeRegistry ? (await this.publicRegistryState('vault_health')).error : undefined;
             const registryNote = registryError ? `\n\nRegistro de cúpulas: recarga rechazada, se sirve el último válido. ${registryError}` : '';
             // SE-481 R2: contador de cuarentena por código, sin rutas ni títulos (las rutas, solo por CLI local).
@@ -614,14 +629,7 @@ export class MCPVaultServer {
             return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
         }
       } catch (e: unknown) {
-        if (e instanceof AuthError) {
-          return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
-        }
-        if (e instanceof RagError || e instanceof FilesError || e instanceof RouteError) {
-          return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
-        }
-        const msg = e instanceof Error ? e.message : String(e);
-        return { content: [{ type: 'text', text: `Error: ${msg}` }], isError: true };
+        return errorResult(e);
       }
     });
 

@@ -2,10 +2,11 @@ import { SearchEngine } from '../search/index.js';
 import { FederationRegistry } from './registry.js';
 import { A2AClient } from './a2a-client.js';
 import { FederationCache } from './cache.js';
+import { CircuitBreaker } from './circuit-breaker.js';
 import type { FederatedDome, FederatedSearchContext, FederatedSearchResult, FederatedSearchResponse } from './types.js';
 
 export class FederatedSearchEngine {
-  private local: SearchEngine; private registry: FederationRegistry; private client: Pick<A2AClient, 'search' | 'healthCheck'>; private cache: FederationCache; private localTimeout: number; private maxTotalResults: number;
+  private local: SearchEngine; private registry: FederationRegistry; private client: Pick<A2AClient, 'search' | 'healthCheck'>; private cache: FederationCache; private localTimeout: number; private maxTotalResults: number; private breaker = new CircuitBreaker();
 
   constructor(local: SearchEngine, registry: FederationRegistry, opts: { localTimeout?: number; maxTotalResults?: number; cacheTtlMs?: number; /** @internal solo tests/benchmark: sustituye transporte, timeouts y validación de A2AClient. Producción no debe pasarlo. */ client?: Pick<A2AClient, 'search' | 'healthCheck'> } = {}) {
     if (opts.maxTotalResults !== undefined && (!Number.isInteger(opts.maxTotalResults) || opts.maxTotalResults <= 0)) throw new Error('maxTotalResults must be a positive integer');
@@ -35,18 +36,26 @@ export class FederatedSearchEngine {
     const localResults = localAllowed
       ? await Promise.race([this.localSearch(query, maxResults), new Promise<FederatedSearchResult[]>(r => setTimeout(() => r([]), this.localTimeout))])
       : [];
-    const remoteResults = await Promise.all(domes.map(d => this.client.search(d, query, Math.ceil(maxResults * d.weight))));
+    const remoteResults = await Promise.all(domes.map(d => this.searchRemote(d, query, maxResults)));
     const totalLimit = Math.min(this.maxTotalResults, maxResults * domeIds.length);
     const allResults = this.merge(localResults, remoteResults, domes, maxResults, totalLimit);
 
-    for (let i = 0; i < domes.length; i++) {
-      const r = remoteResults[i];
-      if (r.status !== 'ok') this.registry.updateStatus(domes[i].id, domes[i].status === 'healthy' ? 'degraded' : 'unhealthy');
-      else if (domes[i].status !== 'healthy') this.registry.updateStatus(domes[i].id, 'healthy');
-    }
     const response: FederatedSearchResponse = { results: allResults, sources: [...(localAllowed ? [{ id: 'local', name: 'Local', status: 'ok' as const, count: localResults.length, latencyMs: 0 }] : []), ...domes.map((d, i) => ({ id: d.id, name: d.name, status: remoteResults[i].status, count: remoteResults[i].results.length, latencyMs: remoteResults[i].latencyMs }))], totalMs: Date.now() - start };
-    this.cache.set(cacheRequest, response);
+    // Una respuesta con un dome omitido no se cachea: tras el enfriamiento debe poder sondearse.
+    if (!response.sources.some(x => x.status === 'skipped')) this.cache.set(cacheRequest, response);
     return response;
+  }
+
+  /** SE-287 AC-4.3: el cortacircuitos sustituye al estado de salud manual. Un dome con el circuito abierto no se llama. */
+  private async searchRemote(d: FederatedDome, query: string, maxResults: number): Promise<{ results: FederatedSearchResult[]; status: 'ok' | 'timeout' | 'error' | 'skipped'; latencyMs: number }> {
+    if (!this.breaker.allow(d.id)) return { results: [], status: 'skipped', latencyMs: 0 };
+    const probing = this.breaker.getState(d.id) === 'HALF_OPEN';
+    let r: Awaited<ReturnType<A2AClient['search']>>;
+    try { r = await this.client.search(d, query, Math.ceil(maxResults * d.weight)); }
+    catch (e) { probing ? this.breaker.recordProbeFailure(d.id) : this.breaker.recordFailure(d.id); throw e; }
+    if (r.status === 'ok') probing ? this.breaker.recordProbeSuccess(d.id) : this.breaker.recordSuccess(d.id);
+    else probing ? this.breaker.recordProbeFailure(d.id) : this.breaker.recordFailure(d.id);
+    return r;
   }
 
   private async localSearch(query: string, maxResults: number): Promise<FederatedSearchResult[]> {

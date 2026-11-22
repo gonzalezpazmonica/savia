@@ -27,6 +27,10 @@ for i in range(30):
 rows.append({"ts":"2026-01-01T00:00:00Z","type":"session-summary","title":"pre-compact auto-save","content":"c","project":"null","importance_tier":"B"})
 with open(t+"/ws/output/.memory-store.jsonl","w") as f:
     for r in rows: f.write(json.dumps(r)+"\n")
+# SE-529 S2: post-compaction.sh solo reinyecta el proyecto activo (CLAUDE.local.md del workspace); sin
+# proyecto determinable imprime 0 bytes y la medición no mide nada. El fixture simula un workspace real.
+with open(t+"/ws/CLAUDE.local.md","w") as f:
+    f.write("project: pb\n")
 PY
 }
 teardown() { rm -rf "$T"; }

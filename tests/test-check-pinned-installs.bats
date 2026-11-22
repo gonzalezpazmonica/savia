@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+# nightly: serial (recorre el repo real; otra suite que crea o borra ficheros a la vez lo da por ilegible y sale 2)
 # Ref: docs/specs/SE-465-pinned-install-dependencies.spec.md (S5, AC1-AC3)
 # Contrato de scripts/check-pinned-installs.sh: un fixture por patron que debe fallar,
 # los casos legitimos de descarga a python (G3) no fallan y los positivos simetricos si.

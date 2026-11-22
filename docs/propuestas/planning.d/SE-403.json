@@ -1,0 +1,32 @@
+{
+  "id": "SE-403",
+  "status": "IMPLEMENTED",
+  "approval": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27)",
+  "priority": "P2",
+  "title": "Benchmark evidence: trazas, frontera, hash de selección",
+  "evidence": "Graduación S27 (2026-11-21): evidencia en la PR #1638 (docs/evidence/graduacion-s27/SE-403.md). Entrega: PR #1171. Con resto: RESTO-403-a: test «una ejecución limpia peor no reemplaza la frontera» (falla con la mutación better=True). RESTO-403-b: test de concurrencia que falle sin flock, o documentar que el cerrojo solo se verifica por lectura. Sin código de producto.",
+  "phase": "C",
+  "delivery": {
+    "merge_pr": 1171,
+    "main_commit": "6d6252b5",
+    "verified_on": "2026-09-30"
+  },
+  "note": "Graduada con resto; el resto queda en la cola S27. RESTO-403-a: test «una ejecución limpia peor no reemplaza la frontera» (falla con la mutación better=True). RESTO-403-b: test de concurrencia que falle sin flock, o documentar que el cerrojo solo se verifica por lectura. Sin código de producto.",
+  "completion": {
+    "merge_pr": 1171,
+    "acceptance_evidence": [
+      {
+        "criterion": "AC (revisión de graduación S27, PR #1638)",
+        "file": "docs/specs/SE-403-benchmark-evidence-frontier.spec.md"
+      },
+      {
+        "criterion": "tests de los AC",
+        "file": "tests/test-se403-bench-evidence.bats"
+      }
+    ],
+    "human_review": {
+      "status": "APPROVED",
+      "evidence": "Operadora 2026-11-21, pregunta interactiva «12 + 5 con resto» (revisión de graduación S27). Evidencia de revisión: PR #1638."
+    }
+  }
+}
