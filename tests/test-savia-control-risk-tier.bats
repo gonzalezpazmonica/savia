@@ -21,4 +21,16 @@ tier() { python3 -I "$BATS_TEST_DIRNAME/../scripts/risk-tier.py" --diff "$1" --j
   # La operadora eligió prefijos (scripts/savia-control*, tests/test-control-epoch*): el límite está fuera de ellos.
   [ "$(tier scripts/savia-status.py)" != 4 ]
   [ "$(tier tests/test-control-plane.bats)" != 4 ]
+  # Justo por debajo de cada prefijo (le falta el último carácter): fuera.
+  for f in scripts/savia-contro.py tests/test-savia-contro.bats tests/test-control-epoc.bats \
+           tests/fixtures/savia-contro/setup.bash config/contro/x.json; do
+    echo "$f"; [ "$(tier "$f")" != 4 ]
+  done
+}
+
+@test "límite: los prefijos son prefijos literales; un nombre que los continúa también es tier 4" {
+  # Decisión de la operadora (#1630): prefijos, no nombres exactos. Proteger de más es fail-closed.
+  for f in scripts/savia-controller.py tests/test-control-epochs-x.bats tests/test-savia-control-x.bats; do
+    echo "$f"; [ "$(tier "$f")" = 4 ]
+  done
 }
