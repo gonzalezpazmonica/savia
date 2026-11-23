@@ -81,7 +81,7 @@
 
 <!-- AUTO_BEGIN — do not edit; regenerate via scripts/resolver-md-generate.sh -->
 
-### Skills (140)
+### Skills (139)
 
 | Intent (skill) | Target | Cuándo usar |
 |---|---|---|
@@ -216,7 +216,6 @@
 | `topic-cluster` | skill:topic-cluster | Usar cuando se agrupan retros, PBIs o incidentes en topics para detectar patrones trans... |
 | `transcriptor-digest` | skill:transcriptor-digest | Usar cuando se detectan carpetas nuevas en el directorio de reuniones del transcriptor ... |
 | `ubiquitous-language` | skill:ubiquitous-language | Usar cuando se necesita extraer o consolidar el glosario de términos de dominio de un ... |
-| `understand-anything` | skill:understand-anything | Usar cuando se necesita analizar un codebase con Understand-Anything para generar knowl... |
 | `verification-lattice` | skill:verification-lattice | Usar cuando se necesita verificación multi-capa más allá del code review estándar. |
 | `voice-inbox` | skill:voice-inbox | Usar cuando se procesan mensajes de voz para transcribirlos y convertirlos en acciones. |
 | `web-research` | skill:web-research | Usar cuando se necesita buscar en la web para resolver gaps de contexto (docs, versione... |

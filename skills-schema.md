@@ -115,7 +115,6 @@
 | tls-security-checker | Usar cuando se verifica TLS/SSL o security headers HTTP de un servidor web. Invo | tls, ssl, web-security, headers, testssl, wafw00f, deploy |
 | topic-cluster | Usar cuando se agrupan retros, PBIs o incidentes en topics para detectar patrone | clustering, bertopic, retrospectives, patterns, memory |
 | ubiquitous-language | Usar cuando se necesita extraer o consolidar el glosario de términos de dominio  | ddd, glossary, domain, context, ubiquitous-language |
-| understand-anything | Usar cuando se necesita analizar un codebase con Understand-Anything para genera | knowledge-graph, codebase, domain, onboarding, diff-impact, ua |
 | verification-lattice | Usar cuando se necesita verificación multi-capa más allá del code review estánda | verification, multi-layer, pipeline, quality-gate |
 | voice-inbox | Usar cuando se procesan mensajes de voz para transcribirlos y convertirlos en ac | voice, transcription, audio, whatsapp |
 | web-research | Usar cuando se necesita buscar en la web para resolver gaps de contexto (docs, v | search, web, cache, searxng, citations, gap-detection |

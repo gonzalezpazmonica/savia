@@ -1,5 +1,7 @@
 # Spec: Adopt Understand-Anything — Codebase Knowledge Graphs for Savia
 
+> **RETIRADA (2026-11-22).** La operadora retiró esta integración por SE-535 S2: el instalador clonaba un repositorio externo sin versión fijada y enlazaba sus skills sin leerlas, y no constaba ningún uso. Se eliminaron los dos guiones, las siete órdenes, la skill y sus dos suites. El texto se conserva como historia; el código se recupera del historial de git. Reintroducirla exige pasar por la puerta de entrada descrita en SE-535.
+
 **Task ID:**        SPEC-SE-088-UA-ADOPT
 **PBI padre:**      Era 192 — Knowledge Graph Adoption
 **Sprint:**         2026-05
@@ -9,7 +11,7 @@
 **Developer Type:** agent-single
 **Asignado a:**     claude-agent
 **Estimacion agent:** ~90 min
-**Estado:**         Pendiente
+**Estado:**         Retirada (2026-11-22, SE-535 S2)
 **Prioridad:**      ALTA
 **Modelo:**         claude-sonnet-4-6
 **Max turns:**      25
