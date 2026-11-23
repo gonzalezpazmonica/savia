@@ -3,6 +3,7 @@
 #   A09 — review-community.sh merge fusionaba sin permiso firmado.
 #   A02 — push-pr.sh reintentaba forzando la subida ante cualquier fallo.
 # Cada caso negativo tiene su contraprueba: un test que no puede fallar no vale (SE-456).
+# Ref: docs/rules/domain/autonomous-safety-merge-grant.md (la fusión exige permiso expreso).
 
 setup() {
   REPO_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
@@ -10,6 +11,12 @@ setup() {
   LOG="$BATS_TEST_TMPDIR/llamadas.log"
   mkdir -p "$STUB"
   : > "$LOG"
+}
+
+teardown() {
+  # BATS_TEST_TMPDIR lo limpia bats; se vacía el directorio de programas falsos por si el test aborta a medias.
+  [ -n "${STUB:-}" ] && [ -d "$STUB" ] && find "$STUB" -type f -delete
+  return 0
 }
 
 # gh falso: apunta cada invocación y sale bien.
@@ -47,7 +54,7 @@ run_push() {
 
 # ── A09 ──────────────────────────────────────────────────────────────
 
-@test "A09: merge rehúsa con código 3 y no llama a gh" {
+@test "A09 error: merge rehúsa con código 3 y no llama a gh" {
   stub_gh
   PATH="$STUB:$PATH" run bash "$REPO_DIR/scripts/review-community.sh" merge 123
   [ "$status" -eq 3 ]
@@ -56,7 +63,7 @@ run_push() {
   [ ! -s "$LOG" ]
 }
 
-@test "A09: merge sin número de PR también rehúsa con 3" {
+@test "A09 no arg: merge sin número de PR también rehúsa con 3" {
   stub_gh
   PATH="$STUB:$PATH" run bash "$REPO_DIR/scripts/review-community.sh" merge
   [ "$status" -eq 3 ]
@@ -113,7 +120,7 @@ run_push() {
   [ "$output" -eq 1 ]
 }
 
-@test "A02 negativo: fallo de red no fuerza y sale con error" {
+@test "A02 error de red: no fuerza y sale con error" {
   stub_git 128 "fatal: unable to access 'https://example.invalid/': Could not resolve host"
   run run_push
   [ "$status" -eq 1 ]
@@ -122,7 +129,7 @@ run_push() {
   [ "$output" -eq 0 ]
 }
 
-@test "A02 negativo: rechazo por rama protegida o hook no fuerza" {
+@test "A02 reject por rama protegida o hook: no fuerza" {
   stub_git 1 "remote: error: GH006: Protected branch update failed
  ! [remote rejected] rama-de-prueba -> rama-de-prueba (protected branch hook declined)"
   run run_push
@@ -131,7 +138,7 @@ run_push() {
   [ "$output" -eq 0 ]
 }
 
-@test "A02 negativo: salida vacía con fallo no fuerza" {
+@test "A02 empty: salida vacía con fallo no fuerza" {
   stub_git 1 ""
   run run_push
   [ "$status" -eq 1 ]
@@ -139,7 +146,7 @@ run_push() {
   [ "$output" -eq 0 ]
 }
 
-@test "A02 límite: si el reintento forzado falla, el fallo se propaga" {
+@test "A02 boundary: si el reintento forzado falla, el error se propaga" {
   stub_git 1 "(non-fast-forward)" 1
   run run_push
   [ "$status" -ne 0 ]
