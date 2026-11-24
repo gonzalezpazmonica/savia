@@ -67,7 +67,7 @@ Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
 
 - **S28 · P1 · fase C** — Lecciones con ámbito y aprobación auténtica
   Acción: Un solo esquema de lección: SE-473 es la dueña (ámbito, evidencia, caducidad, refutación y, nuevo, tipo de acción y punto de control); SE-497 parte 2 conserva el paso a activa (recibo, firma humana verificable, rollback, ninguna cifra concede autoridad). SE-409 se reduce a retirada por desuso. SE-460 declara que su sello local es higiene, no aprobación.
-  Entrada: SE-473 S0 ya aprobado: medir primero. Aprobación de SE-497 por la operadora; S1–S2 de SE-473 necesitan nueva aprobación tras S0.
+  Entrada: SE-473 S0 ya aprobado: medir primero. SE-497 tiene aprobado solo S0 desde el 2026-11-23; los slices S4 a S7 de su parte 2 necesitan nueva decisión de la operadora; S1–S2 de SE-473 necesitan nueva aprobación tras S0.
   Salida: Medición de S0 publicada; esquema único decidido; una cadena de firma falsificada no activa una lección (test negativo).
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: sin esto SE-515 no pasa de orientativa; esfuerzo: S0 pequeño; SE-497 parte 2 media.
 
@@ -181,6 +181,7 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-490 [APPROVED] Soul Continuidad v1: gemelo operativo en el portátil de trabajo, de solo lectura y con comunicación bidireccional — evidencia: docs/specs/SE-490-soul-continuity-work-laptop.spec.md
 - SE-496 [APPROVED] Ontología operativa gobernada: la autoridad vive fuera del modelo — evidencia: docs/specs/SE-496-governed-operational-ontology-authority.spec.md
 - SE-500 [APPROVED] Merge-sprint sin realineación manual: fragmentos de planificación, integración en línea y plan ordenado — evidencia: docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md
+- SE-497 [APPROVED] Conocimiento vinculado a código con deriva, y aprendizaje sin autoautoridad (aprobado solo S0) — evidencia: docs/specs/SE-497-code-linked-knowledge-drift-and-learning-without-self-authority.spec.md
 - SE-498 [APPROVED] STOP global y revocación entre ejecutores — evidencia: docs/specs/SE-498-global-stop-cross-executor-revocation.spec.md
 - SE-501 [APPROVED] Derivados fuera de las PR: firma de confidencialidad, SAM y manifiesto de reglas generados en main — evidencia: docs/specs/SE-501-derivados-fuera-de-las-pr.spec.md
 - SE-504 [APPROVED] Savia usable: una app como la de Claude o ChatGPT, conectada a Soul y Space — evidencia: docs/specs/SE-504-savia-usable-conversacion-documentos-contexto.spec.md
