@@ -49,12 +49,13 @@ Retirar ambos, cada uno en su PR. No se sustituyen por nada. Si algún día se q
 
 | Slice | Entrega | Tier |
 |---|---|---|
-| S1 | **Ranking de skills.** Se eliminan `scripts/skill-feedback-log.sh`, `scripts/skill-feedback-rank.sh` y `.claude/commands/skill-rank.md`. Se limpian sus menciones en `docs/rules/domain/skill-lifecycle.md`, `scripts/skill-detect.sh` y `tests/test-skill-detect.bats`. `docs/specs/SPEC-SKILL-FEEDBACK.spec.md` queda marcada como retirada. Recuento de órdenes actualizado donde se declare. | previsible 3; se calcula al implementar |
-| S2 | **Realimentación de memoria.** Se eliminan `.claude/hooks/memory-feedback-task.sh`, `scripts/memory-feedback-extractor.py`, `tests/bats/test-memory-feedback.bats` y `tests/scripts/test_memory_feedback.py`. Se quita su registro de `.claude/settings.json` (con el pin de configuración actualizado), de `.github/hooks/savia.json`, de `hooks/routing-posttooluse.tsv` y de `docs/hooks-coverage-matrix.md`, y su mención en `scripts/turn-sdlc-audit.sh`. `docs/propuestas/SPEC-164-memory-feedback-loop.md` queda marcada como retirada. Recuento de hooks actualizado donde se declare. | previsible 4 (toca `settings.json`); se calcula al implementar |
+| S1 | **Ranking de skills.** Se eliminan `scripts/skill-feedback-log.sh`, `scripts/skill-feedback-rank.sh` y `.claude/commands/skill-rank.md`. Se limpian sus menciones en `docs/rules/domain/skill-lifecycle.md`, `scripts/skill-detect.sh` y `tests/test-skill-detect.bats`. Se quitan sus entradas de los índices `vault/00-Index/Commands.md` y `vault/00-Index/Scripts.md`. `docs/specs/SPEC-SKILL-FEEDBACK.spec.md` queda marcada como retirada. Recuento de órdenes actualizado donde se declare. | previsible 3; se calcula al implementar |
+| S2 | **Realimentación de memoria.** Se eliminan `.claude/hooks/memory-feedback-task.sh`, `scripts/memory-feedback-extractor.py`, `tests/bats/test-memory-feedback.bats` y `tests/scripts/test_memory_feedback.py`. Se quita su registro de `.claude/settings.json` (con el pin de configuración actualizado), de `.github/hooks/savia.json`, de `hooks/routing-posttooluse.tsv` y de `docs/hooks-coverage-matrix.md`, y su mención en `scripts/turn-sdlc-audit.sh`. **Se quita `test-memory-feedback.bats` de `CORE_TESTS` en `scripts/ci-bats-deps.sh`:** la selección dinámica de la CI añade siempre esas suites y falla si una no existe, así que borrarla sin este paso bloquearía todas las PR posteriores. `docs/propuestas/SPEC-164-memory-feedback-loop.md` queda marcada como retirada, también en su fila de `docs/propuestas/INDEX.md`. Recuento de hooks actualizado donde se declare. | previsible 4 (toca `settings.json`); se calcula al implementar |
 
 **Fuera de la retirada, a propósito:**
 
 - `scripts/skill-detect.sh` y su orden: leen el mismo fichero de invocaciones que nunca existió, así que hoy tampoco tienen datos. Retirarlos es otra decisión; S1 solo les quita la referencia al guion eliminado.
+- `scripts/skill-usage-tracker.py` (escribe) y `scripts/usage-report.py` (lee) usan el mismo fichero `data/skill-invocations.jsonl` sin depender de los guiones retirados: la retirada no los rompe y siguen como están.
 - `scripts/memory-decay.py` y `/memory-prune`: decaimiento por tiempo, de uso manual. No es realimentación automática.
 - El fichero local `output/memory-feedback-telemetry.jsonl` no está versionado; no se toca.
 
@@ -69,11 +70,13 @@ Retirar ambos, cada uno en su PR. No se sustituyen por nada. Si algún día se q
 | AC-5 | **Negativo:** `scripts/turn-sdlc-audit.sh` no falla por la ausencia del hook | S2 | real |
 | AC-6 | Los recuentos de órdenes y de hooks declarados coinciden con el árbol; las comprobaciones de deriva pasan | S1, S2 | real |
 | AC-7 | Cada slice se revierte con una sola PR | S1, S2 | estatica |
+| AC-8 | **Negativo:** la selección dinámica de suites de la CI (`scripts/ci-bats-deps.sh`, `scripts/ci-select-bats.sh`) no lista ninguna suite inexistente; se comprueba recorriendo `CORE_TESTS` y el mapa de dependencias contra el árbol | S2 | real |
 
 ## Riesgos
 
 - **Alguien activó la realimentación en su máquina.** La variable solo puede estar en un entorno local. Si lo estaba, perderá un mecanismo que clasificaba mal; la retirada es reversible.
 - **Referencias colgadas** en catálogos y recuentos: por eso AC-6.
+- **Suite borrada que la CI sigue pidiendo:** rompería la CI de todas las PR, no solo la de la retirada. Por eso AC-8. Lo detectó la revisión independiente de esta spec.
 - **S2 toca configuración sensible:** revisión humana expresa de esa PR.
 
 ## OpenCode Implementation Plan
