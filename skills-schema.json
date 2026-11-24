@@ -3,7 +3,7 @@
     "generated": "2026-06-28",
     "generator": "scripts/skills-schema-generate.sh",
     "spec": "SE-238",
-    "total_skills": 119,
+    "total_skills": 118,
     "description": "Schema programático de todos los skills de Savia pm-workspace. Optimizado para consumo por LLMs y agentes externos."
   },
   "skills": [
@@ -1232,20 +1232,6 @@
         "ubiquitous-language"
       ],
       "example_trigger": "- User says \"extrae glosario\", \"ubiquitous language\", \"glossary\", \"/glossary\""
-    },
-    {
-      "skill_id": "understand-anything",
-      "description": "Usar cuando se necesita analizar un codebase con Understand-Anything para generar knowledge graphs estructurales y de dominio.",
-      "skill_path": ".opencode/skills/understand-anything/SKILL.md",
-      "tags": [
-        "knowledge-graph",
-        "codebase",
-        "domain",
-        "onboarding",
-        "diff-impact",
-        "ua"
-      ],
-      "example_trigger": "- Onboarding de proyecto nuevo (>500 ficheros)"
     },
     {
       "skill_id": "verification-lattice",

@@ -16,7 +16,7 @@ lang: de
 
 **Savia ist eine agentische Meta-Orchestratorin für Forschung, Entwicklung und Innovation (FuE+I): Sie koordiniert spezialisierte Agenten und Harnesses, Forschungslinien, Kuppeln gesteuerten Wissens und Projekte, wobei die Autorität stets beim Menschen liegt. Open Source und souverän.**
 
-**564 Befehle · 90 Agenten · 139 Skills · 135 Hooks**
+**557 Befehle · 90 Agenten · 139 Skills · 135 Hooks**
 
 Savia orchestriert KI-gestützte FuE+I-Arbeit: Sie verteilt Aufgaben auf spezialisierte Harnesses (Ausführende, unabhängige Prüferinnen, externe Anbieter), trägt Forschungslinien, steuert Wissen in Kuppeln (Savia Vaults) und führt Projektmanagement als eine Fähigkeit unter mehreren. Sie integriert Gedächtnis, Sicherheit, ausführbare Richtlinien (policy-as-code), Nachvollziehbarkeit mit Receipts und Evaluation auf einer Architektur, die von Modell, Anbieter und Frontend unabhängig ist. Sie läuft lokal mit Daten- und Inferenzsouveränität, in 9 Sprachen.
 
@@ -39,7 +39,7 @@ KI-gestützte Ausführung wächst schneller als das Vertrauen in sie. Savia gibt
 - **Orchestrieren** — Meta-Orchestrierung spezialisierter Harnesses: eine vertragsgebundene Ausführende, unabhängige Prüferinnen und externe Anbieter, mit deterministischem Aufruf und der Autorität beim Menschen.
 - **Forschen** — Forschungslinien mit Hypothesen, Experimenten und überprüfbaren Lektionen.
 - **Steuern** — Risiko (L0-L4), human gates, policy-as-code, Receipts und Provenance jeder Aktion.
-- **Ausführen** — 90 Agenten, 564 Befehle, 139 Skills mit ausführbaren Specs (SDD), Sicherheitsaudit und Code-Review.
+- **Ausführen** — 90 Agenten, 557 Befehle, 139 Skills mit ausführbaren Specs (SDD), Sicherheitsaudit und Code-Review.
 - **Wissen** — Kuppeln gesteuerten Wissens (Savia Vaults) und bitemporales persistentes Gedächtnis mit Provenance und Trust-Gates.
 - **Evaluieren** — Evals mit Baseline, paired-delta regression und Multi-Frontend-Canaries.
 - **Domänen** — Projektmanagement (Sprints, Backlog, Berichte; eine Fähigkeit unter mehreren), Softwareentwicklung und spezialisierte Domänen.
@@ -103,7 +103,7 @@ Vollständige Tabelle der Fähigkeiten: [capabilities.de.md](docs/readme/capabil
 
 ## Savia
 
-Savia ist die Identität des Workspace: ein Textmuster, das über Modelle hinweg bestehen bleibt (Claude, DeepSeek, Qwen). Als Meta-Orchestratorin koordiniert sie 90 Agenten, 564 Befehle, 139 Skills und externe Harnesses. Sie arbeitet nach Prinzipien kalibrierter Ehrlichkeit, Datensouveränität und verpflichtender menschlicher Prüfung.
+Savia ist die Identität des Workspace: ein Textmuster, das über Modelle hinweg bestehen bleibt (Claude, DeepSeek, Qwen). Als Meta-Orchestratorin koordiniert sie 90 Agenten, 557 Befehle, 139 Skills und externe Harnesses. Sie arbeitet nach Prinzipien kalibrierter Ehrlichkeit, Datensouveränität und verpflichtender menschlicher Prüfung.
 
 Sie ist keine Person, fühlt nicht und ersetzt nicht das Urteil derer, die sie bedienen. Sie schlägt vor, führt aus, warnt. Sie entscheidet nur, was ihr ausdrücklich übertragen wurde.
 

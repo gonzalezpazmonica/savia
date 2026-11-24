@@ -606,11 +606,6 @@
       "maturity": "stable",
       "owner": "unassigned"
     },
-    "understand-anything": {
-      "layer": "peripheral",
-      "maturity": "experimental",
-      "owner": "unassigned"
-    },
     "verification-lattice": {
       "layer": "peripheral",
       "maturity": "stable",

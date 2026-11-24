@@ -6,4 +6,3 @@
 .github/workflows/install-smoke.yml :: NPM_INSTALL :: npm install --prefix .opencode :: pendiente D1: .opencode no versiona lockfile (SE-465, decision D1 sin tomar)
 projects/savia-monitor/scripts/build-linux.sh :: NPM_INSTALL :: npm install --silent :: pendiente D1: savia-monitor no versiona lockfile (SE-465, decision D1 sin tomar)
 scripts/setup-savia-web.sh :: NPM_INSTALL :: npm install --no-audit :: pendiente D1: savia-web no versiona lockfile (SE-465, decision D1 sin tomar)
-scripts/ua-install.sh :: NPM_INSTALL :: npm install :: pendiente D1: repo externo clonado, propuesta de la spec: excepcion razonada (SE-465, decision D1 sin tomar)

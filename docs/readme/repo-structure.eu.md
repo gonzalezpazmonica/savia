@@ -3,7 +3,7 @@
 ```
 pm-workspace/
 ├── .claude/
-│   ├── commands/       ← 564 komando
+│   ├── commands/       ← 557 komando
 │   ├── agents/         ← 86 agente espezializatu (7 decision tree-rekin: SPEC-147)
 │   ├── skills/         ← 139 domeinu skill
 │   ├── hooks/          ← 135 hook deterministiko
