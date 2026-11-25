@@ -216,3 +216,37 @@ count_tier() {
   done
   [ "$bad" -eq 0 ]
 }
+
+# ── Casos límite y negativos del clasificador de niveles (añadidos 2026-11-25) ──
+# Ref: scripts/command-tier-audit.sh (SE-253 S1). Ficheros sintéticos en un directorio temporal.
+
+setup() { TMP_T="$(mktemp -d)"; }
+teardown() { rm -rf "$TMP_T"; }
+
+@test "edge: command file without frontmatter yields an empty tier" {
+  printf '# Sin cabecera\ntexto\n' > "$TMP_T/a.md"
+  [ -z "$(get_tier "$TMP_T/a.md")" ]
+}
+@test "edge: empty command file yields an empty tier without error" {
+  : > "$TMP_T/vacio.md"
+  run get_tier "$TMP_T/vacio.md"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+@test "boundary: tier value with trailing spaces is trimmed to core" {
+  printf -- '---\nname: x\ntier: core   \n---\ncuerpo\n' > "$TMP_T/b.md"
+  [ "$(get_tier "$TMP_T/b.md")" = "core" ]
+}
+@test "edge: a tier line in the body (after frontmatter) is ignored" {
+  printf -- '---\nname: x\n---\ntier: core\n' > "$TMP_T/c.md"
+  [ -z "$(get_tier "$TMP_T/c.md")" ]
+}
+@test "invalid tier value is rejected by the core|extended rule" {
+  printf -- '---\nname: x\ntier: premium\n---\n' > "$TMP_T/d.md"
+  t=$(get_tier "$TMP_T/d.md")
+  [ "$t" = "premium" ]
+  ! [[ "$t" == "core" || "$t" == "extended" ]]
+}
+@test "command-tier-audit.sh keeps strict mode (set -euo pipefail)" {
+  grep -q '^set -euo pipefail' "$SCRIPTS_DIR/command-tier-audit.sh"
+}
