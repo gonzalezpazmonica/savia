@@ -199,3 +199,24 @@ La revalidación no necesita un libro: compara, en el gate y justo antes del efe
 
 - **D3 — S3.** (a) Separar S3 del aparcado: no depende de SE-493 ni de SE-498; corregir su entrada y la línea de Riesgos (recomendada), **condicionada a la enmienda a S2**: la premisa «sin SE-493» sigue abierta mientras S2 consulte en la «preparación de efecto» (`prepare` de SE-493, retirado); S3 empieza solo sobre la admisión de trabajo de riesgo. (b) Mantenerla aparcada junto a S4.
 - **D4 — S4.** Requisito previo común a (a) y (b): aprobar la enmienda a S2 (época y `stop_seq` en su recibo, y el punto de preparación de efecto sin SE-493). (a) Aprobar el rediseño sobre `receipt-v2`, el recibo de S2 y SE-498 F0, con las pérdidas declaradas (recomendada). (b) Hacer S4 sin la dimensión de STOP para no esperar a SE-498 F0, y añadirla después. (c) Retirar S4: si `receipt-v2` y la entrada de S3 ya fallan cerrado, la revalidación aporta poco hasta que haya una segunda ruta.
+
+## Enmienda propuesta 2026-11-25: un brazo de «paquete mínimo» en P10 y los estados recordar, aplicar y mejorar
+
+> Propuesta. No cambia el estado de esta spec ni aprueba S1; vale cuando la operadora fusione la PR que la trae.
+> Origen: Radar de metaorquestación y factorías (documento de la operadora, 2026-11-25, líneas M01–M15), cruzado con main c7987ac94 por una analista independiente. El inventario completo vive en Savia Labs. Absorbe M07 (compilador de contexto), M13 (aprender, no acumular) y parte de M14.
+
+P10 ya compara el recall encendido con el apagado (AC-5). La enmienda añade, sin slice nuevo:
+
+1. **Un tercer brazo, «paquete mínimo»:** solo los criterios que el resolvedor considera aplicables, frente al recall
+   completo. Pregunta: ¿rinde igual con menos contexto?
+2. **Registro por caso de tres estados distintos:** *recordado* (la lección se recuperó), *aplicado* (cambió el plan
+   o la decisión) y *mejoró* (el resultado fue mejor que el contrafactual). Si se recupera pero no cambia nada, el
+   fallo es de aplicación; si cambia sin mejorar, se refuta la hipótesis causal de esa lección.
+
+**Hipótesis refutable.** Con el recall encendido la decisión cambia en al menos 1 de cada 5 casos elegibles, y el
+paquete mínimo no rinde peor que el recall completo.
+
+**Criterio de descarte.** Cero cambios, o cambios sin mejora frente al contrafactual: el recall queda como
+observacional (en línea con SE-536) y SE-482 F3 (ContextBundle) no se abre.
+
+**Soberanía.** Solo casos N1/N2, o modelo local para los que contengan lecciones N3. El recall nunca cambia permisos.

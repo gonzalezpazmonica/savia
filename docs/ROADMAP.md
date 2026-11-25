@@ -31,6 +31,8 @@ comprendida. **WIP:** máximo 3 iniciativas Savia en `IMPLEMENTING` + 1 línea L
 | **E · Harness adoptable** | Instalador, desktop, documentación pública, Vaults adaptativo, Files completo y transparencia Art. 50 S4 | Instalación limpia por una persona ajena con doctor en verde; flujo Files seguro y citado | SE-399, SE-398, SE-390, SE-395, SE-289 S4; SE-408 requiere aprobación; deltas Files por spec |
 | **F · Pilotos con evidencia** | Pilotos AEK y experimentos Labs con datos reales | Sin claims de ROI empresarial sin datos | Labs (1 línea) |
 
+**Congelación vigente (2026-11-25, decisión de la operadora):** ninguna fase nueva de autoridad hasta que cada pieza fusionada tenga consumidor real o se retire (#1593, #1597, #1611, #1612, #1615, #1616, #1617). Primer consumidor: el guion de fusiones obedece el freno de emergencia. AEK (SE-496) conserva su excepción del 14-11.
+
 **Aparcado hasta superar el Gate D:** federación y multi-vault (SE-281/282), lote enterprise,
 multi-tenant, SE-268, SE-385 (publicación), SE-389 y líneas Labs fuera de la ruta (detalle privado en Savia Labs).
 
