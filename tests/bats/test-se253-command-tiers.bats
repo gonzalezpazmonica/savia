@@ -183,10 +183,13 @@ count_tier() {
   [ "$tier" = "core" ]
 }
 
-@test "Extra: total commands count is >= 558 (original 557 + catalog)" {
+@test "Extra: total commands count is >= 557 (567 tras SE-253, menos 10 retiradas a propósito)" {
+  # Suelo = recuento tras las retiradas legítimas: 3 órdenes marketplace-*
+  # (SE-535 S1, PR #1658) y 7 ua-* (SE-535 S2, PR #1660). 567 - 10 = 557.
+  # Sigue detectando borrados accidentales: cualquier pérdida adicional falla.
   total=$(find "$COMMANDS_DIR" -name "*.md" -maxdepth 1 | wc -l)
   echo "total commands: $total"
-  [ "$total" -ge 558 ]
+  [ "$total" -ge 557 ]
 }
 
 @test "Extra: every command .md has a tier field in frontmatter" {
