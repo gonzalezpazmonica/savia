@@ -270,8 +270,8 @@ S1 M, S2 M, S3 M, S4 M (dominado por redactar y revisar 20 instrucciones).
 comparación por pares e intervalos (SE-477). Faltan dos factores que hoy no se separan.
 
 1. **La configuración completa como unidad de comparación**, no solo el frontend: frontend × modelo × esfuerzo, con
-   la versión de cada uno y la fecha de observación en el informe. Una capacidad medida caduca y nunca concede
-   permiso (SE-531 D4).
+   la versión de cada uno y la fecha de observación en el informe. Una capacidad medida envejece (el validador
+   avisa) y nunca concede permiso (SE-531 D4).
 2. **Un brazo de un solo ejecutor sin delegar** frente al brazo orquestadora + worker, con el mismo modelo y
    presupuesto. Así se mide si la delegación compensa su coste de coordinación, en vez de suponerlo.
 

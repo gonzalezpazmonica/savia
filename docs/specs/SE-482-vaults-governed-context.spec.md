@@ -99,8 +99,10 @@ Con las respuestas 1 y 2, F1 se concreta en **SE-486** (PROPOSED).
 1. **Medir primero.** Un guion de solo lectura sobre el historial git de cada cúpula en uso que detecte escrituras
    consecutivas sobre la misma nota desde sesiones distintas en poco tiempo, más un test con dos escritores
    concurrentes que muestre si la pérdida es posible hoy.
-2. **Solo si hay incidencia real:** un `expectedSha` opcional en `vault_write`, que responde `CONFLICT` cuando la
-   nota cambió desde que se leyó. La respuesta `CONFLICT` ya existe en el servidor HTTP.
+2. **Solo si hay incidencia real:** un `expectedSha` opcional en `vault_write`, que rechaza la escritura cuando la
+   nota cambió desde que se leyó. El servidor HTTP ya traduce a 409 los errores `CONFLICT` de Files, pero ninguna
+   ruta de notas lo emite, y F2 ya usa `CONFLICT` para el conflicto semántico determinista. La escritura obsoleta
+   necesita un código propio (por ejemplo `STALE_REVISION`) para no mezclar los dos casos.
 
 **Hipótesis refutable.** En las cúpulas en uso hay al menos una sobrescritura en la que el escritor partía de una
 revisión que ya no era la vigente.

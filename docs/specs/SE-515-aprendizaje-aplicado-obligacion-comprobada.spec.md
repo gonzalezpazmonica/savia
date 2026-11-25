@@ -202,19 +202,25 @@ La revalidación no necesita un libro: compara, en el gate y justo antes del efe
 
 ## Enmienda propuesta 2026-11-25: un brazo de «paquete mínimo» en P10 y los estados recordar, aplicar y mejorar
 
-> Propuesta. No cambia el estado de esta spec ni aprueba S1; vale cuando la operadora fusione la PR que la trae.
+> Propuesta de **cambio de alcance de S1**, que ya está aprobada (2026-11-10) e implementada (#1523). Fusionar la PR
+> que la trae no basta: necesita una aprobación expresa propia de la operadora, y P10 tiene un prerregistro congelado
+> por hash (`tests/fixtures/se515-s0/prereg.json`, #1636). Si se aprueba, se re-prerregistra P10 con hash nuevo antes
+> de medir, conservando el prerregistro anterior y su motivo de sustitución.
 > Origen: Radar de metaorquestación y factorías (documento de la operadora, 2026-11-25, líneas M01–M15), cruzado con main c7987ac94 por una analista independiente. El inventario completo vive en Savia Labs. Absorbe M07 (compilador de contexto), M13 (aprender, no acumular) y parte de M14.
 
-P10 ya compara el recall encendido con el apagado (AC-5). La enmienda añade, sin slice nuevo:
+P10 ya tiene tres brazos congelados (B0 sin agente, B1 recall apagado, B2 recall encendido; AC-5). La enmienda añade,
+sin slice nuevo:
 
-1. **Un tercer brazo, «paquete mínimo»:** solo los criterios que el resolvedor considera aplicables, frente al recall
+1. **Un cuarto brazo, «paquete mínimo» (B3):** solo los criterios que el resolvedor considera aplicables, frente al recall
    completo. Pregunta: ¿rinde igual con menos contexto?
 2. **Registro por caso de tres estados distintos:** *recordado* (la lección se recuperó), *aplicado* (cambió el plan
    o la decisión) y *mejoró* (el resultado fue mejor que el contrafactual). Si se recupera pero no cambia nada, el
    fallo es de aplicación; si cambia sin mejorar, se refuta la hipótesis causal de esa lección.
 
 **Hipótesis refutable.** Con el recall encendido la decisión cambia en al menos 1 de cada 5 casos elegibles, y el
-paquete mínimo no rinde peor que el recall completo.
+paquete mínimo no rinde peor que el recall completo. **Muestra:** el piloto congelado tiene 3 casos y 3
+contraejemplos; con esa muestra el resultado es descriptivo, no confirmatorio. La hipótesis solo se pone a prueba
+con al menos 15 casos elegibles; si no se reúnen, el informe lo dice y no concluye.
 
 **Criterio de descarte.** Cero cambios, o cambios sin mejora frente al contrafactual: el recall queda como
 observacional (en línea con SE-536) y SE-482 F3 (ContextBundle) no se abre.
