@@ -106,3 +106,44 @@ EOF
   baseline=$(bash "$METRIC" --p-consistent 0.7 --divergence 0.3 --ignorance-resolved 0.6 --json)
   echo "$baseline" | grep -q '"L":0.680000'
 }
+
+# ── Casos límite y negativos añadidos con SE-497 S0 ──
+# SCRIPT="scripts/learning-lifecycle.sh" — funciones ejercidas: usage, trailer_ok, record, apply_state.
+# Cada caso trabaja en $BATS_TEST_TMPDIR, que BATS crea y limpia solo.
+_lp() {  # _lp <dir> <estado>: lección mínima de prueba
+  mkdir -p "$1"; printf -- '---\nid: LP-EDGE\nlifecycle: %s\nprovenance: INFERRED\ncreated_utc: 2026-11-01\n---\ncuerpo\n' "$2" > "$1/LP-EDGE.md"
+  echo "$1/LP-EDGE.md"
+}
+@test "S3 edge: nonexistent lesson file fails with exit 3" {
+  D="$BATS_TEST_TMPDIR"
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh" --file "$D/no-existe.md" --to canary --ledger "$D/l.jsonl"
+  [ "$status" -eq 3 ]
+  [ ! -e "$D/l.jsonl" ]
+}
+@test "S3 edge: empty trailer is rejected and the lesson stays canary" {
+  D="$BATS_TEST_TMPDIR"; f=$(_lp "$D" canary)
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh" --file "$f" --to active --human-trailer "" --metric-before 0.1 --metric-after 0.2 --ledger "$D/l.jsonl"
+  [ "$status" -eq 4 ]
+  grep -qx 'lifecycle: canary' "$f"
+}
+@test "S3 invalid target state is rejected with usage error" {
+  D="$BATS_TEST_TMPDIR"; f=$(_lp "$D" proposed)
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh" --file "$f" --to activo --ledger "$D/l.jsonl"
+  [ "$status" -eq 2 ]
+  grep -qx 'lifecycle: proposed' "$f"
+}
+@test "S3 boundary: equal metrics promote, one less fails as regression" {
+  D="$BATS_TEST_TMPDIR"; f=$(_lp "$D/a" canary)
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh" --file "$f" --to active --human-trailer "se488:edge" --metric-before 0.5 --metric-after 0.49 --ledger "$D/l.jsonl"
+  [ "$status" -eq 5 ]
+  grep -qx 'lifecycle: proposed' "$f"
+  f=$(_lp "$D/b" canary)
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh" --file "$f" --to active --human-trailer "se488:edge" --metric-before 0.5 --metric-after 0.5 --ledger "$D/l.jsonl"
+  [ "$status" -eq 0 ]
+  grep -qx 'lifecycle: active' "$f"
+}
+@test "S3 edge: no arg at all prints usage and fails with exit 2" {
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--file"* ]]
+}
