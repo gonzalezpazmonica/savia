@@ -234,6 +234,9 @@ two_prs() { mkpr 50 "scripts/n1.sh"; mkpr 51 "scripts/n2.sh"; review 50 APPROVE 
   [ -z "$output" ]
 }
 
-@test "pendientes: la suite de inyección en review-register sigue existiendo fuera de tests/" {
-  grep -q '^# PENDIENTE DE ACTIVAR' tests-pending/test-merge-sprint-review-register-injection.bats
+@test "pendientes: la suite de inyección en review-register está activa bajo tests/ y ya no en tests-pending/" {
+  # Activada el 2026-11-25 junto con el arreglo de S-MS1.
+  [ -f tests/test-merge-sprint-review-register-injection.bats ]
+  [ ! -e tests-pending/test-merge-sprint-review-register-injection.bats ]
+  ! grep -q '^# PENDIENTE DE ACTIVAR' tests/test-merge-sprint-review-register-injection.bats
 }

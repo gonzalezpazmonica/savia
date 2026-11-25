@@ -79,7 +79,8 @@ parse_verdict() {  # parse_verdict <primera línea> → imprime "verdict pr sha 
   python3 - "$1" <<'PY'
 import re, sys
 m = re.fullmatch(r"VERDICT: (APPROVE|HOLD) pr=(\d+) sha=([0-9a-f]{40}) role=(correctness|security) tier=([1-4]) "
-                 r"reviewer=(\S+) author=(\S+) p0=(\d+) p1=(\d+) p2=(\d+) p2_blocking=(\d+)", sys.argv[1])
+                 r"reviewer=([A-Za-z0-9._-]+) author=([A-Za-z0-9._-]+) p0=(\d+) p1=(\d+) p2=(\d+) p2_blocking=(\d+)",
+                 sys.argv[1], re.ASCII)   # S-MS1: identificadores con lista blanca cerrada; nada que inyectar
 if not m: sys.exit(1)
 v, pr, sha, role, tier, rv, au, p0, p1, p2, p2b = m.groups()
 if v == "APPROVE" and (int(p0) or int(p1) or int(p2b)): v = "HOLD"
@@ -96,7 +97,7 @@ cmd_review_register() {
     local copy="$HOME_MS/judge/$pr-$(sha < "$file" | cut -c1-12).verdict.md"
     mkdir -p "$HOME_MS/judge"; cp "$file" "$copy"; chmod 600 "$copy"
     chain_append "$JREG" "$(python3 -c 'import json,sys,time; print(json.dumps({"ts":sys.argv[1],"ts_epoch":int(time.time()),"pr":int(sys.argv[2]),"file":sys.argv[3],"hash":sys.argv[4]}))' \
-      "$(now)" "$pr" "$copy" "$(sha < "$copy")")"
+      "$(now)" "$pr" "$copy" "$(sha < "$copy")")" || die "no se pudo escribir el registro de jueces" 4
     echo "veredicto de juez registrado: #$pr"; return 0
   fi
   local parsed; parsed=$(parse_verdict "$(head -1 "$file")") || die "primera línea sin gramática VERDICT válida" 3
@@ -105,8 +106,11 @@ cmd_review_register() {
   [[ "$rv" != "$au" ]] && ! is_orch "$rv" || die "revisor no independiente ($rv)" 3
   local copy="$HOME_MS/reviews/$pr-$s-$role-$(sha < "$file" | cut -c1-12).md"
   mkdir -p "$HOME_MS/reviews"; cp "$file" "$copy"; chmod 600 "$copy"
-  chain_append "$REG" "$(printf '{"ts":"%s","pr":%s,"sha":"%s","role":"%s","tier":%s,"verdict":"%s","reviewer":"%s","author":"%s","file":"%s","hash":"%s"}' \
-    "$(now)" "$pr" "$s" "$role" "$tier" "$v" "$rv" "$au" "$copy" "$(sha < "$copy")")"
+  # S-MS1: la línea se codifica con json.dumps (nunca printf) y un fallo de escritura no se anuncia como éxito.
+  local body
+  body=$(python3 -c 'import json,sys; a=sys.argv[1:]; print(json.dumps({"ts":a[0],"pr":int(a[1]),"sha":a[2],"role":a[3],"tier":int(a[4]),"verdict":a[5],"reviewer":a[6],"author":a[7],"file":a[8],"hash":a[9]}))' \
+    "$(now)" "$pr" "$s" "$role" "$tier" "$v" "$rv" "$au" "$copy" "$(sha < "$copy")") || die "no se pudo codificar la revisión" 4
+  chain_append "$REG" "$body" || die "no se pudo escribir el registro de revisiones; nada registrado" 4
   echo "registrada: #$pr $role $v sobre ${s:0:8}"
 }
 
