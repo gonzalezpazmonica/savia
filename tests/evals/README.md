@@ -80,3 +80,15 @@ Reporte generado en `output/eval-report-YYYYMMDD.md`.
 
 El runner actual valida que los ficheros existen y tienen forma correcta
 (criteria.md ≥5 criterios, input.md ≥50 palabras). No invoca LLMs todavía.
+
+### Evals de definicion y evals de comportamiento
+
+`scripts/eval-coverage-matrix.py` separa las dos clases. Un fixture es de
+**comportamiento** si algun caso lleva `aggregate` (se ejecuta el script real y
+se compara el resultado). Los `checks` (grep sobre el prompt del agente) y los
+`weights` son de **definicion**: se siguen ejecutando, pero se cumplen
+escribiendo texto, asi que no cuentan para la cobertura L4. La matriz expone
+`covered` (solo comportamiento) y `covered_definition`. El gate
+`eval-coverage-L4` de `scripts/coherence-gates.sh` esta en modo informe para el
+comportamiento (`EVAL_L4_BEHAVIOR_MODE=block` lo activa) y bloquea si se pierde
+cobertura de definicion.
