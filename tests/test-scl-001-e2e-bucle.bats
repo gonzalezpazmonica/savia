@@ -46,7 +46,7 @@ teardown() {
   after=$(bash "$METRIC" --p-consistent 0.85 --divergence 0.2 --ignorance-resolved 0.6 --json | grep -o '"L":[0-9.]*' | cut -d: -f2)
   awk -v a="$after" -v b="$base" 'BEGIN{exit !(a>b)}'
 
-  run bash "$LC" --file "$f" --to active --actor operadora --human-trailer "op-e2e-sig" \
+  run bash "$LC" --file "$f" --to active --actor operadora --human-trailer "se488:op-e2e-sig" \
     --metric-before "$base" --metric-after "$after" --ledger "$TMPD/lc.jsonl"
   [ "$status" -eq 0 ]
   grep -q "^lifecycle: active" "$f"

@@ -20,8 +20,16 @@
 #     [--subset <domain>] [--metric-before <L>] [--metric-after <L>] \
 #     [--ledger <path>] [--strict]
 #
-# Exit codes: 0 ok, 1 invalid transition, 2 usage, 3 missing file,
-#             4 human_authored required, 5 canary metric regression
+# Exit codes: 0 ok (o sin cambio), 1 invalid transition, 2 usage, 3 missing file,
+#             4 trailer humano ausente o con formato inválido,
+#             5 canary→active sin las dos métricas numéricas, o con regresión
+#
+# SE-497 S0: --human-trailer debe casar ENTERO con
+#   ^(sha:[0-9a-f]{40}|se488:[A-Za-z0-9._-]{1,64})$
+# y se valida antes de tocar el fichero. Ningún valor recibido por argumento se
+# interpola en sed ni se concatena en JSON: la cabecera la edita y el registro
+# lo codifica python3, con los valores pasados como argumentos.
+# Límite: el formato no prueba que firme una persona (eso es R10, S5/S6).
 #
 # Ref: docs/specs/SCL-001-aprendizaje-continuo.spec.md (S2, AC-2.1..2.6)
 
@@ -73,7 +81,8 @@ esac
 
 CURRENT=$(grep -m1 '^[[:space:]]*lifecycle: ' "$FILE" | sed 's/^[[:space:]]*lifecycle: //' || echo "proposed")
 PROV=$(grep -m1 '^[[:space:]]*provenance: ' "$FILE" | sed 's/^[[:space:]]*provenance: //' || echo "INFERRED")
-ID=$(grep -m1 '^[[:space:]]*id: ' "$FILE" | sed 's/^[[:space:]]*id: //' || basename "$FILE" .md)
+ID=$(grep -m1 '^[[:space:]]*id: ' "$FILE" | sed 's/^[[:space:]]*id: //') \
+  || { ID="${FILE##*/}"; ID="${ID%.md}"; }   # sin sustitución de órdenes: conserva el nombre tal cual
 
 # ── Valid transitions ──
 valid=false
@@ -88,62 +97,111 @@ case "$CURRENT" in
     case "$TO" in superseded) valid=true ;; esac ;;
 esac
 
-# proposed→active / canary→active require human_authored (CRIT-031, AC-2.4)
+# ── Registro: una línea JSON por evento, codificada (S0-3) ──
+record() {  # record <to> <status|""> <revert>
+  mkdir -p "$(dirname "$LEDGER")"
+  python3 - "$LEDGER" "$ID" "$CURRENT" "$1" "$ACTOR" "$REASON" "$METRIC_BEFORE" "$METRIC_AFTER" "$2" "$3" <<'PY'
+import json, sys, time
+led, lid, cur, to, actor, reason, mb, ma, status, revert = sys.argv[1:11]
+d = {"id": lid, "from": cur, "to": to, "actor": actor}
+if status: d["status"] = status
+d.update({"reason": reason, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+if not status: d.update({"metric_before": mb, "metric_after": ma, "revert": revert})
+with open(led, "a", encoding="utf-8") as f: f.write(json.dumps(d, ensure_ascii=False, separators=(",", ":")) + "\n")
+PY
+}
+
+# ── Edición de la cabecera sin interpolar nada en sed (S0-7) ──
+apply_state() {  # apply_state <to> <trailer|"">
+  python3 - "$FILE" "$1" "$2" <<'PY'
+import os, re, sys, time
+path, to, trailer = sys.argv[1:4]
+L = open(path, encoding="utf-8", errors="surrogateescape").read().splitlines(keepends=True)
+lo, hi = 0, len(L)
+if L and L[0].strip() == "---":
+    for k in range(1, len(L)):
+        if L[k].strip() == "---": lo, hi = 1, k; break
+def find(key):
+    for k in range(lo, hi):
+        if re.match(r"\s*%s:( |$)" % key, L[k].rstrip("\n")): return k
+    return None
+def setval(k, key, val):
+    ind = re.match(r"\s*", L[k]).group(0)
+    L[k] = "%s%s: %s\n" % (ind, key, val)
+lc = find("lifecycle")
+if lc is None: sys.exit(1)
+setval(lc, "lifecycle", to)
+if to == "active":
+    pv = find("provenance")
+    if pv is not None: setval(pv, "provenance", "human_authored")
+    keep = [k for k in range(lo, hi) if not re.match(r"\s*human_trailer:", L[k])]
+    L[lo:hi] = [L[k] for k in keep]; hi = lo + len(keep)
+    at = find("created_utc"); at = find("lifecycle") if at is None else at
+    L.insert(at + 1, "human_trailer: %s\n" % trailer)
+elif to == "superseded" and find("tombstone") is None:
+    L.insert(lc + 1, "tombstone: superseded %s — no borrado, cuarentena (CRIT-024)\n"
+             % time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+tmp = path + ".tmp.%d" % os.getpid()
+with open(tmp, "w", encoding="utf-8", errors="surrogateescape") as f: f.writelines(L)
+os.chmod(tmp, os.stat(path).st_mode & 0o7777)
+os.replace(tmp, path)
+PY
+}
+
+# ── Trailer humano: formato cerrado sobre la cadena completa (S0-1, S0-2; CRIT-031) ──
+TRAILER_RE='^(sha:[0-9a-f]{40}|se488:[A-Za-z0-9._-]{1,64})$'
+trailer_ok() {
+  local v="$1"
+  [[ "$v" != *$'\n'* && "$v" != *$'\r'* ]] || return 1
+  LC_ALL=C; [[ "$v" =~ $TRAILER_RE ]]
+}
 if [[ "$TO" == "active" ]]; then
   if [[ -z "$HUMAN_TRAILER" ]]; then
-    if $STRICT; then
-      echo "BLOCKED [learning-lifecycle]: transition to active requires --human-trailer (CRIT-031/ART-11)" >&2
-      exit 4
-    fi
-    # non-strict: record the violation attempt but refuse the transition
-    echo "REFUSED: active requires human_authored trailer" >&2
-    mkdir -p "$(dirname "$LEDGER")"
-    {
-      printf '%s' '{"id":"'"$ID"'","from":"'"$CURRENT"'","to":"active","actor":"'"$ACTOR"'",'
-      printf '%s' '"status":"refused-no-human","reason":"'"$REASON"'","ts":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}'
-      echo ""
-    } >> "$LEDGER"
+    # El intento rechazado se registra siempre, también con --strict: es evidencia de auditoría.
+    if $STRICT; then echo "BLOCKED [learning-lifecycle]: transition to active requires --human-trailer (CRIT-031/ART-11)" >&2
+    else echo "REFUSED: active requires human_authored trailer" >&2; fi
+    record active refused-no-human ""
     exit 4
   fi
-fi
-
-# canary→active promotion conditioned on metric (AC-2.5): metric_after must be >= metric_before
-if [[ "$CURRENT" == "canary" && "$TO" == "active" ]] && [[ -n "$METRIC_BEFORE" && -n "$METRIC_AFTER" ]]; then
-  if awk -v b="$METRIC_BEFORE" -v a="$METRIC_AFTER" 'BEGIN{exit (a < b)}'; then
-    : # promotion allowed: after >= before
-  else
-    echo "BLOCKED [learning-lifecycle]: canary metric regression (before=$METRIC_BEFORE after=$METRIC_AFTER) — no ascends, reverting" >&2
-    # revert to proposed (shadow) with cause registered
-    TO="proposed"
-    REASON="canary regression: before=$METRIC_BEFORE after=$METRIC_AFTER ($REASON)"
-    RECORD_REVERT=true
+  if ! ( trailer_ok "$HUMAN_TRAILER" ); then
+    echo "BLOCKED [learning-lifecycle]: --human-trailer no cumple el formato (sha:<40 hex> o se488:<id>); fichero sin tocar" >&2
+    record active refused-invalid-trailer ""
+    exit 4
   fi
 fi
 
 [[ "$valid" == "true" ]] || { echo "ERROR: invalid transition $CURRENT → $TO" >&2; exit 1; }
 
-# ── Apply transition ──
-sed -i "s/^\([[:space:]]*\)lifecycle: .*/\1lifecycle: $TO/" "$FILE"
-# active sets provenance human_authored; other states stay INFERRED
-if [[ "$TO" == "active" ]]; then
-  sed -i "s/^\([[:space:]]*\)provenance: .*/\1provenance: human_authored/" "$FILE"
-  sed -i "s/^\([[:space:]]*\)human_trailer:.*/\1human_trailer: $HUMAN_TRAILER/" "$FILE" \
-    || sed -i "/^\([[:space:]]*\)created_utc:/a human_trailer: $HUMAN_TRAILER" "$FILE"
-  sed -i "/^\([[:space:]]*\)human_trailer:/d;/^\([[:space:]]*\)created_utc:/a human_trailer: $HUMAN_TRAILER" "$FILE"
-elif [[ "$TO" == "superseded" ]]; then
-  # tombstone: keep the file readable, add tombstone marker (CRIT-024)
-  sed -i "/^lifecycle:/a tombstone: superseded $(date -u +%Y-%m-%dT%H:%M:%SZ) — no borrado, cuarentena (CRIT-024)" "$FILE"
+# ── Idempotencia (S0-5): repetir un estado que no cambia nada no escribe ni registra ──
+if [[ "$CURRENT" == "$TO" ]]; then
+  if [[ "$TO" != "active" ]] || grep -qxF "human_trailer: $HUMAN_TRAILER" "$FILE"; then
+    echo "SIN CAMBIO: $CURRENT → $TO (id=$ID)"
+    exit 0
+  fi
 fi
 
-# ── Record transition ──
-mkdir -p "$(dirname "$LEDGER")"
-{
-  printf '%s' '{"id":"'"$ID"'","from":"'"$CURRENT"'","to":"'"$TO"'","actor":"'"$ACTOR"'",'
-  printf '%s' '"reason":"'"$REASON"'","ts":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'",'
-  printf '%s' '"metric_before":"'"$METRIC_BEFORE"'","metric_after":"'"$METRIC_AFTER"'"'
-  printf '%s' ',"revert":"'"${RECORD_REVERT:-false}"'"'
-  echo "}"
-} >> "$LEDGER"
+# ── canary→active: las dos métricas, numéricas y sin regresión (S0-4; provisional hasta el recibo de S5) ──
+REVERT=false
+if [[ "$CURRENT" == "canary" && "$TO" == "active" ]]; then
+  NUM_RE='^-?[0-9]+(\.[0-9]+)?$'
+  if ! [[ "$METRIC_BEFORE" =~ $NUM_RE && "$METRIC_AFTER" =~ $NUM_RE ]]; then
+    echo "BLOCKED [learning-lifecycle]: canary → active exige --metric-before y --metric-after numéricas; sigue en canary" >&2
+    record active refused-no-metrics ""
+    exit 5
+  fi
+  if ! awk -v b="$METRIC_BEFORE" -v a="$METRIC_AFTER" 'BEGIN{exit (a < b)}'; then
+    echo "BLOCKED [learning-lifecycle]: canary metric regression (before=$METRIC_BEFORE after=$METRIC_AFTER) — no asciende, vuelve a proposed" >&2
+    TO="proposed"
+    REASON="canary regression: before=$METRIC_BEFORE after=$METRIC_AFTER ($REASON)"
+    REVERT=true
+  fi
+fi
+
+# ── Apply + record ──
+TR=""; [[ "$TO" == "active" ]] && TR="$HUMAN_TRAILER"
+apply_state "$TO" "$TR" || { echo "ERROR: no se pudo actualizar la cabecera de $FILE" >&2; exit 1; }
+record "$TO" "" "$REVERT"
 
 echo "TRANSITION: $CURRENT → $TO (id=$ID actor=$ACTOR)"
+$REVERT && exit 5
 exit 0

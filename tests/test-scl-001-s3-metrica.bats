@@ -35,7 +35,7 @@ lifecycle: proposed
 ---
 EOF
   bash "$LC" --file "$F" --to canary --actor agente --ledger "$TMPD/lc.jsonl" >/dev/null
-  bash "$LC" --file "$F" --to active --actor operadora --human-trailer "sig" \
+  bash "$LC" --file "$F" --to active --actor operadora --human-trailer "se488:sig" \
     --metric-before 0.4 --metric-after 0.9 --ledger "$TMPD/lc.jsonl" >/dev/null
   grep -q "^lifecycle: active" "$F"
   rm -rf "$TMPD"
@@ -54,8 +54,9 @@ lifecycle: proposed
 ---
 EOF
   bash "$LC" --file "$F" --to canary --actor agente --ledger "$TMPD/lc.jsonl" >/dev/null
-  bash "$LC" --file "$F" --to active --actor operadora --human-trailer "sig" \
-    --metric-before 0.8 --metric-after 0.7 --ledger "$TMPD/lc.jsonl" >/dev/null
+  bash "$LC" --file "$F" --to active --actor operadora --human-trailer "se488:sig" \
+    --metric-before 0.8 --metric-after 0.7 --ledger "$TMPD/lc.jsonl" >/dev/null || rc=$?
+  [ "${rc:-0}" -eq 5 ]   # SE-497 S0-4: la regresión sale con 5
   ! grep -q "^lifecycle: active" "$F"
   grep -q "^lifecycle: proposed" "$F"
   grep -q '"revert":"true"' "$TMPD/lc.jsonl"

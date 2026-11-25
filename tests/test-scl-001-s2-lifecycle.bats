@@ -37,7 +37,7 @@ teardown() {
   LED="$TMPD/ledger/lc.jsonl"
   run bash "$LC" --file "$F" --to canary --actor agente --ledger "$LED"
   [ "$status" -eq 0 ]
-  run bash "$LC" --file "$F" --to active --actor operadora --human-trailer "op-sig" --ledger "$LED"
+  run bash "$LC" --file "$F" --to active --actor operadora --human-trailer "se488:op-sig" --metric-before 0.5 --metric-after 0.6 --ledger "$LED"
   [ "$status" -eq 0 ]
   run bash "$LC" --file "$F" --to superseded --actor agente --reason "obsoleto" --ledger "$LED"
   [ "$status" -eq 0 ]
@@ -66,7 +66,7 @@ PY
   # Una entrada activa SI cambia el gate (efecto global)
   LED="$TMPD/ledger/lc.jsonl"
   bash "$LC" --file "$F" --to canary --actor agente --ledger "$LED" >/dev/null
-  bash "$LC" --file "$F" --to active --actor operadora --human-trailer "op-sig" --ledger "$LED" >/dev/null
+  bash "$LC" --file "$F" --to active --actor operadora --human-trailer "se488:op-sig" --metric-before 0.5 --metric-after 0.6 --ledger "$LED" >/dev/null
   run bash -c "grep -q '^lifecycle: active' '$F' && echo ACTIVE || echo INACTIVE"
   [ "$output" = "ACTIVE" ]
 }
@@ -90,7 +90,7 @@ EOF
 
   LED="$TMPD/ledger/lc.jsonl"
   bash "$LC" --file "$FP" --to canary --actor agente --ledger "$LED" >/dev/null
-  bash "$LC" --file "$FP" --to active --actor operadora --human-trailer "sig" --ledger "$LED" >/dev/null
+  bash "$LC" --file "$FP" --to active --actor operadora --human-trailer "se488:sig" --metric-before 0.5 --metric-after 0.6 --ledger "$LED" >/dev/null
   # no commit tras activar → rollback restaura del HEAD
   run bash "$RB" --file "$FP" --reason "entrada erronea" --ledger "$TMPD/ledger/rb.jsonl"
   [ "$status" -eq 0 ]
@@ -110,7 +110,7 @@ EOF
 @test "AC-2.5: promocion condicionada — canary con metrica peor que baseline NO asciende" {
   LED="$TMPD/ledger/lc.jsonl"
   bash "$LC" --file "$F" --to canary --actor agente --ledger "$LED" >/dev/null
-  run bash "$LC" --file "$F" --to active --actor operadora --human-trailer "sig" \
+  run bash "$LC" --file "$F" --to active --actor operadora --human-trailer "se488:sig" \
     --metric-before 0.8 --metric-after 0.6 --ledger "$LED"
   grep -q "^lifecycle: proposed" "$F"
   python3 - "$LED" <<'PY'
@@ -124,7 +124,7 @@ PY
 @test "AC-2.6: superseded no borra — entrada permanece legible con tombstone" {
   LED="$TMPD/ledger/lc.jsonl"
   bash "$LC" --file "$F" --to canary --actor agente --ledger "$LED" >/dev/null
-  bash "$LC" --file "$F" --to active --actor operadora --human-trailer "sig" --ledger "$LED" >/dev/null
+  bash "$LC" --file "$F" --to active --actor operadora --human-trailer "se488:sig" --metric-before 0.5 --metric-after 0.6 --ledger "$LED" >/dev/null
   bash "$LC" --file "$F" --to superseded --actor agente --reason "obsoleto" --ledger "$LED" >/dev/null
   [ -f "$F" ]
   grep -q "^lifecycle: superseded" "$F"
