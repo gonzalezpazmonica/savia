@@ -78,7 +78,15 @@ prototipo: página HTML local sin red, con dos estilos y «sin cara», botones p
 
 ### D1 — Fuente de la amplitud
 
-El `tts_worker` de SE-537 publica un evento `speech-level` con `{epoch, rms, t}` cada 30–50 ms **del bloque que está sonando**. La vista ignora los eventos de una época anterior. Cuando llega `speech-interrupted`, la boca se cierra en el mismo fotograma.
+El `tts_worker` de SE-537 publica un evento `speech-level` con `{epoch, seq, rms, t}` cada 30–50 ms **del bloque que está sonando**. La vista ignora los eventos de una época anterior. Cuando llega `speech-interrupted`, la boca se cierra en el mismo fotograma.
+
+Precisiones de la revisión documental de Codex del 2026-11-26 (Labs, L12):
+
+- El nivel se calcula sobre el PCM **que se envía al dispositivo**, después de la ganancia y del silencio de la aplicación. No se usa el que solo está generado o en cola.
+- En estéreo se suman las energías de los canales: `sqrt(Σx²/(C·N))`. Así dos canales en contrafase no se anulan.
+- Si la entrada no es válida (NaN, Inf, formato desconocido), la boca queda neutral y se escribe un diagnóstico. El renderer nunca recibe NaN.
+- El cálculo se acumula en el callback de audio, pero el evento se publica fuera de él: dentro no se serializa JSON ni se hace E/S.
+- Al recuperar una ventana oculta no se reproducen fotogramas atrasados.
 
 ### D2 — Estilos
 
@@ -104,6 +112,8 @@ Esta spec propone cerrar la D2 de SE-432 con la misma definición de estilos, pa
 - [ ] S2: un `speech-level` de una época anterior no mueve la boca (test).
 - [ ] S2: tras `speech-interrupted`, la boca queda cerrada en ≤ 1 fotograma (test con reloj falso).
 - [ ] S2: con amplitud de micrófono y sin voz reproducida, la boca no se mueve (test negativo).
+- [ ] S2: un PCM estéreo en contrafase produce un nivel distinto de cero, y PCM vacío, NaN o Inf dejan la boca neutral sin propagar NaN (tests).
+- [ ] S2: un activo de estilo que intenta cargar una URL externa se rechaza y la cara cae al estilo por defecto (test negativo).
 
 ## Fuera de alcance
 

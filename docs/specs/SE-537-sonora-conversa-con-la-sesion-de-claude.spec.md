@@ -150,6 +150,7 @@ La retirada de edge-tts en `zeroclaw/savia-voice/` (`tts.py:144`, `requirements.
 - [ ] Una orden hablada como «borra… no, no borres» no dispara la cancelación ni ninguna acción por sí misma: el texto va a la sesión como cualquier turno (test).
 - [ ] Sin red, el dictado funciona y la conversación responde con la frase fija de D5 (test con la sesión desconectada).
 - [ ] Prueba de egreso: durante una conversación simulada, ningún socket sale con audio ni texto de voz hacia hosts que no sean el proceso local de la sesión (test en CI con la red bloqueada).
+- [ ] **Negativo, caché fría:** con los pesos de Whisper o de Kokoro ausentes, la conversación no descarga nada. Muestra «falta el modelo de voz» y deja la descarga como acción explícita de la persona en ajustes (test con la caché vacía y la red bloqueada). Hoy los dos descargan de Hugging Face la primera vez, y una caché caliente ocultaría esa salida.
 
 ## Criterios de aceptación transversales
 
