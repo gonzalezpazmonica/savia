@@ -129,13 +129,18 @@ mk_ws() { # workspace completo y activo
     "$WS/.opencode/plugins/guards/block-credential-leak.ts" \
     "$WS/.opencode/hooks/context-sanitize-input.sh" \
     "$WS/docs/rules/domain/savia-shield-opencode.md"
-  cat > "$WS/.opencode/plugins/savia-foundation.ts" <<'TS'
-import { blockCredentialLeak } from "./guards/block-credential-leak.ts";
-import { dataSovereigntyGate } from "./guards/data-sovereignty-gate.ts";
-const BEFORE_GUARDS = [
+  # Disposición SE-510 AC-7: la lista vive en lib/before-guards.ts y la fundación la importa y usa.
+  cat > "$WS/.opencode/plugins/lib/before-guards.ts" <<'TS'
+import { blockCredentialLeak } from "../guards/block-credential-leak.ts";
+import { dataSovereigntyGate } from "../guards/data-sovereignty-gate.ts";
+export const BEFORE_GUARDS = [
   blockCredentialLeak,
   dataSovereigntyGate, // SH01
 ] as const;
+TS
+  cat > "$WS/.opencode/plugins/savia-foundation.ts" <<'TS'
+import { BEFORE_GUARDS } from "./lib/before-guards.ts";
+export const run = (i: unknown) => runGuardsOnVariants(BEFORE_GUARDS, i);
 TS
 }
 
@@ -174,8 +179,8 @@ jq_py() { echo "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); 
 
 @test "synthetic: guard imported but removed from the guard list is blocked as not wired" {
   mk_ws
-  sed -i '/^  dataSovereigntyGate, \/\/ SH01$/d' "$WS/.opencode/plugins/savia-foundation.ts"
-  grep -q 'import { dataSovereigntyGate }' "$WS/.opencode/plugins/savia-foundation.ts"
+  sed -i '/^  dataSovereigntyGate, \/\/ SH01$/d' "$WS/.opencode/plugins/lib/before-guards.ts"
+  grep -q 'import { dataSovereigntyGate }' "$WS/.opencode/plugins/lib/before-guards.ts"
   shield --json
   [ "$status" -eq 2 ]
   jq_py "assert 'savia-foundation-wired' in d['missing'] and d['shield_status']=='inactive', d"
@@ -183,7 +188,7 @@ jq_py() { echo "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); 
 
 @test "synthetic: commented-out credential guard is not wired and makes shield inactive" {
   mk_ws
-  sed -i 's|^  blockCredentialLeak,$|  // blockCredentialLeak,|' "$WS/.opencode/plugins/savia-foundation.ts"
+  sed -i 's|^  blockCredentialLeak,$|  // blockCredentialLeak,|' "$WS/.opencode/plugins/lib/before-guards.ts"
   shield --json
   [ "$status" -eq 2 ]
   jq_py "assert 'block-credential-leak-wired' in d['missing'] and d['shield_status']=='inactive', d"

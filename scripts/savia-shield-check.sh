@@ -78,20 +78,99 @@ check_component \
   "true"
 
 # ── Check 6: savia-foundation.ts wires the guards ────────────────────────────
-# «Cableado» = el guard figura como elemento de una lista de guards (línea con
-# solo el identificador). Un import o un comentario no bastan: un guard
-# importado pero retirado de BEFORE_GUARDS no protege nada.
+# «Cableado» (fallo cerrado ante cualquier duda): el guard es elemento (identificador
+# desnudo) del array BEFORE_GUARDS de lib/before-guards.ts, acotado a ese bloque y sin
+# comentarios ni cadenas, Y savia-foundation.ts importa BEFORE_GUARDS (sin alias ni
+# `import type`) desde ./lib/before-guards(.ts) y lo usa fuera de comentarios y cadenas.
+# Un guard importado o listado en otro array no protege nada.
 FOUNDATION="$WORKSPACE_DIR/.opencode/plugins/savia-foundation.ts"
-# SE-510 AC-7: la lista BEFORE_GUARDS vive en lib/before-guards.ts y el plugin la
-# importa. Esa lista solo cuenta si savia-foundation.ts realmente la usa.
 BEFORE_GUARDS_FILE="$WORKSPACE_DIR/.opencode/plugins/lib/before-guards.ts"
 guard_registered() {
-  local pat="^[[:space:]]*$1,?[[:space:]]*(//.*)?$"
-  [[ -f "$FOUNDATION" ]] || return 1
-  grep -qE "$pat" "$FOUNDATION" 2>/dev/null && return 0
-  [[ -f "$BEFORE_GUARDS_FILE" ]] \
-    && grep -q "BEFORE_GUARDS" "$FOUNDATION" 2>/dev/null \
-    && grep -qE "$pat" "$BEFORE_GUARDS_FILE" 2>/dev/null
+  [[ -f "$FOUNDATION" && -f "$BEFORE_GUARDS_FILE" ]] || return 1
+  command -v python3 >/dev/null 2>&1 || return 1
+  python3 -I - "$FOUNDATION" "$BEFORE_GUARDS_FILE" "$1" 2>/dev/null <<'PY'
+import re
+import sys
+from pathlib import Path
+
+
+def scan(src, keep_strings):
+    """Quita comentarios; con keep_strings=False vacía también el contenido de cadenas."""
+    out, i, n = [], 0, len(src)
+    while i < n:
+        c = src[i]
+        two = src[i:i + 2]
+        if two == "//":
+            while i < n and src[i] != "\n":
+                i += 1
+        elif two == "/*":
+            j = src.find("*/", i + 2)
+            if j < 0:
+                raise ValueError("comentario sin cierre")
+            out.append(" ")
+            i = j + 2
+        elif c in "\"'`":
+            j = i + 1
+            while j < n and src[j] != c:
+                j += 2 if src[j] == "\\" else 1
+            if j >= n:
+                raise ValueError("cadena sin cierre")
+            out.append(src[i:j + 1] if keep_strings else c + c)
+            i = j + 1
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def guards_in_list(src):
+    decl = list(re.finditer(r"\bBEFORE_GUARDS\b", src))
+    m = re.search(r"\bexport\s+const\s+BEFORE_GUARDS\s*(?::[^=;]*)?=\s*\[", src)
+    if not m or len(decl) != 1:
+        raise ValueError("BEFORE_GUARDS ausente o ambigua")
+    depth, j, start = 1, m.end(), m.end()
+    items, buf = [], []
+    while j < len(src) and depth:
+        ch = src[j]
+        if ch in "[({":
+            depth += 1
+        elif ch in "])}":
+            depth -= 1
+            if depth == 0:
+                break
+        if ch == "," and depth == 1:
+            items.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+        j += 1
+    if depth:
+        raise ValueError("lista sin cierre")
+    items.append("".join(buf))
+    return {t.strip() for t in items if re.fullmatch(r"\s*[A-Za-z_$][\w$]*\s*", t)}
+
+
+foundation, guards_file, guard = sys.argv[1:4]
+try:
+    if guard not in guards_in_list(scan(Path(guards_file).read_text(), False)):
+        sys.exit(1)
+    with_str = scan(Path(foundation).read_text(), True)
+    imp = re.compile(
+        r"(?<![\w$.])import\s*\{([^}]*)\}\s*from\s*([\"'])\./lib/before-guards(?:\.ts)?\2")
+    imports = [m for m in imp.finditer(with_str)
+               if any(t.strip() == "BEFORE_GUARDS" for t in m.group(1).split(","))]
+    if len(imports) != 1:
+        sys.exit(1)
+    body = with_str[:imports[0].start()] + " " + with_str[imports[0].end():]
+    body = scan(body, False)
+    if re.search(r"\b(?:const|let|var|function|class)\s+BEFORE_GUARDS\b", body):
+        sys.exit(1)
+    if not re.search(r"(?<![\w$.])BEFORE_GUARDS\b(?!\s*:)", body):
+        sys.exit(1)
+except Exception:
+    sys.exit(1)
+sys.exit(0)
+PY
 }
 if guard_registered "dataSovereigntyGate"; then
   COMPONENTS+=("savia-foundation-wired")
@@ -99,8 +178,7 @@ else
   MISSING+=("savia-foundation-wired")
 fi
 
-# ── Check 7: block-credential-leak referenced in settings/plugin wiring ──────
-# The foundation plugin imports blockCredentialLeak — verify it's wired
+# ── Check 7: block-credential-leak wired (mismo criterio que el check 6) ─────
 if guard_registered "blockCredentialLeak"; then
   COMPONENTS+=("block-credential-leak-wired")
 else
