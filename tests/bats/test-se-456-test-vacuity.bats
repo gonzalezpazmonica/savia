@@ -101,9 +101,10 @@ vac_kind() {
   [ "$(vac_count ok5)" -eq 0 ]
 }
 
-@test "no marca: run y || true fuera de un @test (setup y helpers)" {
-  printf '#!/usr/bin/env bats\nsetup() {\n  run true\n  grep -q x f || true\n}\n@test "caso" {\n  [ 1 -eq 1 ]\n}\n' > "$FX/tests/ok6.bats"
-  [ "$(vac_count ok6)" -eq 0 ]
+@test "setup y helpers: run sin comprobar no se marca; la aserción anulada de setup sí (RESTO-456-a)" {
+  printf '#!/usr/bin/env bats\nsetup() {\n  run true\n  grep -q x f || true\n}\nhelper() {\n  run true\n  grep -q x f || true\n}\n@test "caso" {\n  [ 1 -eq 1 ]\n}\n' > "$FX/tests/ok6.bats"
+  [ "$(vac_count ok6)" -eq 1 ]
+  [ "$(vac_kind ok6)" = "V1" ]
 }
 
 @test "el hallazgo lleva test, línea y tipo" {
@@ -404,4 +405,22 @@ gate_run() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"RESULT: PASS"* ]]
   [[ "$output" == *"RESULT: FAIL — tests que no pueden fallar"* ]]
+}
+
+# RESTO-456-a: aserciones anuladas dentro de setup() (antes quedaban fuera del detector).
+@test "V1 en setup(): grep -q anulado con || true dentro de setup se detecta" {
+  printf '#!/usr/bin/env bats\nsetup() {\n  grep -q "set -uo pipefail" x.sh || true\n  export A=1\n}\n\n@test "caso" {\n  [ 1 -eq 1 ]\n}\n' > "$FX/tests/setupvac.bats"
+  [ "$(vac_count setupvac)" -eq 1 ]
+  [ "$(vac_kind setupvac)" = "V1" ]
+}
+
+@test "setup() con preparación condicional legítima (|| true tras acción) no se marca" {
+  printf '#!/usr/bin/env bats\nsetup() {\n  mkdir -p "$BATS_TMPDIR/x" 2>/dev/null || true\n  [[ -n "${T:-}" ]] && H="-H $T" || true\n}\n\n@test "caso" {\n  [ 1 -eq 1 ]\n}\n' > "$FX/tests/setupok.bats"
+  [ "$(vac_count setupok)" -eq 0 ]
+}
+
+@test "el repo no tiene aserciones anuladas en setup(): el escaneo da 0" {
+  run python3 "$ENGINE" --vacuity-scan .
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s' "$output" | python3 -c "import json,sys; print(json.load(sys.stdin)['count'])")" -eq 0 ]
 }

@@ -131,6 +131,23 @@ def test_blocks(c):
     i = 0
     while i < len(lines):
         m = re.match(r'^@test\s+(?:"((?:[^"\\]|\\.)*)"|\'([^\']*)\')\s*\{\s*(?:#.*)?$', lines[i])
+        hook = re.match(r'^(setup|setup_file)\s*\(\)\s*\{\s*(?:#.*)?$', lines[i])
+        if hook:
+            # RESTO-456-a: las aserciones anuladas de setup() también cuentan (solo V1)
+            j, body, tag = i + 1, [], None
+            while j < len(lines) and (tag or lines[j].rstrip() != "}"):
+                t = lines[j].strip()
+                if tag:  # cuerpo de un heredoc (p. ej. un script simulado): no es aserción de setup
+                    if t == tag:
+                        tag = None
+                elif t and not t.startswith("#"):
+                    body.append((j + 1, t))
+                    hd = re.search(r'<<-?\s*[\'"]?(\w+)[\'"]?', t)
+                    tag = hd.group(1) if hd else None
+                j += 1
+            yield hook.group(1) + "()", body
+            i = j + 1
+            continue
         if not m:
             i += 1
             continue
@@ -149,6 +166,8 @@ def vacuity_all(c):
         for idx, (n, s) in enumerate(body):
             if (ASSERT_LINE.search(s) and NEUTRALIZED.search(s) and only_assertions(s)) or IF_NOOP.match(s):
                 found.append({"test": name, "line": n, "kind": "V1", "text": s[:120]})
+            elif name.startswith("setup") and name.endswith("()"):
+                continue  # en setup() solo se busca V1; un run sin comprobar es preparación
             elif RUN_LINE.match(s) and not RUN_SELF_CHECKED.match(s):
                 same_line = re.split(r';\s*|\s&&\s', s, maxsplit=1)[1:]
                 rest = body[idx + 1:]

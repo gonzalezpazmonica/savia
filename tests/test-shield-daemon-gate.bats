@@ -6,7 +6,7 @@
 
 setup() {
   # Verify set -uo pipefail in target hook
-  grep -q 'set -uo pipefail' .opencode/hooks/data-sovereignty-gate.sh || true
+  grep -q 'set -uo pipefail' "${BATS_TEST_DIRNAME}/../.opencode/hooks/data-sovereignty-gate.sh"
   export TMPDIR="${BATS_TMPDIR:-/tmp}/shield-gate-$$"
   mkdir -p "$TMPDIR" 2>/dev/null || true
 }

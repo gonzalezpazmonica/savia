@@ -5,7 +5,7 @@
 # Target: scripts/masked-digest.sh
 
 setup() {
-  grep -q 'set -uo pipefail' scripts/masked-digest.sh || true
+  grep -q 'set -uo pipefail' "${BATS_TEST_DIRNAME}/../scripts/masked-digest.sh"
   export PROJECT_DIR="${BATS_TEST_DIRNAME}/.."
   export SCRIPT="$PROJECT_DIR/scripts/masked-digest.sh"
   export SHIELD_URL="http://127.0.0.1:${SAVIA_SHIELD_PORT:-8444}"

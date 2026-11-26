@@ -4,7 +4,7 @@
 # Ref: docs/savia-shield-guide.md
 
 setup() {
-  grep -q 'set -uo pipefail' .opencode/hooks/data-sovereignty-gate.sh || true
+  grep -q 'set -uo pipefail' "${BATS_TEST_DIRNAME}/../.opencode/hooks/data-sovereignty-gate.sh"
   export SHIELD_URL="http://127.0.0.1:${SAVIA_SHIELD_PORT:-8444}"
   export TMPDIR="${BATS_TMPDIR:-/tmp}/shield-daemon-$$"
   mkdir -p "$TMPDIR" 2>/dev/null || true
