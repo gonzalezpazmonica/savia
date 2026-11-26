@@ -8,7 +8,7 @@
 
 **Developer Type:** agent-team
 **Asignado a:**     python-developer + frontend-developer (React)
-**Estado:**         PROPOSED
+**Estado:**         SUPERSEDED por SE-537 (2026-11-26): el cerebro pasa a la sesión de Claude de Savia; Ollama queda descartado
 
 **Decisiones de diseño (2026-08-07, propuestas para aprobacion):**
 
