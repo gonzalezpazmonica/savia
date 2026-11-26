@@ -72,7 +72,7 @@ CONS
   # All other packages — use constraints to prevent CUDA torch re-download
   pip download --dest "$CACHE_DIR/wheels" --no-cache-dir \
     --no-deps \
-    numpy pyyaml websockets sounddevice edge-tts 2>&1 | tail -2
+    numpy pyyaml websockets sounddevice 2>&1 | tail -2
   # faster-whisper + deps (excluding torch, already downloaded)
   pip download --dest "$CACHE_DIR/wheels" --no-cache-dir \
     faster-whisper silero-vad 2>&1 | tail -3

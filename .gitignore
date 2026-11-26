@@ -166,8 +166,6 @@ config.local/
 
 # ── ZeroClaw local data (firmware cache, local config, generated audio) ──────
 zeroclaw/.cache/
-zeroclaw/savia-voice/config.local.yaml
-zeroclaw/savia-voice/cache/
 
 # ── Infraestructura local del PM (no parte del producto) ────────────────────
 git/

@@ -44,7 +44,7 @@
 ### 2b — Savia Voice daemon next-gen (HECHO — pendiente test hardware)
 - [x] Arquitectura full-duplex con Silero VAD + faster-whisper + Claude stream-json
 - [x] SessionManager: sesión persistente con `--resume`, streaming por frases
-- [x] TTS dual: Kokoro 82M local (200ms/frase) + edge-tts Elvira fallback
+- [x] ~~TTS dual: Kokoro 82M local (200ms/frase) + edge-tts Elvira fallback~~ — retirado el 2026-11-26 con `savia-voice/` (SE-537 D6); la conversación por voz pasa a Sonora
 - [x] Pre-cache TTS: 64 frases (fillers, stalls, respuestas comunes, 0ms)
 - [x] Conversation model: clasificacion de overlaps (backchannel/stop/collaborative)
 - [x] Barge-in: solo "para"/"callate" interrumpe, el resto se guarda como follow-up
@@ -111,7 +111,7 @@ afectan tanto a pm-workspace core como a SaviaClaw:
 > SPECs individuales: `docs/propuestas/SPEC-012` a `SPEC-016`
 
 Nota: SPEC-010 N3 (Voz en Tier 4 del roadmap unificado) ya esta parcialmente
-cubierto por savia-voice (Fase 2b). La prioridad real es Fase 2c (test hardware).
+cubierto por savia-voice (Fase 2b; retirado el 2026-11-26, SE-537 D6). La prioridad real es Fase 2c (test hardware).
 
 ---
 
