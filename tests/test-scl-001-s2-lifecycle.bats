@@ -37,7 +37,7 @@ teardown() {
   LED="$TMPD/ledger/lc.jsonl"
   run bash "$LC" --file "$F" --to canary --actor agente --ledger "$LED"
   [ "$status" -eq 0 ]
-  run bash "$LC" --file "$F" --to active --actor operadora --human-trailer "op-sig" --ledger "$LED"
+  run bash "$LC" --file "$F" --to active --actor operadora --human-trailer "se488:op-sig" --metric-before 0.5 --metric-after 0.6 --ledger "$LED"
   [ "$status" -eq 0 ]
   run bash "$LC" --file "$F" --to superseded --actor agente --reason "obsoleto" --ledger "$LED"
   [ "$status" -eq 0 ]
@@ -66,7 +66,7 @@ PY
   # Una entrada activa SI cambia el gate (efecto global)
   LED="$TMPD/ledger/lc.jsonl"
   bash "$LC" --file "$F" --to canary --actor agente --ledger "$LED" >/dev/null
-  bash "$LC" --file "$F" --to active --actor operadora --human-trailer "op-sig" --ledger "$LED" >/dev/null
+  bash "$LC" --file "$F" --to active --actor operadora --human-trailer "se488:op-sig" --metric-before 0.5 --metric-after 0.6 --ledger "$LED" >/dev/null
   run bash -c "grep -q '^lifecycle: active' '$F' && echo ACTIVE || echo INACTIVE"
   [ "$output" = "ACTIVE" ]
 }
@@ -90,7 +90,7 @@ EOF
 
   LED="$TMPD/ledger/lc.jsonl"
   bash "$LC" --file "$FP" --to canary --actor agente --ledger "$LED" >/dev/null
-  bash "$LC" --file "$FP" --to active --actor operadora --human-trailer "sig" --ledger "$LED" >/dev/null
+  bash "$LC" --file "$FP" --to active --actor operadora --human-trailer "se488:sig" --metric-before 0.5 --metric-after 0.6 --ledger "$LED" >/dev/null
   # no commit tras activar → rollback restaura del HEAD
   run bash "$RB" --file "$FP" --reason "entrada erronea" --ledger "$TMPD/ledger/rb.jsonl"
   [ "$status" -eq 0 ]
@@ -110,7 +110,7 @@ EOF
 @test "AC-2.5: promocion condicionada — canary con metrica peor que baseline NO asciende" {
   LED="$TMPD/ledger/lc.jsonl"
   bash "$LC" --file "$F" --to canary --actor agente --ledger "$LED" >/dev/null
-  run bash "$LC" --file "$F" --to active --actor operadora --human-trailer "sig" \
+  run bash "$LC" --file "$F" --to active --actor operadora --human-trailer "se488:sig" \
     --metric-before 0.8 --metric-after 0.6 --ledger "$LED"
   grep -q "^lifecycle: proposed" "$F"
   python3 - "$LED" <<'PY'
@@ -124,10 +124,51 @@ PY
 @test "AC-2.6: superseded no borra — entrada permanece legible con tombstone" {
   LED="$TMPD/ledger/lc.jsonl"
   bash "$LC" --file "$F" --to canary --actor agente --ledger "$LED" >/dev/null
-  bash "$LC" --file "$F" --to active --actor operadora --human-trailer "sig" --ledger "$LED" >/dev/null
+  bash "$LC" --file "$F" --to active --actor operadora --human-trailer "se488:sig" --metric-before 0.5 --metric-after 0.6 --ledger "$LED" >/dev/null
   bash "$LC" --file "$F" --to superseded --actor agente --reason "obsoleto" --ledger "$LED" >/dev/null
   [ -f "$F" ]
   grep -q "^lifecycle: superseded" "$F"
   grep -q "^tombstone:" "$F"
   cat "$F" | grep -q "Test"
+}
+
+# ── Casos límite y negativos añadidos con SE-497 S0 ──
+# SCRIPT="scripts/learning-lifecycle.sh" — funciones ejercidas: usage, trailer_ok, record, apply_state.
+# Cada caso trabaja en $BATS_TEST_TMPDIR, que BATS crea y limpia solo.
+_lp() {  # _lp <dir> <estado>: lección mínima de prueba
+  mkdir -p "$1"; printf -- '---\nid: LP-EDGE\nlifecycle: %s\nprovenance: INFERRED\ncreated_utc: 2026-11-01\n---\ncuerpo\n' "$2" > "$1/LP-EDGE.md"
+  echo "$1/LP-EDGE.md"
+}
+@test "S2 edge: nonexistent lesson file fails with exit 3" {
+  D="$BATS_TEST_TMPDIR"
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh" --file "$D/no-existe.md" --to canary --ledger "$D/l.jsonl"
+  [ "$status" -eq 3 ]
+  [ ! -e "$D/l.jsonl" ]
+}
+@test "S2 edge: empty trailer is rejected and the lesson stays canary" {
+  D="$BATS_TEST_TMPDIR"; f=$(_lp "$D" canary)
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh" --file "$f" --to active --human-trailer "" --metric-before 0.1 --metric-after 0.2 --ledger "$D/l.jsonl"
+  [ "$status" -eq 4 ]
+  grep -qx 'lifecycle: canary' "$f"
+}
+@test "S2 invalid target state is rejected with usage error" {
+  D="$BATS_TEST_TMPDIR"; f=$(_lp "$D" proposed)
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh" --file "$f" --to activo --ledger "$D/l.jsonl"
+  [ "$status" -eq 2 ]
+  grep -qx 'lifecycle: proposed' "$f"
+}
+@test "S2 boundary: equal metrics promote, one less fails as regression" {
+  D="$BATS_TEST_TMPDIR"; f=$(_lp "$D/a" canary)
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh" --file "$f" --to active --human-trailer "se488:edge" --metric-before 0.5 --metric-after 0.49 --ledger "$D/l.jsonl"
+  [ "$status" -eq 5 ]
+  grep -qx 'lifecycle: proposed' "$f"
+  f=$(_lp "$D/b" canary)
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh" --file "$f" --to active --human-trailer "se488:edge" --metric-before 0.5 --metric-after 0.5 --ledger "$D/l.jsonl"
+  [ "$status" -eq 0 ]
+  grep -qx 'lifecycle: active' "$f"
+}
+@test "S2 edge: no arg at all prints usage and fails with exit 2" {
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--file"* ]]
 }
