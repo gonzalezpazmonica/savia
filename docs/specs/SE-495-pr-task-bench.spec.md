@@ -260,3 +260,34 @@ S1 M, S2 M, S3 M, S4 M (dominado por redactar y revisar 20 instrucciones).
 
 - [x] **DUAL_BINDING**: el núcleo es Python stdlib común; desde S3 hay adaptadores para Claude Code, OpenCode y Codex
   con el mismo contrato, y un brazo ausente se informa como `unknown`.
+
+## Enmienda propuesta 2026-11-25: la configuración como factor y un brazo de un solo ejecutor
+
+> Propuesta. No cambia el estado de esta spec; vale cuando la operadora fusione la PR que la trae.
+> Origen: Radar de metaorquestación y factorías (documento de la operadora, 2026-11-25, líneas M01–M15), cruzado con main c7987ac94 por una analista independiente. El inventario completo vive en Savia Labs. Absorbe M02 (arena de configuraciones), M03 (evaluar la organización del trabajo) y M10 (topologías).
+
+**Por qué aquí y no en una spec nueva.** Lo que el radar llama «arena» ya es este banco: tareas de PRs reales,
+comparación por pares e intervalos (SE-477). Faltan dos factores que hoy no se separan.
+
+1. **La configuración completa como unidad de comparación**, no solo el frontend: frontend × modelo × esfuerzo, con
+   la versión de cada uno y la fecha de observación en el informe. Una capacidad medida envejece (el validador
+   avisa) y nunca concede permiso (SE-531 D4).
+2. **Un brazo de un solo ejecutor sin delegar** frente al brazo orquestadora + worker, con el mismo modelo y
+   presupuesto. Así se mide si la delegación compensa su coste de coordinación, en vez de suponerlo.
+
+**Hipótesis refutable.** En al menos una familia de tareas (`fix` con tests), cambiar la configuración, o pasar de un
+ejecutor a orquestadora + worker, cambia la tasa de aceptación o el coste por entrega aceptada con un IC95 de la
+diferencia pareada que excluye el 0.
+
+**Prueba mínima.** Las 20 tareas del banco, dos configuraciones y el brazo de un solo ejecutor, tres repeticiones,
+juicio ciego y conjunto `test` sellado (SE-470).
+
+**Criterio de descarte.** Si todos los IC95 incluyen el 0, se mantiene el selector fijo por tier y no se construye
+ningún selector ni arena. Es un resultado válido y se publica.
+
+**Consumidor.** La elección de worker por encargo de la orquestadora, y la ficha de estación de SE-531 S3 si se abre.
+
+**Fuera.** Optimizar topologías con aprendizaje, routing sensible a caché y cualquier dependencia de HarnessRouter o
+UHP. Las cifras externas del radar no están reproducidas y no fijan umbrales.
+
+**Coste.** Codex consume cuota semanal y una ventana de 5 h; la medición va de 2 en 2 y con tope.

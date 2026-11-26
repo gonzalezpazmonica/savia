@@ -12,7 +12,15 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-MEMORY_DIR="${MEMORY_DIR:-$HOME/.claude/projects/-home-monica-claude/memory}"
+# Carpeta de memoria. Si MEMORY_DIR viene dado, manda. Si no, se usa la memoria
+# automática de Claude Code para ESTE repositorio: su carpeta de proyecto se llama
+# como la ruta del repo con cada carácter no alfanumérico cambiado por «-».
+# Antes había aquí una ruta fija de una máquina concreta que ya no existía, y el
+# guion respondía «nada que revisar» con salida 0 sin haber mirado nada.
+default_memory_dir() {
+  printf '%s/.claude/projects/%s/memory' "$HOME" "$(printf '%s' "$REPO_ROOT" | sed 's#[^A-Za-z0-9]#-#g')"
+}
+MEMORY_DIR="${MEMORY_DIR:-$(default_memory_dir)}"
 FIX_MODE=false
 
 [[ "${1:-}" == "--fix" ]] && FIX_MODE=true
@@ -152,9 +160,11 @@ main() {
   echo "Memory dir: $MEMORY_DIR"
   echo ""
 
+  # Falla cerrado: sin carpeta no se ha revisado nada, y eso no es «sano».
   if [[ ! -d "$MEMORY_DIR" ]]; then
-    echo "No memory directory found. Nothing to lint."
-    exit 0
+    echo "ERROR: no existe la carpeta de memoria: $MEMORY_DIR" >&2
+    echo "No se ha revisado nada. Indica la carpeta con MEMORY_DIR=<ruta>." >&2
+    exit 3
   fi
 
   check_orphan_index_entries
