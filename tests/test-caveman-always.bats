@@ -7,7 +7,7 @@
 
 setup() {
   cd "$BATS_TEST_DIRNAME/.."
-  FOUNDATION=".opencode/plugins/savia-foundation.ts"
+  FOUNDATION=".opencode/plugins/lib/before-guards.ts"  # SE-510 AC-7: la lista vive aquí
   GRILL_GUARD=".opencode/plugins/guards/auto-grill-me.ts"
   ZOOM_GUARD=".opencode/plugins/guards/auto-zoom-out.ts"
   GRILL_HOOK=".opencode/hooks/auto-grill-me.sh"
@@ -109,19 +109,19 @@ json.dump(d, open('$TMPDIR_TEST/oc.json', 'w'))
 
 # ── Registration in savia-foundation (AC-05) ─────────────────────────────────
 
-@test "AC-05: savia-foundation imports auto-grill-me" {
+@test "AC-05: before-guards (lista de savia-foundation) imports auto-grill-me" {
   grep -q "autoGrillMe" "$FOUNDATION"
   grep -q "auto-grill-me" "$FOUNDATION"
 }
 
-@test "AC-05: savia-foundation imports auto-zoom-out" {
+@test "AC-05: before-guards (lista de savia-foundation) imports auto-zoom-out" {
   grep -q "autoZoomOut" "$FOUNDATION"
   grep -q "auto-zoom-out" "$FOUNDATION"
 }
 
 @test "AC-05: autoGrillMe in BEFORE_GUARDS array" {
   python3 - <<'PY'
-content = open(".opencode/plugins/savia-foundation.ts").read()
+content = open(".opencode/plugins/lib/before-guards.ts").read()
 guards_block = content[content.index("const BEFORE_GUARDS"):content.index("] as const;", content.index("const BEFORE_GUARDS"))+12]
 assert "autoGrillMe" in guards_block, "autoGrillMe not in BEFORE_GUARDS"
 PY
@@ -129,7 +129,7 @@ PY
 
 @test "AC-05: autoZoomOut in BEFORE_GUARDS array" {
   python3 - <<'PY'
-content = open(".opencode/plugins/savia-foundation.ts").read()
+content = open(".opencode/plugins/lib/before-guards.ts").read()
 guards_block = content[content.index("const BEFORE_GUARDS"):content.index("] as const;", content.index("const BEFORE_GUARDS"))+12]
 assert "autoZoomOut" in guards_block, "autoZoomOut not in BEFORE_GUARDS"
 PY
