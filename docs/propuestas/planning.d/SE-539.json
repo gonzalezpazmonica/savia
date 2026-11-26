@@ -1,0 +1,9 @@
+{
+  "id": "SE-539",
+  "status": "PROPOSED",
+  "priority": "P2",
+  "phase": "D",
+  "title": "Guías web modernas para el agente de front, en copia fija y sin código (2 slices)",
+  "evidence": "docs/specs/SE-539-guias-web-modernas-para-el-agente-de-front.spec.md",
+  "note": "Nace de la petición del 2026-11-26 sobre GoogleChrome/modern-web-guidance (211 guías, Apache-2.0, commit 2b4aa13). Su skill oficial ejecuta npx @latest en cada tarea, lo que choca con SE-465 y SE-535. La operadora eligió por pregunta interactiva una copia fija solo de texto. S1: importador, copia y búsqueda local. S2: paso de consulta en frontend-developer y objetivo de navegador de Sonora; primer consumidor, SE-538 S1. Sigue PROPOSED."
+}
