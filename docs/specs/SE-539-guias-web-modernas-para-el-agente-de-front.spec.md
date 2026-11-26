@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P2
 developer_type: agent-single
 created: 2026-11-26
@@ -14,6 +14,10 @@ timeline:
     learned: "2026-11-26"
     value: "PROPOSED"
     source: "orquestadora; decisión de la operadora en pregunta interactiva del 2026-11-26"
+  - from: "2026-11-26"
+    learned: "2026-11-26"
+    value: "APPROVED"
+    source: "operadora, pregunta interactiva del 2026-11-26: «Aprobar las tres»"
 ---
 # SE-539 — Guías web modernas para el agente de front, en copia fija y sin código
 
@@ -99,4 +103,4 @@ Para actualizar se pasa otro commit al importador. El cambio llega en una PR con
 
 ## Aprobación
 
-- estado: PROPOSED. Decidir la forma de entrada no aprueba la spec.
+**Aprobada por la operadora el 2026-11-26** por pregunta interactiva («Aprobar las tres»). Cada slice se fusiona con la revisión de su PR concreta. Se formaliza al fusionar esta PR (SE-488).

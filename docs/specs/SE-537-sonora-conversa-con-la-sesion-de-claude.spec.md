@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P1
 developer_type: agent-team
 created: 2026-11-26
@@ -15,6 +15,10 @@ timeline:
     learned: "2026-11-26"
     value: "PROPOSED"
     source: "orquestadora; escenas confirmadas por la operadora en pregunta interactiva del 2026-11-26"
+  - from: "2026-11-26"
+    learned: "2026-11-26"
+    value: "APPROVED"
+    source: "operadora, pregunta interactiva del 2026-11-26: «Aprobar las tres»"
 ---
 # SE-537 — Sonora conversa con la sesión de Claude de Savia
 
@@ -81,8 +85,8 @@ prototipo: el mismo de SE-538 (página local con los estados escuchando, pensand
 
 ### Confirmación del prototipo
 
-- fecha: pendiente
-- respuesta: pendiente
+- fecha: 2026-11-26
+- respuesta: «Confirmo el prototipo». Respuesta de la operadora, por pregunta interactiva, a la página privada publicada ese día, con dos estilos y «sin cara», pulsar para hablar, voz callada sin cancelar el trabajo, sin red, movimiento reducido y tema. La pregunta advertía que faltaba el botón «Parar trabajo». Se añade en la versión siguiente del prototipo y forma parte de S3 de SE-537.
 
 ## Qué decide esta spec
 
@@ -116,7 +120,7 @@ El dictado y la transcripción no necesitan red. Si la sesión de Claude no resp
 
 ### D6 — ZeroClaw
 
-La retirada de edge-tts en `zeroclaw/savia-voice/` (`tts.py:144`, `requirements.txt`, `scripts/sovereignty-ops.sh:75`) va en una PR pequeña aparte, sin spec, y la decide la operadora. Cuando se haya portado lo que sirve, el daemon dormido se retira.
+`zeroclaw/savia-voice/` se retira entero en una PR aparte, sin spec. Lo decidió la operadora el 2026-11-26 por pregunta interactiva («Retirar ZeroClaw voz entera»). Con él se van su fallback a edge-tts (`tts.py:144`) y el empaquetado en `scripts/sovereignty-ops.sh:75`. Lo útil (cola con época, barge-in, clasificación de solapamientos) se reescribe en Sonora desde esta spec, mirando el historial de git.
 
 ## Slices
 
@@ -191,4 +195,4 @@ Micrófono abierto y AEC; voz a voz; catálogo y selección de motores; gallego 
 
 ## Aprobación
 
-- estado: PROPOSED. Confirmar las escenas no aprueba la spec.
+**Aprobada por la operadora el 2026-11-26** por pregunta interactiva («Aprobar las tres») y la confirmación del prototipo. Cada slice se fusiona con la revisión de su PR concreta. Se formaliza al fusionar esta PR (SE-488).

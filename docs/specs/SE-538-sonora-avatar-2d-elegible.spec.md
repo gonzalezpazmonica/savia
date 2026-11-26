@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P2
 developer_type: agent-single
 created: 2026-11-26
@@ -14,6 +14,10 @@ timeline:
     learned: "2026-11-26"
     value: "PROPOSED"
     source: "orquestadora; escenas confirmadas por la operadora en pregunta interactiva del 2026-11-26"
+  - from: "2026-11-26"
+    learned: "2026-11-26"
+    value: "APPROVED"
+    source: "operadora, pregunta interactiva del 2026-11-26: «Aprobar las tres»"
 ---
 # SE-538 — Avatar 2D elegible y desactivable en Sonora
 
@@ -71,8 +75,8 @@ prototipo: página HTML local sin red, con dos estilos y «sin cara», botones p
 
 ### Confirmación del prototipo
 
-- fecha: pendiente
-- respuesta: pendiente
+- fecha: 2026-11-26
+- respuesta: «Confirmo el prototipo». Respuesta de la operadora, por pregunta interactiva, a la página privada publicada ese día, con dos estilos y «sin cara», pulsar para hablar, voz callada sin cancelar el trabajo, sin red, movimiento reducido y tema. La pregunta advertía que faltaba el botón «Parar trabajo». Se añade en la versión siguiente del prototipo y forma parte de S3 de SE-537.
 
 ## Qué decide esta spec
 
@@ -94,7 +98,7 @@ Un estilo es un JSON con formas y colores y sin código. Los dos primeros son un
 
 ### D3 — Una sola cara para Savia
 
-Esta spec propone cerrar la D2 de SE-432 con la misma definición de estilos, para que Space y Sonora no dibujen dos caras distintas. Lo decide la persona; mientras no lo haga, la cara vive solo en Sonora.
+Space y Sonora comparten la misma cara: un solo formato de estilos que usan las dos superficies. Lo decidió la operadora el 2026-11-26 por pregunta interactiva («Sí, la misma (Recommended)»), y eso cierra la D2 de SE-432 con lo que sale de esta spec. Llevar la cara a Space es trabajo de Space, no de esta spec.
 
 ## Slices
 
@@ -121,7 +125,7 @@ Visemas, 3D, expresiones emocionales, cara en Space (eso depende de la D2 de SE-
 
 ## Preguntas abiertas
 
-1. ¿La cara de Savia es la misma en Space y en Sonora? Es la D2 de SE-432 y la decide la persona.
+1. ~~¿La cara de Savia es la misma en Space y en Sonora?~~ Resuelta: sí (D3).
 2. ¿Hay que medir la latencia del evento `speech-level` en Qt WebEngine en el Mac antes de S2?
 
 ## Riesgos
@@ -131,4 +135,4 @@ Visemas, 3D, expresiones emocionales, cara en Space (eso depende de la D2 de SE-
 
 ## Aprobación
 
-- estado: PROPOSED. Confirmar las escenas no aprueba la spec.
+**Aprobada por la operadora el 2026-11-26** por pregunta interactiva («Aprobar las tres») y la confirmación del prototipo. Cada slice se fusiona con la revisión de su PR concreta. Se formaliza al fusionar esta PR (SE-488).

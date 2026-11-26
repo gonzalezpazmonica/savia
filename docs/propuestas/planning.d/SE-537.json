@@ -1,9 +1,10 @@
 {
   "id": "SE-537",
-  "status": "PROPOSED",
+  "status": "APPROVED",
   "priority": "P1",
   "phase": "D",
   "title": "Sonora conversa con la sesión de Claude de Savia (S0 + 3 slices)",
   "evidence": "docs/specs/SE-537-sonora-conversa-con-la-sesion-de-claude.spec.md",
-  "note": "Nace de la propuesta de Sonora del 2026-11-26 y de la auditoría AS-IS sobre 4104a2bd1: Sonora transcribe pero no conversa; SE-310 elegía Ollama. Sustituye a SE-310. Pulsar para hablar, Whisper local, sesión persistente de Claude Code, Kokoro local por frases, callar la voz distinto de cancelar, prueba de egreso. Escenas confirmadas el 2026-11-26 («Sí, es eso»). Sigue PROPOSED."
+  "note": "Nace de la propuesta de Sonora del 2026-11-26 y de la auditoría AS-IS sobre 4104a2bd1: Sonora transcribe pero no conversa; SE-310 elegía Ollama. Sustituye a SE-310. Pulsar para hablar, Whisper local, sesión persistente de Claude Code, Kokoro local por frases, callar la voz distinto de cancelar, prueba de egreso. Escenas confirmadas el 2026-11-26 («Sí, es eso»). Aprobada por la operadora el 2026-11-26 («Aprobar las tres»).",
+  "approval": "operadora, pregunta interactiva 2026-11-26 («Aprobar las tres»); se formaliza al fusionar (SE-488)"
 }
