@@ -30,8 +30,23 @@ if [[ -z "$TITLE" || -z "$LINE" || -z "$METHOD" || -z "$METRIC" || -z "$SUCCESS"
   exit 1
 fi
 
-if [[ ! "$LINE" =~ ^L(1[0-9]|[1-9])$ ]]; then
-  echo "ERROR: --line must be L1-L19"
+# Linea: L<n> con n entero positivo sin ceros a la izquierda; debe existir en
+# labs/ROADMAP.md de la cupula. Sin Labs o sin ROADMAP: falla cerrado.
+if [[ ! "$LINE" =~ ^L[1-9][0-9]*$ ]]; then
+  echo "ERROR: --line must be L<n> with n a positive integer (got '$LINE')"
+  exit 1
+fi
+
+if [[ ! -d "$LABS_DIR" ]]; then
+  echo "ERROR: Labs not available at $LABS_DIR; cannot verify line $LINE"
+  exit 1
+fi
+if [[ ! -f "$LABS_DIR/ROADMAP.md" ]]; then
+  echo "ERROR: labs/ROADMAP.md not found; cannot verify line $LINE"
+  exit 1
+fi
+if ! grep -Eq "(^|[^A-Za-z0-9])${LINE}([^0-9]|$)" "$LABS_DIR/ROADMAP.md"; then
+  echo "ERROR: line $LINE does not exist in labs/ROADMAP.md"
   exit 1
 fi
 
@@ -92,7 +107,10 @@ fi
 echo "- [$TS] **$LINE**: $TITLE (sample: $SAMPLE)" >> "$NOTEBOOK"
 
 cd "$LABS_DIR"
-git add -A && git commit -m "preregister: $LINE — $TITLE" 2>/dev/null || true
+if ! git add -A || ! git commit -q -m "preregister: $LINE — $TITLE"; then
+  echo "ERROR: commit failed in labs; preregistration NOT recorded ($HYPOTHESES_DIR/$SLUG.md left uncommitted)" >&2
+  exit 1
+fi
 
 echo "Preregistered: $SLUG"
 echo "File: hypotheses/$SLUG.md"
