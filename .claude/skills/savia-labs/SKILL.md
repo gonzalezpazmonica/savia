@@ -22,6 +22,20 @@ Cupula de investigacion sobre desconocidos desconocidos.
 3. **Reproducibilidad**: version de modelo, revision vault, semilla, hash corpus
 4. **Validacion humana**: descubrimiento maquina, validacion humano
 5. **Presupuesto por ciclo**: tokens y horas declarados antes de empezar
+6. **Intuición junto a su traducción** (HT-LHR-04): guardar el enunciado
+   original de la persona al lado de la hipótesis formalizada. Si la persona
+   corrige el sentido, eso no valida la conclusión técnica.
+7. **Afirmación con fuente y alcance** (HT-LHR-08): cada afirmación lleva su
+   fuente y dice si es conjetura, comprobación local, reproducción o réplica.
+   Ninguna de las cuatro implica las demás.
+8. **Negativos y retractaciones en el traspaso** (HT-LHR-09): cada traspaso
+   dice qué no funcionó, en qué condiciones y qué se retractó. Las conclusiones
+   que dependían de una premisa retractada se marcan para revisión y la
+   historia no se reescribe.
+
+Las prácticas 6 a 8 no requieren código; las adoptó la operadora el 2026-11-26
+(decisión L42 de Labs). Las demás propuestas HT-LHR o son experimentos
+candidatos de L42 o se decidió no construirlas.
 
 ## Comandos
 
