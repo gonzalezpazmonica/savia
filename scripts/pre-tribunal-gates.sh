@@ -129,7 +129,9 @@ fi
 risk_score=$(json_field "$CONTEXT_JSON" "risk_score")
 if [[ -n "$risk_score" ]]; then
   # Compare floats using python3 (bash can't do float comparison natively)
-  if python3 -c "import sys; sys.exit(0 if float('$risk_score') > float('$RISK_GATE_THRESHOLD') else 1)" 2>/dev/null; then
+  # Values go in as argv, never inside the Python source (they come from --context).
+  if python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) > float(sys.argv[2]) else 1)' \
+      "$risk_score" "$RISK_GATE_THRESHOLD" 2>/dev/null; then
     emit_result "G3" "BLOCK" "risk_score=$risk_score > threshold=$RISK_GATE_THRESHOLD"
     exit 1
   fi

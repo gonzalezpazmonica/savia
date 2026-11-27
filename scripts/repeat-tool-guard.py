@@ -202,7 +202,8 @@ def main() -> int:
     key = f"{args.session}:::{args.turn or 'default'}"
 
     # estado por (sesion, turno); persistido SIEMPRE (cada PostToolUse es proceso nuevo)
-    state_path = os.path.join(args.state_dir, f"{args.session}.json")
+    # Igual que el modo pre: el id de sesión es un nombre de fichero, nunca una ruta.
+    state_path = os.path.join(args.state_dir, f"{safe_name(args.session)}.json")
     state = load_state(state_path) if not args.no_persist else {}
 
     chain = state.get(key)

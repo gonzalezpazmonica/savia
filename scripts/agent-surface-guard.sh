@@ -222,8 +222,9 @@ cmd_list() {
     [[ -f "$surface_file" ]] || continue
     found=1
     local run_id declared_at
-    run_id="$(python3 -c "import json; d=json.load(open('${surface_file}')); print(d.get('run_id','?'))")"
-    declared_at="$(python3 -c "import json; d=json.load(open('${surface_file}')); print(d.get('declared_at','?'))")"
+    # The path goes in as argv: a directory name under .evo is never Python source.
+    run_id="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("run_id","?"))' "$surface_file")"
+    declared_at="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("declared_at","?"))' "$surface_file")"
     printf '%s  %s\n' "$run_id" "$declared_at"
   done
 

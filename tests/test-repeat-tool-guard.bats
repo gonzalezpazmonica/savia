@@ -270,7 +270,7 @@ EOF
   python3 "$GUARD" --session "../escapado" --tool Read --args '{"file_path":"a.py"}' \
     --turn t1 --state-dir "$TMPD/state" 2>/dev/null || true
   [ ! -e "$TMPD/escapado.json" ]
-  ls "$TMPD/state" | grep -q json
+  ls -A "$TMPD/state" | grep -q json
 }
 
 @test "post: --session absoluto no escribe en la ruta absoluta" {
