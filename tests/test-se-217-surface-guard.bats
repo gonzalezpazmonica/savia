@@ -259,3 +259,42 @@ print('OK')
   [ ! -e "$BATS_TEST_TMPDIR/pwned-list" ]
   [[ "$output" == *"r  t"* ]]
 }
+
+# ---------------------------------------------------------------------------
+# Barrido Python (pendientes): run_id cerrado y JSON bien formado
+# ---------------------------------------------------------------------------
+
+@test "declare rechaza run_id con recorrido de ruta y no escribe fuera de .evo" {
+  for rid in "../x" "a/b" "/tmp/abs" "." ".." "-x" "a b" "x'y"; do
+    run bash "$SCRIPT" declare --run-id "$rid" --editable "output/"
+    [[ "$status" -ne 0 ]]
+    [[ "$output" == *"run-id"* ]]
+  done
+  [[ ! -e "${TMP_DIR}/x/surface.json" ]]
+  [[ ! -e "/tmp/abs/surface.json" ]]
+  [[ ! -d "${SAVIA_EVO_DIR}" ]] || [[ -z "$(ls -A "$SAVIA_EVO_DIR")" ]]
+}
+
+@test "verify y context rechazan run_id con recorrido de ruta" {
+  mkdir -p "${TMP_DIR}/fuera"
+  printf '{"editable":["x"],"readonly":[],"forbidden":[]}\n' > "${TMP_DIR}/fuera/surface.json"
+  run bash "$SCRIPT" verify --run-id "../fuera"
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"run-id"* ]]
+  run bash "$SCRIPT" context --run-id "../fuera"
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"run-id"* ]]
+}
+
+@test "declare escapa comillas y barras en las listas: surface.json es JSON válido" {
+  run bash "$SCRIPT" declare --run-id "json-esc" --editable 'out"put/ a\b' --readonly "" --forbidden ""
+  [[ "$status" -eq 0 ]]
+  run python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["editable"]==["out\"put/","a\\b"], d' "${SAVIA_EVO_DIR}/json-esc/surface.json"
+  [[ "$status" -eq 0 ]]
+}
+
+@test "run_id válidos con punto, guion y guion bajo siguen funcionando" {
+  run bash "$SCRIPT" declare --run-id "run_1.v2-x" --editable "output/"
+  [[ "$status" -eq 0 ]]
+  [[ -f "${SAVIA_EVO_DIR}/run_1.v2-x/surface.json" ]]
+}

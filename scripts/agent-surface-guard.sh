@@ -27,6 +27,14 @@ EOF
   exit 1
 }
 
+# run_id es un nombre de directorio bajo .evo, nunca una ruta: expresión cerrada.
+_check_run_id() {
+  if [[ ! "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+    echo "ERROR: invalid --run-id '$1' (allowed: [A-Za-z0-9][A-Za-z0-9._-]{0,127})" >&2
+    exit 1
+  fi
+}
+
 # Check whether a file path matches any pattern in a space-separated list.
 # Patterns ending in / are treated as directory prefixes.
 _matches_surface() {
@@ -60,40 +68,24 @@ cmd_declare() {
     echo "ERROR: --run-id is required for declare" >&2
     exit 1
   fi
+  _check_run_id "$run_id"
 
   local run_dir="${EVO_DIR}/${run_id}"
   mkdir -p "$run_dir"
 
-  # Build a JSON array from a space-separated string
-  _to_json_array() {
-    local input="$1"
-    local items=()
-    # Read words; handle empty input gracefully
-    if [[ -n "$input" ]]; then
-      read -ra items <<< "$input"
-    fi
-    local json="["
-    local first=1
-    local item
-    for item in "${items[@]+"${items[@]}"}"; do
-      [[ -z "$item" ]] && continue
-      [[ $first -eq 1 ]] && first=0 || json+=","
-      json+="\"${item}\""
-    done
-    json+="]"
-    printf '%s' "$json"
+  # The lists go in as argv and json.dumps escapes them: never printf into JSON.
+  python3 -c '
+import json, sys
+run_id, ts, ed, ro, fb, out = sys.argv[1:7]
+d = {"run_id": run_id, "declared_at": ts,
+     "editable": ed.split(), "readonly": ro.split(), "forbidden": fb.split()}
+with open(out, "w") as f:
+    json.dump(d, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+' "$run_id" "$(_now)" "${editable:-}" "${readonly_list:-}" "${forbidden:-}" "${run_dir}/surface.json" || {
+    echo "ERROR: could not write ${run_dir}/surface.json" >&2
+    exit 1
   }
-
-  local editable_json readonly_json forbidden_json
-  editable_json="$(_to_json_array "${editable:-}")"
-  readonly_json="$(_to_json_array "${readonly_list:-}")"
-  forbidden_json="$(_to_json_array "${forbidden:-}")"
-  local ts
-  ts="$(_now)"
-
-  printf '{\n  "run_id": "%s",\n  "declared_at": "%s",\n  "editable": %s,\n  "readonly": %s,\n  "forbidden": %s\n}\n' \
-    "$run_id" "$ts" "$editable_json" "$readonly_json" "$forbidden_json" \
-    > "${run_dir}/surface.json"
 
   echo "Surface declared for run '${run_id}' -> ${run_dir}/surface.json"
 }
@@ -116,26 +108,15 @@ cmd_verify() {
     readonly_list="$DEFAULT_READONLY"
     forbidden="$DEFAULT_FORBIDDEN"
   else
+    _check_run_id "$run_id"
     local surface_file="${EVO_DIR}/${run_id}/surface.json"
     if [[ ! -f "$surface_file" ]]; then
       echo "ERROR: No surface.json found for run '${run_id}' at ${surface_file}" >&2
       exit 1
     fi
-    editable="$(python3 -c "
-import json
-d = json.load(open('${surface_file}'))
-print(' '.join(d.get('editable', [])))
-")"
-    readonly_list="$(python3 -c "
-import json
-d = json.load(open('${surface_file}'))
-print(' '.join(d.get('readonly', [])))
-")"
-    forbidden="$(python3 -c "
-import json
-d = json.load(open('${surface_file}'))
-print(' '.join(d.get('forbidden', [])))
-")"
+    editable="$(python3 -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1])).get("editable", [])))' "$surface_file")"
+    readonly_list="$(python3 -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1])).get("readonly", [])))' "$surface_file")"
+    forbidden="$(python3 -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1])).get("forbidden", [])))' "$surface_file")"
   fi
 
   local staged_files
@@ -189,6 +170,7 @@ cmd_context() {
     echo "ERROR: --run-id is required for context" >&2
     exit 1
   fi
+  _check_run_id "$run_id"
 
   local surface_file="${EVO_DIR}/${run_id}/surface.json"
   if [[ ! -f "$surface_file" ]]; then
