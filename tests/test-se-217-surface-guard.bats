@@ -245,3 +245,17 @@ print('OK')
   run bash "$SCRIPT" verify --run-id "vtest-outside"
   [[ "$status" -eq 1 ]]
 }
+
+# ---------------------------------------------------------------------------
+# Barrido Python 2026-11-27: los nombres de run no entran como código Python
+# ---------------------------------------------------------------------------
+@test "list: un run_id con comillas no ejecuta código en python3 -c" {
+  local rid="x'+str(__import__('pathlib').Path('pwned-list').touch())+'"
+  mkdir -p "${SAVIA_EVO_DIR}/${rid}"
+  printf '{"run_id":"r","declared_at":"t","editable":[],"readonly":[],"forbidden":[]}\n' \
+    > "${SAVIA_EVO_DIR}/${rid}/surface.json"
+  cd "$BATS_TEST_TMPDIR"
+  run bash "$SCRIPT" list
+  [ ! -e "$BATS_TEST_TMPDIR/pwned-list" ]
+  [[ "$output" == *"r  t"* ]]
+}

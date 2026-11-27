@@ -359,3 +359,27 @@ _verd() { echo "$output" | jq -r .verdict; }
   run _g --decision deploy --context '{"source_branch":"feature/x","target_branch":"main"}'
   [ "$status" -eq 0 ]
 }
+
+# ── Barrido Python 2026-11-27: risk_score nunca entra como código Python ─────
+
+@test "G3: un risk_score con comillas no ejecuta código (inyección en python3 -c)" {
+  sentinel="$BATS_TEST_TMPDIR/pwned-g3"
+  ctx=$(SENT="$sentinel" python3 -c 'import os; print("{\"risk_score\":\"0\x27)*0+0*len(str(__import__(\x27pathlib\x27).Path(\x27%s\x27).touch()))+float(\x270\"}" % os.environ["SENT"])')
+  run env RISK_GATE_THRESHOLD=0.8 bash "$SCRIPT" --decision deploy --context "$ctx"
+  [ ! -e "$sentinel" ]
+}
+
+@test "G3: el umbral con comillas tampoco se evalúa como código" {
+  sentinel="$BATS_TEST_TMPDIR/pwned-g3-umbral"
+  thr=$(SENT="$sentinel" python3 -c 'import os; print("0\x27)*0+__import__(\x27os\x27).system(\x27touch %s\x27)+float(\x270" % os.environ["SENT"])')
+  run env RISK_GATE_THRESHOLD="$thr" bash "$SCRIPT" --decision deploy --context '{"risk_score":0.5}'
+  [ ! -e "$sentinel" ]
+}
+
+@test "G3: tras el arreglo la comparación numérica sigue igual (0.9 bloquea, 0.5 no)" {
+  run env RISK_GATE_THRESHOLD=0.8 bash "$SCRIPT" --decision deploy --context '{"risk_score":0.9}'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"G3"* ]]
+  run env RISK_GATE_THRESHOLD=0.8 bash "$SCRIPT" --decision deploy --context '{"risk_score":0.5}'
+  [[ "$output" != *'"gate":"G3"'* ]]
+}
