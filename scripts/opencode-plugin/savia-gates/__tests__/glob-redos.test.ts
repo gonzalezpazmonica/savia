@@ -165,3 +165,37 @@ test("un find -name con expansión desconocida falla cerrado", async () => {
   expect(protectedTarget("find .claude -name '*.py' -delete", root, root, PROTECTED_GATE_PATHS)).toBe(null)
   expect(protectedTarget('find .claude -name "$PATTERN" -print', root, root, PROTECTED_GATE_PATHS)).toBe(null)
 })
+
+// Auditoría de mutación 2026-11-27, T9: sin el recorte de barras finales en `inside`, `/` + sep es `//` y
+// ninguna puerta empieza por ahí; el borrado recursivo de la raíz del sistema dejaba de ser «puerta».
+test("el borrado recursivo de /, // y /// alcanza las puertas", async () => {
+  const { protectedTarget } = await import(LIB)
+  const { PROTECTED_GATE_PATHS } = await import(VOCAB)
+  const root = await mkdtemp(join(tmpdir(), "glob-redos-root-"))
+  roots.push(root)
+  for (const target of ["/", "//", "///", "/.", "//./"]) {
+    for (const verb of ["rm -rf", "rm -r", "rm -fr --"]) {
+      expect(protectedTarget(`${verb} ${target}`, root, root, PROTECTED_GATE_PATHS)).toBe(target)
+    }
+  }
+  // Una escritura no destructiva sobre la raíz no toca ninguna puerta.
+  expect(protectedTarget("touch /", root, root, PROTECTED_GATE_PATHS)).toBe(null)
+})
+
+// Auditoría de mutación 2026-11-27, T3: sin colapsar `**…*` en un átomo, `add` recorre todas las estrellas
+// desde cada estrella viva y cada carácter cuesta O(estrellas²): 4 000 estrellas eran 2,7 s por nombre.
+test("4 000 estrellas seguidas contra un nombre de 255 caracteres resuelven en menos de 100 ms", () => {
+  const name = "a".repeat(252) + ".sh"
+  const run = child(`
+    const { globMatcher } = await import(${JSON.stringify(LIB)})
+    const t0 = performance.now()
+    const miss = globMatcher(${JSON.stringify("*".repeat(4000) + "b")}).test(${JSON.stringify(name)})
+    const hit = globMatcher(${JSON.stringify("*".repeat(4000) + ".sh")}).test(${JSON.stringify(name)})
+    console.log(JSON.stringify({ miss, hit, ms: performance.now() - t0 }))
+  `)
+  expect(run.ok).toBe(true)
+  const got = JSON.parse(run.out)
+  expect(got.miss).toBe(false)
+  expect(got.hit).toBe(true)
+  expect(got.ms).toBeLessThan(100)
+}, 15000)
