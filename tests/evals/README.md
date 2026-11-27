@@ -112,3 +112,4 @@ del script que deben hacer fallar el case. Sin llamadas a modelo.
 | test-runner | `scripts/test-coverage-ratchet.sh` |
 | meeting-digest | `scripts/confidentiality-check.sh` (sobre el arbol que escribe el digest) |
 | truth-tribunal-orchestrator | `scripts/truth-tribunal.sh aggregate` |
+| frontend-test-runner | `.claude/hooks/responsibility-judge.sh` (Write/Edit de tests y config frontend) |
