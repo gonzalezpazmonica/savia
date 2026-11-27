@@ -660,33 +660,70 @@ def analyse(text, depth=0):
     return targets
 
 
+class _Glob:
+    """Alert #116: the glob was one regex (`*` -> `[^/]*`) and `a*a*…*b`, written by the agent in a
+    `find -name`, backtracks exponentially against a long name and hangs the guard. Each atom is now a
+    one-character regex (None is a `*`) and the glob runs as a set of pattern positions over the text:
+    O(text × atoms), no backtracking, the same answers as the whole regex."""
+
+    # Bit p of a state set is pattern position p; consecutive `*` are one atom, so a single shift closes
+    # a set over the `*` that may match nothing.
+
+    def __init__(self, atoms):
+        self.atoms = atoms
+        self.stars = sum(1 << p for p, a in enumerate(atoms) if a is None)
+        self.accepts = {}  # character -> positions whose atom takes it
+
+    def _closed(self, states):
+        return states | ((states & self.stars) << 1)
+
+    def _accepts(self, ch):
+        mask = self.accepts.get(ch)
+        if mask is None:
+            mask = sum(1 << p for p, a in enumerate(self.atoms)
+                       if (ch != "/" if a is None else a.fullmatch(ch) is not None))
+            self.accepts[ch] = mask
+        return mask
+
+    def fullmatch(self, text):
+        cur = self._closed(1)
+        for ch in text:
+            taken = cur & self._accepts(ch)
+            if not taken:
+                return False
+            cur = self._closed((taken & self.stars) | ((taken & ~self.stars) << 1))
+        return bool(cur >> len(self.atoms) & 1)
+
+
 def _rx(pattern, flags=0):
     try:
-        return re.compile(_glob_regex(pattern), re.S | flags)
+        return _Glob([None if a is None else re.compile(a, re.S | flags) for a in _glob_atoms(pattern)])
     except re.error as exc:  # `[z-a]`: the same refusal as the port's RegExp error
         raise ProtocolError("INVALID_EVENT") from exc
 
 
-def _glob_regex(pattern):
-    out, i, n = "", 0, len(pattern)
+def _glob_atoms(pattern):
+    """A glob as one-character regexes; None is a `*`. Consecutive `*` are one."""
+    out, i, n = [], 0, len(pattern)
     while i < n:
         c = pattern[i]
         if c == "*":
-            out += "[^/]*"
+            if not out or out[-1] is not None:
+                out.append(None)
         elif c == "?":
-            out += "[^/]"
+            out.append("[^/]")
         elif c == "[":
             j = pattern.find("]", i + 2 if i + 1 < n and pattern[i + 1] in "!^" else i + 1)
             if j < 0:
-                out += r"\["
+                out.append(r"\[")
             else:
                 body = pattern[i + 1:j]
                 neg = body[:1] in ("!", "^")
                 body = body[1:] if neg else body
-                out += "[" + ("^" if neg else "") + re.sub(r"([\\\]\[^])", r"\\\1", body) + "]"
+                out.append("[" + ("^" if neg else "") + re.sub(r"([\\\]\[^])", r"\\\1", body) + "]")
                 i = j
         else:
-            out += re.escape(c)
+            out.append(re.escape(c))
         i += 1
     return out
 
