@@ -187,3 +187,63 @@ wired_missing() {
   [ "$status" -eq 2 ]
   [[ "$output" == *'"shield_status":"inactive"'* ]]
 }
+
+# ── Ronda 2 (revisión #1671): import en cadenas, ambigüedad léxica, sin python3 ──
+
+@test "import real dentro de un template literal y uso presente" {
+  sub "$FOUNDATION" 'import { BEFORE_GUARDS } from "./lib/before-guards.ts";' 'const s = `import { BEFORE_GUARDS } from "./lib/before-guards"`;'
+  shield
+  wired_missing
+}
+
+@test "import dentro de un template mas import real desde otro fichero" {
+  sub "$FOUNDATION" 'import { BEFORE_GUARDS } from "./lib/before-guards.ts";' $'const s = `import { BEFORE_GUARDS } from "./lib/before-guards"`;\nimport { BEFORE_GUARDS } from "./fake.ts";'
+  shield
+  wired_missing
+}
+
+@test "import dentro de una cadena entre comillas simples" {
+  sub "$FOUNDATION" 'import { BEFORE_GUARDS } from "./lib/before-guards.ts";' $'const s = \'import { BEFORE_GUARDS } from "./lib/before-guards"\';'
+  shield
+  wired_missing
+}
+
+@test "guard escondido tras una interpolacion anidada en un template de la lista" {
+  sub "$GUARDS" $'  dataSovereigntyGate,\n  blockGitignoredReferences,' $'  `${`,dataSovereigntyGate,`}`,\n  blockGitignoredReferences,'
+  shield
+  wired_missing
+}
+
+@test "interpolacion dentro de un template en la fundacion es ambigua" {
+  printf '\nconst t = `x ${1 + 1} y`;\n' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "guard escondido tras literales regex con comillas en la lista" {
+  sub "$GUARDS" $'  dataSovereigntyGate,\n  blockGitignoredReferences,' $'  /\'/, \',dataSovereigntyGate,\', /\'/,\n  blockGitignoredReferences,'
+  shield
+  wired_missing
+}
+
+@test "literal regex en la fundacion es ambiguo" {
+  printf '\nconst r = /"/;\n' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "sin python3 en PATH: inactive (fallo cerrado)" {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  ln -s "$(command -v dirname)" "$BATS_TEST_TMPDIR/bin/dirname"
+  run env PATH="$BATS_TEST_TMPDIR/bin" SAVIA_WORKSPACE_DIR="$WS" "$(command -v bash)" "$SCRIPT" --json
+  wired_missing
+}
+
+@test "python3 que falla en PATH: inactive (fallo cerrado)" {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  ln -s "$(command -v dirname)" "$BATS_TEST_TMPDIR/bin/dirname"
+  printf '#!/bin/sh\nexit 3\n' > "$BATS_TEST_TMPDIR/bin/python3"
+  chmod +x "$BATS_TEST_TMPDIR/bin/python3"
+  run env PATH="$BATS_TEST_TMPDIR/bin" SAVIA_WORKSPACE_DIR="$WS" "$(command -v bash)" "$SCRIPT" --json
+  wired_missing
+}

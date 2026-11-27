@@ -213,3 +213,112 @@ TS
   shield
   assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
 }
+
+# Una sintaxis ambigua puede invalidar la lista completa. También se admite
+# conservar blockCredentialLeak si se consigue analizarlo sin aceptar el texto
+# dataSovereigntyGate como identificador. El resto de componentes sigue presente.
+assert_ambiguous_list_inactive() {
+  printf 'exit=%s; JSON=%s\n' "$status" "$output"
+  [ "$status" -eq 2 ]
+  python3 - "$output" <<'PY'
+import json
+import sys
+
+data = json.loads(sys.argv[1])
+missing = set(data["missing"])
+assert data["shield_status"] == "inactive", data
+assert missing in (
+    {"savia-foundation-wired"},
+    {"savia-foundation-wired", "block-credential-leak-wired"},
+), data
+all_components = {
+    "data-sovereignty-gate", "data-sovereignty-audit", "sovereignty-patterns",
+    "block-credential-leak", "context-sanitize-input", "savia-foundation-wired",
+    "block-credential-leak-wired", "savia-shield-opencode-doc",
+}
+assert len(data["missing"]) == len(missing), data
+assert set(data["components"]) == all_components - missing, data
+assert len(data["components"]) == len(all_components - missing), data
+PY
+}
+
+@test "inactivo: import ficticio dentro de cadena con uso de BEFORE_GUARDS" {
+  cat > "$FOUNDATION" <<'TS'
+const s = 'import { BEFORE_GUARDS } from "./lib/before-guards"';
+run(BEFORE_GUARDS);
+TS
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: import ficticio dentro de template con uso de BEFORE_GUARDS" {
+  cat > "$FOUNDATION" <<'TS'
+const s = `import { BEFORE_GUARDS } from "./lib/before-guards"`;
+run(BEFORE_GUARDS);
+TS
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: import real de fake.ts y señuelo dentro de cadena" {
+  cat > "$FOUNDATION" <<'TS'
+import { BEFORE_GUARDS } from "./fake.ts";
+const s = 'import { BEFORE_GUARDS } from "./lib/before-guards"';
+run(BEFORE_GUARDS);
+TS
+  printf 'export const BEFORE_GUARDS = [] as const;\n' > "$WS/.opencode/plugins/fake.ts"
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: import real de fake.ts y señuelo dentro de template" {
+  cat > "$FOUNDATION" <<'TS'
+import { BEFORE_GUARDS } from "./fake.ts";
+const s = `import { BEFORE_GUARDS } from "./lib/before-guards"`;
+run(BEFORE_GUARDS);
+TS
+  printf 'export const BEFORE_GUARDS = [] as const;\n' > "$WS/.opencode/plugins/fake.ts"
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: template con interpolación anidada oculta dataSovereigntyGate" {
+  write_guard_list <<'TS'
+export const BEFORE_GUARDS = [ blockCredentialLeak, `${`,dataSovereigntyGate,`}` ] as const;
+TS
+  shield
+  assert_ambiguous_list_inactive
+}
+
+@test "inactivo: regex con comillas no convierte una cadena en guard" {
+  write_guard_list <<'TS'
+export const BEFORE_GUARDS = [ /'/, ',dataSovereigntyGate,', /'/ ] as const;
+TS
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex con comillas y blockCredentialLeak real no activan el escudo" {
+  write_guard_list <<'TS'
+export const BEFORE_GUARDS = [ blockCredentialLeak, /'/, ',dataSovereigntyGate,', /'/ ] as const;
+TS
+  shield
+  assert_ambiguous_list_inactive
+}
+
+@test "inactivo: python3 ausente en PATH hermético con árbol válido" {
+  local isolated_bin="$BATS_TEST_TMPDIR/bin"
+  local bash_exe
+  bash_exe="$(command -v bash)"
+  mkdir -p "$isolated_bin"
+  # Solo las herramientas de shell que usa el script; nunca heredar PATH.
+  ln -s "$bash_exe" "$isolated_bin/bash"
+  ln -s "$(command -v dirname)" "$isolated_bin/dirname"
+  run env PATH="$isolated_bin" "$bash_exe" -c 'command -v python3'
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+
+  # PATH afecta únicamente al proceso probado. La aserción JSON conserva Python.
+  run env PATH="$isolated_bin" SAVIA_WORKSPACE_DIR="$WS" "$bash_exe" "$SCRIPT" --json
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}

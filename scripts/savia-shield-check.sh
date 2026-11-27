@@ -83,6 +83,11 @@ check_component \
 # comentarios ni cadenas, Y savia-foundation.ts importa BEFORE_GUARDS (sin alias ni
 # `import type`) desde ./lib/before-guards(.ts) y lo usa fuera de comentarios y cadenas.
 # Un guard importado o listado en otro array no protege nada.
+# Ambiguo = inactivo: `${` dentro de un template o `/` en posición de operando (posible
+# regex) en cualquiera de los dos ficheros, comentarios o cadenas sin cierre, sin python3.
+# LÍMITE: «usa BEFORE_GUARDS» es heurístico (identificador fuera de comentarios y cadenas).
+# Un uso sombreado (`(BEFORE_GUARDS) => ...`) o código muerto (`if (false) BEFORE_GUARDS`)
+# lo satisface; no se puede demostrar estáticamente que la lista llegue a ejecutarse.
 FOUNDATION="$WORKSPACE_DIR/.opencode/plugins/savia-foundation.ts"
 BEFORE_GUARDS_FILE="$WORKSPACE_DIR/.opencode/plugins/lib/before-guards.ts"
 guard_registered() {
@@ -94,29 +99,45 @@ import sys
 from pathlib import Path
 
 
-def scan(src, keep_strings):
-    """Quita comentarios; con keep_strings=False vacía también el contenido de cadenas."""
+REGEX_PREV = set("(,=:[!&|?{};+-*%<>~^")
+REGEX_WORDS = ("return", "typeof", "case", "in", "of", "void", "delete", "throw", "else", "do")
+
+
+def scan(src):
+    """Texto de la misma longitud: comentarios y contenido de cadenas pasan a espacios
+    (se conservan saltos de línea y comillas). Ambiguo (ValueError): `${` en un template,
+    `/` en posición de operando (posible regex), comentario o cadena sin cierre."""
     out, i, n = [], 0, len(src)
     while i < n:
         c = src[i]
         two = src[i:i + 2]
         if two == "//":
             while i < n and src[i] != "\n":
+                out.append(" ")
                 i += 1
         elif two == "/*":
             j = src.find("*/", i + 2)
             if j < 0:
                 raise ValueError("comentario sin cierre")
-            out.append(" ")
+            out.append("".join(ch if ch == "\n" else " " for ch in src[i:j + 2]))
             i = j + 2
         elif c in "\"'`":
             j = i + 1
             while j < n and src[j] != c:
+                if c == "`" and src[j:j + 2] == "${":
+                    raise ValueError("interpolación en template")
                 j += 2 if src[j] == "\\" else 1
             if j >= n:
                 raise ValueError("cadena sin cierre")
-            out.append(src[i:j + 1] if keep_strings else c + c)
+            out.append(c + "".join(ch if ch == "\n" else " " for ch in src[i + 1:j]) + c)
             i = j + 1
+        elif c == "/":
+            prev = "".join(out).rstrip()
+            word = re.search(r"[A-Za-z_$][\w$]*$", prev)
+            if not prev or prev[-1] in REGEX_PREV or (word and word.group(0) in REGEX_WORDS):
+                raise ValueError("posible literal regex")
+            out.append(c)
+            i += 1
         else:
             out.append(c)
             i += 1
@@ -152,17 +173,21 @@ def guards_in_list(src):
 
 foundation, guards_file, guard = sys.argv[1:4]
 try:
-    if guard not in guards_in_list(scan(Path(guards_file).read_text(), False)):
+    if guard not in guards_in_list(scan(Path(guards_file).read_text())):
         sys.exit(1)
-    with_str = scan(Path(foundation).read_text(), True)
-    imp = re.compile(
-        r"(?<![\w$.])import\s*\{([^}]*)\}\s*from\s*([\"'])\./lib/before-guards(?:\.ts)?\2")
-    imports = [m for m in imp.finditer(with_str)
-               if any(t.strip() == "BEFORE_GUARDS" for t in m.group(1).split(","))]
+    orig = Path(foundation).read_text()
+    blank = scan(orig)
+    # El import se localiza sobre el texto con cadenas vaciadas (un import escrito dentro
+    # de una cadena no cuenta) y el especificador se lee del original en esas posiciones.
+    imp = re.compile(r"(?<![\w$.])import\s*\{([^}]*)\}\s*from\s*([\"'])\s*\2")
+    spec = re.compile(r"from\s*([\"'])\./lib/before-guards(?:\.ts)?\1\Z")
+    imports = [m for m in imp.finditer(blank)
+               if any(t.strip() == "BEFORE_GUARDS" for t in m.group(1).split(","))
+               and spec.search(orig[m.start():m.end()])]
     if len(imports) != 1:
         sys.exit(1)
-    body = with_str[:imports[0].start()] + " " + with_str[imports[0].end():]
-    body = scan(body, False)
+    a, b = imports[0].span()
+    body = blank[:a] + " " * (b - a) + blank[b:]
     if re.search(r"\b(?:const|let|var|function|class)\s+BEFORE_GUARDS\b", body):
         sys.exit(1)
     if not re.search(r"(?<![\w$.])BEFORE_GUARDS\b(?!\s*:)", body):

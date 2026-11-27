@@ -1,5 +1,59 @@
 # NOTAS — regresión de BEFORE_GUARDS (Codex)
 
+## Ampliación del 2026-11-27 — revisión HOLD de #1671
+
+Base comprobada: `404c2157983ec4e18914ebb541eaa2262206f558`, rama de trabajo
+`agent/codex-escudo2-tests-20261127`, sobre `origin/agent/fix-20261126-escudo`.
+Informe independiente leído entero. Solo se amplían esta suite y sus notas;
+no se modifica `scripts/`, ni se crean commits, pushes o PRs.
+
+Antes de ampliar: **17/17 pasan**. Los 17 casos originales y sus helpers se
+conservan idénticos byte a byte, comprobado contra una copia previa al cambio.
+Después: **25 casos; 18 pasan, 7 fallan; exit de BATS 1**.
+
+```bash
+bats --tap tests/bats/test-shield-check-before-guards-codex.bats
+```
+
+| Caso nuevo | Escenario | Salida actual | Resultado |
+| --- | --- | --- | --- |
+| 18 | Import dentro de cadena y uso de BEFORE_GUARDS | active / 0 | **Falla** |
+| 19 | Import dentro de template y uso de BEFORE_GUARDS | active / 0 | **Falla** |
+| 20 | Import real desde fake.ts más señuelo en cadena | active / 0 | **Falla** |
+| 21 | Import real desde fake.ts más señuelo en template | active / 0 | **Falla** |
+| 22 | Template con interpolación anidada | active / 0 | **Falla** |
+| 23 | Lista exacta de regex con comillas del informe | inactive / 2, cableado de soberanía falso | **Falla** |
+| 24 | Mismas regex con blockCredentialLeak real añadido | active / 0 | **Falla** |
+| 25 | PATH hermético sin python3, árbol válido | inactive / 2, faltan ambos cableados | Pasa |
+
+Los casos 18–21 exigen que falten ambos cableados. En 20–21 existe `fake.ts`
+con una lista vacía. En 22 y 24 se permite conservar el guard de credenciales
+real o rechazar toda la lista ambigua; nunca aceptar el guard de soberanía
+escrito dentro de una cadena. En 23 faltan ambos guards reales: la salida
+ya es inactiva, pero el JSON aún declara `savia-foundation-wired`. El caso 24
+aísla ese defecto conservando el guard sano y reproduce el falso activo.
+
+El PATH del caso 25 solo contiene enlaces a Bash y dirname, sin heredar
+directorios del entorno. Se exige que `command -v python3` devuelva 1 y salida
+vacía. Solo el proceso probado recibe ese PATH; la aserción JSON usa el normal.
+Una copia temporal con la aserción cambiada a `assert_shield 0 active` falla
+sobre el exit 2 real. Los otros siete casos nuevos ya fallan contra el script
+actual, demostrando que discriminan. No se altera el script para esta prueba.
+
+Comprobaciones adicionales: suite SPEC-OC-01 **20/20**, `git diff --check`
+sin incidencias. Auditor: **73/100**, `certified: false`, `vacuity: []`,
+`weak: []`; se conserva el resultado, sin pruebas de relleno.
+Arranque `validate-ci-local.sh --quick`: **15 PASS, 0 FAIL, 2 WARN**
+(coherencia advisory y snapshot de cúpula atrasado). Roadmap consultado.
+No se ejecuta `--clean-state` ni se accede al traspaso privado: consultarían
+otros worktrees o estado fuera del ámbito permitido por este encargo.
+TAP y prueba de aserción mutada guardados en la carpeta privada de este run.
+
+Siguiente acción: la autora del script debe corregir los siete fallos y
+repetir las suites de 25 y 20 casos, sin rebajar aserciones.
+
+## Histórico del 2026-11-26 (anterior al arreglo de #1671)
+
 Medición del 2026-11-26 sobre `291b2bdc2`, base explícita de la tarea:
 `origin/agent/fix-20261125-suite-nocturna` (PR #1669).
 No se ha modificado el script, ni creado commits ni PR.
