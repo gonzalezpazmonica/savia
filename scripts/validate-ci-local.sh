@@ -326,6 +326,23 @@ report_unverified_coverage() {
   return 0
 }
 
+# SE-468 AC5: gates de CI que el detector de vacuidad (SE-456) no cubre; solo informa, sin afirmar
+# que sean vacuos ni que no lo sean. Registro: scripts/lib/unverified-gates.tsv.
+report_unverified_gates() {
+  [[ "${SAVIA_AUTHORITY_REPORT:-on}" == "off" ]] && return 0
+  local reg="${SAVIA_UNVERIFIED_GATES_FOR_TESTS:-$REPO_ROOT_CI/scripts/lib/unverified-gates.tsv}"
+  [[ -f "$reg" ]] || return 0
+  local wf name spec reason out=""
+  while IFS=$'\t' read -r wf name spec reason; do
+    [[ -z "$wf" || "$wf" == \#* ]] && continue
+    out+="    $name ($wf, $spec): $reason"$'\n'
+  done < "$reg"
+  [[ -z "$out" ]] && return 0
+  echo "  Gates sin cobertura del detector de vacuidad (no verificado, SE-444):"
+  printf '%s' "$out"
+  return 0
+}
+
 # ── Run checks in parallel ───────────────────────────────────────────────
 if $FRESH_ONLY; then
   check_generated_fresh
@@ -370,6 +387,7 @@ for f in "$TMPDIR_CI"/*; do
 done
 
 report_unverified_coverage
+report_unverified_gates
 echo ""
 echo "--- Results: $PASS passed, $FAIL failed, $WARN warnings ---"
 

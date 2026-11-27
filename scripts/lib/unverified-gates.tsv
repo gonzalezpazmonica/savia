@@ -1,0 +1,5 @@
+# Gates de CI cuya no vacuidad no verifica el detector de SE-456 (scripts/test-auditor-engine.py
+# solo recorre tests/**/*.bats). Cobertura no verificada (SE-444): no afirma que el gate sea vacuo
+# ni que no lo sea. Lo lee report_unverified_coverage de scripts/validate-ci-local.sh.
+# Columnas (TAB): workflow	nombre del gate (name: del workflow)	spec	motivo
+.github/workflows/evals-ci.yaml	Evals CI Gate	SE-468	detector de vacuidad no lo cubre (solo analiza .bats); AC5 de SE-468
