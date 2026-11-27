@@ -24,6 +24,10 @@ run_gate() { # $1 nombre $2 comando...
   local out
   if out=$( "$@" 2>&1 ); then
     echo "PASS coherence/$name"
+    # SE-387 §17: la cifra medida (p. ej. «deuda 115 <= …») queda en el log
+    # para coherence-closure-status.py, sin volver a ejecutar el gate.
+    local detail; detail=$(printf '%s\n' "$out" | grep -E '^PASS:' | tail -n 1)
+    [[ -n "$detail" ]] && echo "INFO coherence/$name: $detail"
   else
     local cal; cal=$(is_calibrated "$name")
     echo "${st} coherence/$name (calibration=${cal:-unknown})"

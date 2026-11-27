@@ -95,7 +95,7 @@ if $CLEAN_ONLY; then
   clean_state_report "$CLEAN_REPO"
   exit $?
 fi
-TMPDIR_CI=$(mktemp -d 2>/dev/null || echo "/tmp/ci-$$"); mkdir -p "$TMPDIR_CI"
+TMPDIR_CI=$(mktemp -d 2>/dev/null || echo "/tmp/ci-$$"); mkdir -p "$TMPDIR_CI/raw"
 trap 'rm -rf "$TMPDIR_CI"' EXIT
 
 echo ""
@@ -107,6 +107,7 @@ check_coherence() {
   local out="$TMPDIR_CI/9-coherence"
   local g rc=0 blocks
   g=$(bash "$(dirname "${BASH_SOURCE[0]}")/coherence-gates.sh" 2>&1) || rc=$?
+  printf '%s\n' "$g" > "$TMPDIR_CI/raw/coherence.log"  # SE-387 §17
   # Falla cerrado: un BLOCK (en cualquier posición de línea) o un código ≠ 0
   # nunca pueden acabar en PASS/WARN. FAIL prevalece sobre WARN.
   blocks=$(printf '%s\n' "$g" | grep -E '^BLOCK|BLOCK coherence' | paste -sd'|' - | sed 's/|/ | /g')
@@ -372,6 +373,18 @@ if ! $QUICK_MODE; then
   check_secrets &
 fi
 wait
+
+# ── SE-387 §17: informe de cierre desde la evidencia ya capturada (no repite gates)
+closure_status_report() {
+  local gen; gen="$(dirname "${BASH_SOURCE[0]}")/coherence-closure-status.py"
+  [ -f "$gen" ] || return 0
+  cat "$TMPDIR_CI"/8-fresh-* > "$TMPDIR_CI/raw/fresh.log" 2>/dev/null
+  if ! python3 "$gen" --root "$REPO_ROOT_CI" --gates-log "$TMPDIR_CI/raw/coherence.log" \
+       --fresh-log "$TMPDIR_CI/raw/fresh.log" >/dev/null 2>&1; then
+    echo "WARN Closure status: coherence-closure-status.py falló; informe §17 no regenerado" > "$TMPDIR_CI/9-closure"
+  fi
+}
+closure_status_report
 
 # ── Collect results ──────────────────────────────────────────────────────
 PASS=0; FAIL=0; WARN=0; ERRORS=""
