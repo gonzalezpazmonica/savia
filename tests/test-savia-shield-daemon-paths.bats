@@ -141,3 +141,95 @@ print(res)
   [ "$status" -ne 124 ]
   [[ "$output" == *"token"* ]]
 }
+
+# --- Mutación 2026-11-27 (D1, D2, D5, D6, D8, D12): supervivientes cerrados ---
+
+@test "sibling dir sharing the workspace prefix (ws-evil) is not read" {
+  # Contención por prefijo de cadena dejaría entrar "$BASE/ws-evil" (D8).
+  mkdir -p "$BASE/ws-evil"
+  printf '%s' "$HALF_DISK" > "$BASE/ws-evil/s.txt"
+  run gate_verdict "$BASE/ws-evil/s.txt"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ALLOW" ]
+  run gate_verdict "../ws-evil/s.txt"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ALLOW" ]
+}
+
+@test "workspace reached through a symlink still reads its own files" {
+  # Sin realpath(PROJ) el workspace enlazado rechaza sus ficheros (D12).
+  ln -s "$WS" "$BASE/ws-link"
+  WS="$BASE/ws-link"
+  run gate_verdict "$WS/docs/config.txt"
+  [ "$status" -eq 0 ]
+  [ "$output" = "BLOCK" ]
+  run gate_verdict "docs/config.txt"
+  [ "$status" -eq 0 ]
+  [ "$output" = "BLOCK" ]
+}
+
+@test "dangling symlink planted at shield-token: no token, target never written" {
+  # Sin O_EXCL el token se escribiría donde apunta el enlace plantado (D5).
+  mkdir -p "$FAKE_HOME/.savia"
+  ln -s "$BASE/robado" "$FAKE_HOME/.savia/shield-token"
+  run env HOME="$FAKE_HOME" python3 -I -c '
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("ssd", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+print(m.load_token(), repr(m.TOKEN))
+' "$DAEMON"
+  [ "$status" -eq 0 ]
+  [ "$(last_line)" = "False ''" ]
+  [ ! -e "$BASE/robado" ]
+}
+
+@test "no token loaded: every header is rejected, also an empty one" {
+  # _check_auth con TOKEN vacío debe cerrar (D1).
+  run env HOME="$FAKE_HOME" python3 -I -c '
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("ssd", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+m.TOKEN = ""
+class F: pass
+res = []
+for h in ({}, {"X-Shield-Token": ""}, {"X-Shield-Token": " "}, {"X-Shield-Token": "x"}):
+    f = F(); f.headers = h; res.append(m.H._check_auth(f))
+print(res)
+' "$DAEMON"
+  [ "$status" -eq 0 ]
+  [ "$(last_line)" = "[False, False, False, False]" ]
+}
+
+@test "no token: ~/.savia is created with mode 0700" {
+  # El directorio del token no debe quedar legible por otros (D6).
+  run env HOME="$FAKE_HOME" python3 -I -c '
+import importlib.util, os, stat, sys
+os.umask(0o022)
+spec = importlib.util.spec_from_file_location("ssd", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+ok = m.load_token()
+d = os.path.join(os.environ["HOME"], ".savia")
+print(ok, oct(stat.S_IMODE(os.stat(d).st_mode)))
+' "$DAEMON"
+  [ "$status" -eq 0 ]
+  [ "$(last_line)" = "True 0o700" ]
+}
+
+@test "token with surrounding whitespace in the header is rejected" {
+  # La comparación es exacta: nada de strip() sobre la cabecera (D2).
+  mkdir -p "$FAKE_HOME/.savia"
+  printf 'tok-123\n' > "$FAKE_HOME/.savia/shield-token"
+  run env HOME="$FAKE_HOME" python3 -I -c '
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("ssd", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+m.load_token()
+class F: pass
+res = []
+for h in (" tok-123", "tok-123 ", "tok-123\t", "tok-123"):
+    f = F(); f.headers = {"X-Shield-Token": h}; res.append(m.H._check_auth(f))
+print(res)
+' "$DAEMON"
+  [ "$status" -eq 0 ]
+  [ "$(last_line)" = "[False, False, False, True]" ]
+}
