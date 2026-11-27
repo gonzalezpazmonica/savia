@@ -680,35 +680,88 @@ export function analyse(text: unknown, depth = 0): Target[] {
 
 const escapeRegex = (c: string) => c.replace(/[.*+?^${}()|[\]\\/-]/g, "\\$&")
 
-function globRegex(pattern: string): string {
-  let out = ""
+/** A glob as a list of one-character atoms; null is a `*` (any run without `/`). Consecutive `*` are one. */
+function globAtoms(pattern: string): (string | null)[] {
+  const out: (string | null)[] = []
   const n = pattern.length
   for (let i = 0; i < n; i++) {
     const c = pattern[i]
-    if (c === "*") out += "[^/]*"
-    else if (c === "?") out += "[^/]"
+    if (c === "*") {
+      if (out.length === 0 || out[out.length - 1] !== null) out.push(null)
+    } else if (c === "?") out.push("[^/]")
     else if (c === "[") {
       const j = pattern.indexOf("]", i + 1 < n && "!^".includes(pattern[i + 1]) ? i + 2 : i + 1)
-      if (j < 0) out += "\\["
+      if (j < 0) out.push("\\[")
       else {
         let body = pattern.slice(i + 1, j)
         const neg = body.startsWith("!") || body.startsWith("^")
         if (neg) body = body.slice(1)
-        out += "[" + (neg ? "^" : "") + body.replace(/([\\\]\[^])/g, "\\$1") + "]"
+        out.push("[" + (neg ? "^" : "") + body.replace(/([\\\]\[^])/g, "\\$1") + "]")
         i = j
       }
-    } else out += escapeRegex(c)
+    } else out.push(escapeRegex(c))
   }
   return out
 }
 
-/** Port of _rx: a glob that is no valid pattern (`[z-a]`) is INVALID_EVENT, as re.error is in Python. */
-function rx(pattern: string, ci = false): RegExp {
+export type GlobMatcher = { test(text: string): boolean }
+
+/**
+ * Port of _rx. Alert #116: the glob was one regex (`*` -> `[^/]*`) and `a*a*…*b`, written by the agent in a
+ * `find -name`, backtracks exponentially against a long name and hangs the guard. Each atom is now a one-character
+ * regex and the glob runs as a set of pattern positions over the text: O(text × atoms), no backtracking, the same
+ * answers as the whole regex. A glob that is no valid pattern (`[z-a]`) is INVALID_EVENT, as re.error is in Python.
+ */
+export function globMatcher(pattern: string, ci = false): GlobMatcher {
+  const flags = ci ? "si" : "s"
+  let atoms: (RegExp | null)[]
   try {
-    return new RegExp(`^(?:${globRegex(pattern)})$`, ci ? "si" : "s")
+    atoms = globAtoms(pattern).map((a) => (a === null ? null : new RegExp(`^${a}$`, flags)))
   } catch {
     invalid()
   }
+  const end = atoms.length
+  const test = (text: string): boolean => {
+    let cur = new Uint8Array(end + 1)
+    let next = new Uint8Array(end + 1)
+    // A `*` may match nothing: reaching it also reaches the atom after it.
+    const add = (set: Uint8Array, p: number) => {
+      set[p] = 1
+      while (p < end && atoms[p] === null) set[++p] = 1
+    }
+    add(cur, 0)
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i]
+      next.fill(0)
+      let alive = false
+      for (let p = 0; p < end; p++) {
+        if (!cur[p]) continue
+        const a = atoms[p]
+        if (a === null) {
+          if (ch !== "/") {
+            add(next, p)
+            alive = true
+          }
+        } else if (a.test(ch)) {
+          add(next, p + 1)
+          alive = true
+        }
+      }
+      if (!alive) return false
+      ;[cur, next] = [next, cur]
+    }
+    return cur[end] === 1
+  }
+  return { test }
+}
+
+const rx = globMatcher
+
+/** `s` without its trailing `/`, in linear time (`/\/+$/` is polynomial on a run of `/` not at the end). */
+function trimSlashes(s: string): string {
+  let k = s.length
+  while (k > 0 && s[k - 1] === "/") k -= 1
+  return s.slice(0, k)
 }
 
 /** os.path.normpath for absolute paths. */
@@ -839,7 +892,7 @@ export function protectedTarget(command: unknown, cwd: string, root: string, pro
     for (const cand of [path, realPath(path)]) {
       for (const base of realBases) {
         if (cand === base || cand.startsWith(base + sep)) return true
-        if (destructive && base.startsWith(cand.replace(/\/+$/, "") + sep)) return true
+        if (destructive && base.startsWith(trimSlashes(cand) + sep)) return true
       }
     }
     return false
