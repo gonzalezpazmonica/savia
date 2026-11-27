@@ -1,5 +1,59 @@
 # NOTAS — regresión de BEFORE_GUARDS (Codex)
 
+## Tercera ronda del 2026-11-27 — segunda revisión HOLD de #1671
+
+Base: `272990fceefd82832314a287eb6210f426df821d`, rama
+`agent/codex-escudo3-tests-20261127`, sobre la base explícitamente autorizada
+`origin/agent/fix-20261126-escudo`. Segunda revisión leída entera.
+Solo se amplían la suite Codex y estas notas; sin cambios en `scripts/`,
+commits, push ni PR. Los apartados inferiores son mediciones históricas.
+
+Antes: **25/25 pasan**. Después: **32 casos, 26 pasan y 6 fallan; exit BATS 1**.
+Los 25 tests y helpers anteriores siguen idénticos byte a byte: el fichero
+de `HEAD` es prefijo exacto del ampliado. Comando de reproducción:
+
+```bash
+bats --tap tests/bats/test-shield-check-before-guards-codex.bats
+```
+
+| Caso añadido | Escenario | Resultado actual |
+| --- | --- | --- |
+| 26 | Regex tras `)` y falso import en cadena, import real desde `./fake.ts` | **Falla: active / 0** |
+| 27 | `].filter(() => false);` | **Falla: active / 0** |
+| 28 | `].slice(0, 0);` | **Falla: active / 0** |
+| 29 | `] && [];` | **Falla: active / 0** |
+| 30 | `const dataSovereigntyGate = async () => {};` en lugar del import | **Falla: active / 0** |
+| 31 | Único uso como tipo: `[] as typeof BEFORE_GUARDS` | **Falla: active / 0** |
+| 32 | Línea canónica del import dentro de template multilínea más import real de `./fake.ts` | Pasa: inactive / 2 |
+
+Los seis falsos activos devuelven `missing: []` y los ocho componentes.
+Se exige exit 2 y JSON exacto: faltan ambos cableados en 26–29, 31 y 32;
+en 30 falta solo soberanía, manteniendo el guard de credenciales importado.
+Los contrastes positivos pedidos ya son los casos **1–3**, conservados y
+verificados: árbol real, cierre `] as const;` y comentario `//` al final
+de las líneas de guard. Los tres devuelven active / 0 y `missing: []`.
+
+Autorrevisión: los seis negativos nuevos rojos fallan contra el script sin
+modificar. En una copia temporal externa a la suite, cambiar el caso 32
+a `assert_shield 0 active` lo hace fallar; invertir los tres positivos
+también produce tres fallos. La copia original conserva sus aserciones.
+No se añaden `! cmd`, `|| true` ni excepciones que oculten errores.
+Auditor: **73/100**, `certified: false`, `vacuity: []`, `weak: []`;
+no se añaden tests de relleno para mejorar su puntuación heurística.
+TAP de antes/después, mutación de aserciones y auditor guardados en el log
+privado del run. Siguiente acción: la autora del script debe corregir los
+seis falsos activos y repetir los 32 casos sin rebajar aserciones.
+
+Validación complementaria: suite Claude **33/33**, SPEC-OC-01 **20/20**;
+`git diff --check` pasa y `scripts/` no tiene cambios. Roadmap consultado.
+`validate-ci-local.sh --quick` termina con exit 1: **14 PASS, 2 FAIL, 1 WARN**.
+Fallos ajenos a esta ampliación: `Generado desfasado: derivados de reglas
+(SE-501)` y `BLOCK coherence/eval-coverage-L4: matriz de cobertura no evaluable
+(fail-closed, SE-387 D)`; aviso de snapshot de cúpula atrasado. No se regeneran
+artefactos fuera del alcance. No se ejecuta `--clean-state`, ni se lee o
+actualiza el traspaso privado: consultarían otros worktrees o estado externo
+prohibido por el encargo. El run entrega tests rojos deliberados, no un arreglo.
+
 ## Ampliación del 2026-11-27 — revisión HOLD de #1671
 
 Base comprobada: `404c2157983ec4e18914ebb541eaa2262206f558`, rama de trabajo

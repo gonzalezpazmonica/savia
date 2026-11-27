@@ -50,10 +50,10 @@ wired_missing() {
   [ "$status" -eq 0 ]
 }
 
-@test "import multilinea con coma final sigue valiendo" {
+@test "import multilinea con coma final no es canonico (fallo cerrado)" {
   sub "$FOUNDATION" 'import { BEFORE_GUARDS } from' $'import {\n  BEFORE_GUARDS,\n} from'
   shield
-  [ "$status" -eq 0 ]
+  wired_missing
 }
 
 @test "import con alias: el nombre BEFORE_GUARDS ya no esta importado" {
@@ -146,8 +146,7 @@ wired_missing() {
 @test "guard solo como cadena dentro de BEFORE_GUARDS" {
   sub "$GUARDS" $'  blockCredentialLeak,\n  blockForcePush,' $'  "blockCredentialLeak",\n  blockForcePush,'
   shield
-  [ "$status" -eq 2 ]
-  [[ "$output" == *'"missing":["block-credential-leak-wired"]'* ]]
+  wired_missing
 }
 
 @test "guard solo en el import, no en la lista" {
@@ -245,5 +244,121 @@ wired_missing() {
   printf '#!/bin/sh\nexit 3\n' > "$BATS_TEST_TMPDIR/bin/python3"
   chmod +x "$BATS_TEST_TMPDIR/bin/python3"
   run env PATH="$BATS_TEST_TMPDIR/bin" SAVIA_WORKSPACE_DIR="$WS" "$(command -v bash)" "$SCRIPT" --json
+  wired_missing
+}
+
+# ── Ronda 3 (revisión #1671b): forma canónica estricta, fallo cerrado ──
+
+@test "regex tras ) de un if invierte cadenas: import falso" {
+  sub "$FOUNDATION" 'import { BEFORE_GUARDS } from "./lib/before-guards.ts";' 'import { BEFORE_GUARDS } from "./fake.ts";'
+  printf '%s\n' 'if (1) /'"'"'/.test("");' "const s = '; import { BEFORE_GUARDS } from \"./lib/before-guards.ts\"; //';" >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "regex tras ) de un while es ambiguo" {
+  printf '%s\n' 'while (0) /x/.test("");' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "cierre con .filter tras el corchete" {
+  sub "$GUARDS" '] as const;' '].filter(() => false);'
+  shield
+  wired_missing
+}
+
+@test "cierre con && tras el corchete" {
+  sub "$GUARDS" '] as const;' '] && [];'
+  shield
+  wired_missing
+}
+
+@test "cierre ] as const sin punto y coma es canonico" {
+  sub "$GUARDS" '] as const;' '] as const'
+  shield
+  [ "$status" -eq 0 ]
+}
+
+@test "cierre ]; sin as const es canonico" {
+  sub "$GUARDS" '] as const;' '];'
+  shield
+  [ "$status" -eq 0 ]
+}
+
+@test "cierre con codigo en la misma linea tras as const" {
+  sub "$GUARDS" '] as const;' '] as const; foo();'
+  shield
+  wired_missing
+}
+
+@test "el identificador listado no esta importado (const local)" {
+  sub "$GUARDS" 'import { dataSovereigntyGate } from "../guards/data-sovereignty-gate.ts";' 'const dataSovereigntyGate = async () => {};'
+  shield
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"missing":["savia-foundation-wired"]'* ]]
+}
+
+@test "import del guard con alias no es canonico" {
+  sub "$GUARDS" 'import { blockCredentialLeak } from' 'import { blockCredentialLeak as blockCredentialLeak } from'
+  shield
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"missing":["block-credential-leak-wired"]'* ]]
+}
+
+@test "import del guard desde fuera de ../guards" {
+  sub "$GUARDS" '"../guards/block-credential-leak.ts"' '"./otro.ts"'
+  shield
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"missing":["block-credential-leak-wired"]'* ]]
+}
+
+@test "import del guard indentado no es canonico" {
+  sub "$GUARDS" 'import { blockCredentialLeak } from' ' import { blockCredentialLeak } from'
+  shield
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"missing":["block-credential-leak-wired"]'* ]]
+}
+
+@test "uso solo de tipo typeof BEFORE_GUARDS" {
+  sub "$FOUNDATION" 'runGuardsOnVariants(BEFORE_GUARDS,' 'runGuardsOnVariants([] as typeof BEFORE_GUARDS,'
+  shield
+  wired_missing
+}
+
+@test "dos guards en una linea de la lista" {
+  sub "$GUARDS" $'  blockCredentialLeak,\n  blockForcePush,' $'  blockCredentialLeak, blockForcePush,'
+  shield
+  wired_missing
+}
+
+@test "elemento con spread o llamada en la lista" {
+  sub "$GUARDS" $'  blockForcePush,\n  blockBranchSwitchDirty,' $'  ...OTRA,\n  blockBranchSwitchDirty,'
+  shield
+  wired_missing
+}
+
+@test "elemento en la misma linea que la apertura" {
+  sub "$GUARDS" 'export const BEFORE_GUARDS = [' 'export const BEFORE_GUARDS = [ toolCallHealing,'
+  sub "$GUARDS" $'  toolCallHealing,\n  validateBashGlobal,' '  validateBashGlobal,'
+  shield
+  wired_missing
+}
+
+@test "elemento sin coma final antes del cierre" {
+  sub "$GUARDS" $'  configSnapshot,\n] as const;' $'  configSnapshot\n] as const;'
+  shield
+  wired_missing
+}
+
+@test "import de la fundacion indentado no es canonico" {
+  sub "$FOUNDATION" 'import { BEFORE_GUARDS } from' ' import { BEFORE_GUARDS } from'
+  shield
+  wired_missing
+}
+
+@test "import de la fundacion precedido de codigo en la misma linea" {
+  sub "$FOUNDATION" 'import { BEFORE_GUARDS } from' 'void 0; import { BEFORE_GUARDS } from'
+  shield
   wired_missing
 }

@@ -322,3 +322,88 @@ TS
   run env PATH="$isolated_bin" SAVIA_WORKSPACE_DIR="$WS" "$bash_exe" "$SCRIPT" --json
   assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
 }
+
+# Segunda revisión HOLD de #1671 (272990f): las expresiones posteriores al
+# array y el origen/uso de los identificadores también forman parte del cableado.
+# Los positivos de contraste son los casos 1–3: árbol real, `] as const;`
+# y comentarios // al final de las líneas de guard. Se conservan sin cambios.
+
+@test "inactivo: regex tras paréntesis no convierte una cadena en import canónico" {
+  replace_in_foundation 'import { BEFORE_GUARDS } from "./lib/before-guards.ts";' \
+    "$(cat <<'TS'
+if (1) /'/.test(""); const s = '; import { BEFORE_GUARDS } from "./lib/before-guards.ts"; //';
+import { BEFORE_GUARDS } from "./fake.ts";
+TS
+)"
+  printf 'export const BEFORE_GUARDS = [] as const;\n' > "$WS/.opencode/plugins/fake.ts"
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: filter posterior al cierre elimina todos los guards" {
+  write_guard_list <<'TS'
+export const BEFORE_GUARDS = [
+  dataSovereigntyGate,
+  blockCredentialLeak,
+].filter(() => false);
+TS
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: slice posterior al cierre exporta una lista vacía" {
+  write_guard_list <<'TS'
+export const BEFORE_GUARDS = [
+  dataSovereigntyGate,
+  blockCredentialLeak,
+].slice(0, 0);
+TS
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: conjunción posterior al cierre sustituye los guards por una lista vacía" {
+  write_guard_list <<'TS'
+export const BEFORE_GUARDS = [
+  dataSovereigntyGate,
+  blockCredentialLeak,
+] && [];
+TS
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: identificador local homónimo no sustituye al guard de soberanía importado" {
+  cat > "$GUARDS" <<'TS'
+const dataSovereigntyGate = async () => {};
+import { blockCredentialLeak } from "../guards/block-credential-leak.ts";
+export const BEFORE_GUARDS = [
+  dataSovereigntyGate,
+  blockCredentialLeak,
+] as const;
+TS
+  shield
+  assert_shield 2 inactive savia-foundation-wired
+}
+
+@test "inactivo: typeof BEFORE_GUARDS solo en una aserción de tipo no ejecuta guards" {
+  replace_in_foundation \
+    'await runGuardsOnVariants(BEFORE_GUARDS, input, output);' \
+    'await runGuardsOnVariants([] as typeof BEFORE_GUARDS, input, output);'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: import canónico en línea propia dentro de template multilínea" {
+  replace_in_foundation 'import { BEFORE_GUARDS } from "./lib/before-guards.ts";' \
+    "$(cat <<'TS'
+const documentation = `
+import { BEFORE_GUARDS } from "./lib/before-guards.ts";
+`;
+import { BEFORE_GUARDS } from "./fake.ts";
+TS
+)"
+  printf 'export const BEFORE_GUARDS = [] as const;\n' > "$WS/.opencode/plugins/fake.ts"
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}

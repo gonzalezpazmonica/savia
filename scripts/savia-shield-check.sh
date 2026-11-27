@@ -78,10 +78,14 @@ check_component \
   "true"
 
 # ── Check 6: savia-foundation.ts wires the guards ────────────────────────────
-# «Cableado» (fallo cerrado ante cualquier duda): el guard es elemento (identificador
-# desnudo) del array BEFORE_GUARDS de lib/before-guards.ts, acotado a ese bloque y sin
-# comentarios ni cadenas, Y savia-foundation.ts importa BEFORE_GUARDS (sin alias ni
-# `import type`) desde ./lib/before-guards(.ts) y lo usa fuera de comentarios y cadenas.
+# «Cableado» = FORMA CANÓNICA ESTRICTA, fallo cerrado ante cualquier desviación:
+#  - before-guards.ts: línea `export const BEFORE_GUARDS = [`, después solo líneas
+#    `<espacios>id,` (comentarios y líneas vacías aparte) y cierre `]` o `] as const`
+#    con `;` opcional y nada más; cada id importado en ese fichero con una línea
+#    `import { id } from "../guards/x.ts";` al principio de línea.
+#  - savia-foundation.ts: línea `import { BEFORE_GUARDS } from "./lib/before-guards(.ts)";`
+#    al principio de línea y en estado «código», y un uso fuera de comentarios, cadenas
+#    y `typeof BEFORE_GUARDS`.
 # Un guard importado o listado en otro array no protege nada.
 # Ambiguo = inactivo: `${` dentro de un template o `/` en posición de operando (posible
 # regex) en cualquiera de los dos ficheros, comentarios o cadenas sin cierre, sin python3.
@@ -134,7 +138,8 @@ def scan(src):
         elif c == "/":
             prev = "".join(out).rstrip()
             word = re.search(r"[A-Za-z_$][\w$]*$", prev)
-            if not prev or prev[-1] in REGEX_PREV or (word and word.group(0) in REGEX_WORDS):
+            if (not prev or prev[-1] in REGEX_PREV or (word and word.group(0) in REGEX_WORDS)
+                    or (prev[-1] == ")" and after_paren_is_regex(prev))):
                 raise ValueError("posible literal regex")
             out.append(c)
             i += 1
@@ -144,52 +149,71 @@ def scan(src):
     return "".join(out)
 
 
-def guards_in_list(src):
-    decl = list(re.finditer(r"\bBEFORE_GUARDS\b", src))
-    m = re.search(r"\bexport\s+const\s+BEFORE_GUARDS\s*(?::[^=;]*)?=\s*\[", src)
-    if not m or len(decl) != 1:
-        raise ValueError("BEFORE_GUARDS ausente o ambigua")
-    depth, j, start = 1, m.end(), m.end()
-    items, buf = [], []
-    while j < len(src) and depth:
-        ch = src[j]
-        if ch in "[({":
+def after_paren_is_regex(out):
+    """`out` termina en `)`: busca el `(` que le corresponde y mira la palabra anterior."""
+    depth = 0
+    for k in range(len(out) - 1, -1, -1):
+        if out[k] == ")":
             depth += 1
-        elif ch in "])}":
+        elif out[k] == "(":
             depth -= 1
             if depth == 0:
-                break
-        if ch == "," and depth == 1:
-            items.append("".join(buf))
-            buf = []
-        else:
-            buf.append(ch)
-        j += 1
-    if depth:
-        raise ValueError("lista sin cierre")
-    items.append("".join(buf))
-    return {t.strip() for t in items if re.fullmatch(r"\s*[A-Za-z_$][\w$]*\s*", t)}
+                before = "".join(out[:k]).rstrip()
+                word = re.search(r"[A-Za-z_$][\w$]*$", before)
+                return bool(word and word.group(0) in ("if", "while", "for", "with"))
+    return True
+
+
+IDENT = r"[A-Za-z_$][\w$]*"
+
+
+def canonical_list(blank_lines):
+    """Forma canónica estricta del bloque BEFORE_GUARDS: apertura exacta, líneas
+    `<espacios>id,` (comentarios ya vaciados) y cierre `]`/`] as const` con `;` opcional."""
+    opens = [k for k, ln in enumerate(blank_lines) if "BEFORE_GUARDS" in ln]
+    if len(opens) != 1 or blank_lines[opens[0]].rstrip() != "export const BEFORE_GUARDS = [":
+        raise ValueError("apertura no canónica")
+    ids = []
+    for k in range(opens[0] + 1, len(blank_lines)):
+        ln = blank_lines[k]
+        if re.fullmatch(r"\s*", ln):
+            continue
+        m = re.fullmatch(r"\s*(" + IDENT + r")\s*,\s*", ln)
+        if m:
+            ids.append(m.group(1))
+            continue
+        if re.fullmatch(r"\](?: as const)?;?\s*", ln):
+            return ids
+        raise ValueError("línea no canónica en la lista")
+    raise ValueError("lista sin cierre")
 
 
 foundation, guards_file, guard = sys.argv[1:4]
 try:
-    if guard not in guards_in_list(scan(Path(guards_file).read_text())):
+    g_orig = Path(guards_file).read_text().split("\n")
+    g_blank = scan("\n".join(g_orig)).split("\n")
+    if guard not in canonical_list(g_blank):
         sys.exit(1)
-    orig = Path(foundation).read_text()
-    blank = scan(orig)
-    # El import se localiza sobre el texto con cadenas vaciadas (un import escrito dentro
-    # de una cadena no cuenta) y el especificador se lee del original en esas posiciones.
-    imp = re.compile(r"(?<![\w$.])import\s*\{([^}]*)\}\s*from\s*([\"'])\s*\2")
-    spec = re.compile(r"from\s*([\"'])\./lib/before-guards(?:\.ts)?\1\Z")
-    imports = [m for m in imp.finditer(blank)
-               if any(t.strip() == "BEFORE_GUARDS" for t in m.group(1).split(","))
-               and spec.search(orig[m.start():m.end()])]
-    if len(imports) != 1:
+    # El guard debe estar importado en el mismo fichero con una línea canónica.
+    imp_g = re.compile(r"import \{ " + re.escape(guard) + r" \} from \"\.\./guards/[\w.-]+\.ts\";\s*(?://.*)?")
+    if sum(1 for o, b in zip(g_orig, g_blank)
+           if re.fullmatch(r"import \{ " + re.escape(guard) + r" \} from \"\s*\";\s*", b)
+           and imp_g.fullmatch(o)) != 1:
         sys.exit(1)
-    a, b = imports[0].span()
-    body = blank[:a] + " " * (b - a) + blank[b:]
+
+    f_orig = Path(foundation).read_text().split("\n")
+    f_blank = scan("\n".join(f_orig)).split("\n")
+    # La línea del import se localiza sobre el texto con cadenas vaciadas (estado «código»)
+    # y el especificador se lee del original en esa misma línea.
+    imp_f = re.compile(r"import \{ BEFORE_GUARDS \} from \"\./lib/before-guards(?:\.ts)?\";\s*(?://.*)?")
+    hits = [k for k, (o, b) in enumerate(zip(f_orig, f_blank))
+            if re.fullmatch(r"import \{ BEFORE_GUARDS \} from \"\s*\";\s*", b) and imp_f.fullmatch(o)]
+    if len(hits) != 1:
+        sys.exit(1)
+    body = "\n".join("" if k == hits[0] else ln for k, ln in enumerate(f_blank))
     if re.search(r"\b(?:const|let|var|function|class)\s+BEFORE_GUARDS\b", body):
         sys.exit(1)
+    body = re.sub(r"\btypeof\s+BEFORE_GUARDS\b", " ", body)
     if not re.search(r"(?<![\w$.])BEFORE_GUARDS\b(?!\s*:)", body):
         sys.exit(1)
 except Exception:
