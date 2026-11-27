@@ -100,6 +100,8 @@ consume y alimenta vía A2A HTTP — mismo patrón decoplado que SE-308.
 
 - **App**: Python 3.10+ + Pyloid (PySide6+Qt WebEngine) + React — multiplataforma nativa. Audio: WASAPI (Win) / PipeWire (Linux) / BlackHole (macOS).
 - **Engine TTS**: `savia-kokoro.py` (Python, multiplataforma) es el entry point canónico. Los wrappers bash son POSIX; la app invoca el engine vía **subprocess Python** (nunca bash) para compatibilidad Windows.
+**Browser Support:** Chromium 130 (130.0.6723.192) de Qt WebEngine 6.9.2 (PySide6 6.9.2) con Pyloid 0.27.2 fijado en `app/uv.lock`; admite lo que esa versión soporta, sin polyfills (SE-539 D5). Medido en la biblioteca `libQt6WebEngineCore` de ese PySide6.
+
 - **Runtime**: `~/.savia/transcriptor/` se mantiene (compatibilidad con datos existentes); un rename a `~/.savia/sonora/` es fase futura con migración de datos.
 
 ## Referencias
