@@ -11,7 +11,11 @@ setup() {
   SCRIPT="$ROOT/scripts/savia-shield-check.sh"
   WS="$BATS_TEST_TMPDIR/ws"
   mkdir -p "$WS/docs/rules/domain"
-  cp -RL "$ROOT/.opencode" "$WS/.opencode"
+  # Solo lo que mira el script (plugins y un hook): copiar .opencode entero arrastra
+  # projects/ por los enlaces y agota /tmp.
+  mkdir -p "$WS/.opencode/hooks"
+  cp -RL "$ROOT/.opencode/plugins" "$WS/.opencode/plugins"
+  cp "$ROOT/.opencode/hooks/context-sanitize-input.sh" "$WS/.opencode/hooks/"
   cp "$ROOT/docs/rules/domain/savia-shield-opencode.md" "$WS/docs/rules/domain/"
   FOUNDATION="$WS/.opencode/plugins/savia-foundation.ts"
   GUARDS="$WS/.opencode/plugins/lib/before-guards.ts"
@@ -359,6 +363,121 @@ wired_missing() {
 
 @test "import de la fundacion precedido de codigo en la misma linea" {
   sub "$FOUNDATION" 'import { BEFORE_GUARDS } from' 'void 0; import { BEFORE_GUARDS } from'
+  shield
+  wired_missing
+}
+
+# ── Ronda 4 (revisión #1671c): terminadores de línea, regex general, mutación ──
+
+@test "U+2028 termina un comentario // en la lista" {
+  sub "$GUARDS" 'export const BEFORE_GUARDS = [' $'export const BEFORE_GUARDS = [\n  //\xe2\x80\xa8], __fake = ['
+  shield
+  wired_missing
+}
+
+@test "U+2029 en un comentario de la fundacion" {
+  printf '%s\n' $'// x\xe2\x80\xa9const y = 1;' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "U+0085 en la fundacion" {
+  printf '%s\n' $'const y = 1;\xc2\x85' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "CR suelto en before-guards.ts" {
+  printf '// x\rconst y = 1;\n' >> "$GUARDS"
+  shield
+  wired_missing
+}
+
+@test "CRLF en ambos ficheros sigue valiendo" {
+  python3 - "$FOUNDATION" "$GUARDS" <<'PY'
+import sys
+from pathlib import Path
+for f in sys.argv[1:]:
+    p = Path(f); p.write_bytes(p.read_bytes().replace(b"\n", b"\r\n"))
+PY
+  shield
+  [ "$status" -eq 0 ]
+}
+
+@test "regex tras await en la fundacion" {
+  printf '%s\n' 'await /`/;' 'const BEFORE_GUARDS: any[] = [];' 'const __s = `' 'import { BEFORE_GUARDS } from "./lib/before-guards.ts";' '`;' '// `' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "regex tras yield, instanceof, new, extends, void, typeof, in" {
+  local w
+  for w in yield instanceof new extends void typeof in of return; do
+    cp "$FOUNDATION" "$BATS_TEST_TMPDIR/f.bak"
+    printf '%s\n' "x = $w /a/;" >> "$FOUNDATION"
+    shield
+    wired_missing || { echo "no ambiguo con $w: $output"; false; }
+    cp "$BATS_TEST_TMPDIR/f.bak" "$FOUNDATION"
+  done
+}
+
+@test "barra tras comillas es ambigua" {
+  printf '%s\n' 'const d = "a" / 2;' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "barra tras llave de cierre es ambigua" {
+  printf '%s\n' '{ }/x/;' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "barra tras identificador no reservado y tras numero es division valida" {
+  printf '%s\n' 'const q = total / 2 / 3.5;' >> "$FOUNDATION"
+  shield
+  [ "$status" -eq 0 ]
+}
+
+@test "mutar BEFORE_GUARDS con splice en la fundacion" {
+  printf '%s\n' 'BEFORE_GUARDS.splice(0);' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "asignar length o indice de BEFORE_GUARDS en la fundacion" {
+  printf '%s\n' 'BEFORE_GUARDS.length = 0;' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "asignar un elemento por indice en la fundacion" {
+  printf '%s\n' 'BEFORE_GUARDS[0] = null;' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "reasignar BEFORE_GUARDS en la fundacion" {
+  printf '%s\n' 'BEFORE_GUARDS = [];' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "el import del guard viene de otro fichero de ../guards" {
+  sub "$GUARDS" '"../guards/block-credential-leak.ts"' '"../guards/noop.ts"'
+  shield
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"missing":["block-credential-leak-wired"]'* ]]
+}
+
+@test "identificador con escape unicode en before-guards.ts" {
+  printf '%s\n' 'BEFORE_GUARDS.length = 0;' >> "$GUARDS"
+  shield
+  wired_missing
+}
+
+@test "escape unicode fuera de cadenas en la fundacion" {
+  printf '%s\n' 'BEFORE_GUARDS.length = 0;' >> "$FOUNDATION"
   shield
   wired_missing
 }

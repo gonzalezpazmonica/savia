@@ -89,6 +89,9 @@ check_component \
 # Un guard importado o listado en otro array no protege nada.
 # Ambiguo = inactivo: `${` dentro de un template o `/` en posición de operando (posible
 # regex) en cualquiera de los dos ficheros, comentarios o cadenas sin cierre, sin python3.
+# Cualquier terminador de línea que no sea \n o \r\n, o un `\` fuera de cadenas, es ambiguo.
+# Toda `/` fuera de comentario/cadena que no siga a [A-Za-z0-9_$)\] (o siga a una palabra
+# reservada de JS) es ambigua. Mutar o reasignar BEFORE_GUARDS en la fundación se rechaza.
 # LÍMITE: «usa BEFORE_GUARDS» es heurístico (identificador fuera de comentarios y cadenas).
 # Un uso sombreado (`(BEFORE_GUARDS) => ...`) o código muerto (`if (false) BEFORE_GUARDS`)
 # lo satisface; no se puede demostrar estáticamente que la lista llegue a ejecutarse.
@@ -103,8 +106,29 @@ import sys
 from pathlib import Path
 
 
-REGEX_PREV = set("(,=:[!&|?{};+-*%<>~^")
-REGEX_WORDS = ("return", "typeof", "case", "in", "of", "void", "delete", "throw", "else", "do")
+JS_WORDS = frozenset("""await break case catch class const continue debugger default delete do else
+enum export extends false finally for function if import in instanceof new null return super
+switch this throw true try typeof var void while with yield let static implements interface
+package private protected public of async get set""".split())
+
+
+def read_src(path):
+    """Texto del fichero; terminador de línea distinto de \n o \r\n = ambiguo (JS los
+    cuenta: U+2028, U+2029; un \r suelto también)."""
+    text = Path(path).read_bytes().decode("utf-8").replace("\r\n", "\n")
+    if any(ch in text for ch in ("\r", "\u2028", "\u2029", "\x85")):
+        raise ValueError("terminador de línea no estándar")
+    return text
+
+
+def _tail(out, size=256):
+    acc, n = [], 0
+    for item in reversed(out):
+        acc.append(item)
+        n += len(item)
+        if n >= size and item.strip():
+            break
+    return "".join(reversed(acc))
 
 
 def scan(src):
@@ -136,17 +160,25 @@ def scan(src):
             out.append(c + "".join(ch if ch == "\n" else " " for ch in src[i + 1:j]) + c)
             i = j + 1
         elif c == "/":
-            prev = "".join(out).rstrip()
-            word = re.search(r"[A-Za-z_$][\w$]*$", prev)
-            if (not prev or prev[-1] in REGEX_PREV or (word and word.group(0) in REGEX_WORDS)
-                    or (prev[-1] == ")" and after_paren_is_regex(prev))):
+            # Regla general: una `/` solo es división si va justo tras [A-Za-z0-9_$)\]]
+            # (ignorando espacios) y, si es un identificador, no es palabra reservada.
+            tail = _tail(out).rstrip()
+            word = re.search(r"[A-Za-z0-9_$]+$", tail)
+            if not tail or tail[-1] not in ")]" and not word:
                 raise ValueError("posible literal regex")
+            if word and word.group(0) in JS_WORDS:
+                raise ValueError("barra tras palabra reservada")
+            if tail[-1] == ")" and after_paren_is_regex("".join(out).rstrip()):
+                raise ValueError("posible regex tras paréntesis")
             out.append(c)
             i += 1
         else:
             out.append(c)
             i += 1
-    return "".join(out)
+    res = "".join(out)
+    if "\\" in res:
+        raise ValueError("escape fuera de cadenas")
+    return res
 
 
 def after_paren_is_regex(out):
@@ -190,18 +222,19 @@ def canonical_list(blank_lines):
 
 foundation, guards_file, guard = sys.argv[1:4]
 try:
-    g_orig = Path(guards_file).read_text().split("\n")
+    g_orig = read_src(guards_file).split("\n")
     g_blank = scan("\n".join(g_orig)).split("\n")
     if guard not in canonical_list(g_blank):
         sys.exit(1)
     # El guard debe estar importado en el mismo fichero con una línea canónica.
-    imp_g = re.compile(r"import \{ " + re.escape(guard) + r" \} from \"\.\./guards/[\w.-]+\.ts\";\s*(?://.*)?")
+    kebab = re.sub(r"(?<!^)([A-Z])", lambda m: "-" + m.group(1).lower(), guard[0].lower() + guard[1:])
+    imp_g = re.compile(r"import \{ " + re.escape(guard) + r" \} from \"\.\./guards/" + re.escape(kebab) + r"\.ts\";\s*(?://.*)?")
     if sum(1 for o, b in zip(g_orig, g_blank)
            if re.fullmatch(r"import \{ " + re.escape(guard) + r" \} from \"\s*\";\s*", b)
            and imp_g.fullmatch(o)) != 1:
         sys.exit(1)
 
-    f_orig = Path(foundation).read_text().split("\n")
+    f_orig = read_src(foundation).split("\n")
     f_blank = scan("\n".join(f_orig)).split("\n")
     # La línea del import se localiza sobre el texto con cadenas vaciadas (estado «código»)
     # y el especificador se lee del original en esa misma línea.
@@ -211,6 +244,8 @@ try:
     if len(hits) != 1:
         sys.exit(1)
     body = "\n".join("" if k == hits[0] else ln for k, ln in enumerate(f_blank))
+    if re.search(r"\bBEFORE_GUARDS\s*(?:\?\.|\.|\[|=(?!=))", body):
+        sys.exit(1)
     if re.search(r"\b(?:const|let|var|function|class)\s+BEFORE_GUARDS\b", body):
         sys.exit(1)
     body = re.sub(r"\btypeof\s+BEFORE_GUARDS\b", " ", body)
