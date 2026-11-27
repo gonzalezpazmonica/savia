@@ -603,7 +603,9 @@ function findTargets(args: Word[], depth: number): Target[] {
       continue
     }
     if (FIND_NAME.has(t) && k + 1 < args.length) {
-      names.push([args[k + 1].text, t === "-iname"])
+      // A pattern with an expansion ($VAR, ${VAR}, $(cmd)) is unknown until it runs: no gate can be ruled out.
+      if (args[k + 1].dynamic) narrow = false
+      else names.push([args[k + 1].text, t === "-iname"])
       k += 2
       continue
     }

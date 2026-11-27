@@ -581,7 +581,12 @@ def _find_targets(args, depth):
             k = end + 1
             continue
         if t in _FIND_NAME and k + 1 < len(args):
-            names.append((args[k + 1].text, t == "-iname"))
+            # A pattern with an expansion ($VAR, ${VAR}, $(cmd)) is unknown until it runs: no gate
+            # can be ruled out.
+            if args[k + 1].dynamic:
+                narrow = False
+            else:
+                names.append((args[k + 1].text, t == "-iname"))
             k += 2
             continue
         if t in _FIND_VALUED:
