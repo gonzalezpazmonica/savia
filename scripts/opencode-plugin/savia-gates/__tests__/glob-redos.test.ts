@@ -146,3 +146,22 @@ test("casos límite: **, ?, rutas con / y rango inválido", async () => {
   expect(globMatcher("HOOKS").test("hooks")).toBe(false)
   expect(() => globMatcher("[z-a]")).toThrow("INVALID_EVENT")
 })
+
+// Un patrón de `find -name` con una expansión ($VAR, ${VAR}, $(cmd)) no se conoce hasta ejecutar: el guard
+// no puede descartar ninguna puerta y tiene que tratarlo como «alcanza» (fallo cerrado). Entre comillas
+// simples el `$` es literal y el patrón sí se puede comparar.
+test("un find -name con expansión desconocida falla cerrado", async () => {
+  const root = await mkdtemp(join(tmpdir(), "glob-dyn-"))
+  roots.push(root)
+  await mkdir(join(root, ".claude", "hooks"), { recursive: true })
+  await writeFile(join(root, ".claude", "hooks", "guard.sh"), "")
+  const { protectedTarget } = await import(LIB)
+  const { PROTECTED_GATE_PATHS } = await import(VOCAB)
+  for (const name of ['"$PATTERN"', "$PATTERN", "'*.'$EXT", '"${P}.sh"', '"$(cat p)"', "`cat p`"]) {
+    expect(protectedTarget(`find .claude -name ${name} -delete`, root, root, PROTECTED_GATE_PATHS)).toBe(".claude")
+    expect(protectedTarget(`find .claude -iname ${name} -delete`, root, root, PROTECTED_GATE_PATHS)).toBe(".claude")
+  }
+  expect(protectedTarget("find .claude -name '$PATTERN' -delete", root, root, PROTECTED_GATE_PATHS)).toBe(null)
+  expect(protectedTarget("find .claude -name '*.py' -delete", root, root, PROTECTED_GATE_PATHS)).toBe(null)
+  expect(protectedTarget('find .claude -name "$PATTERN" -print', root, root, PROTECTED_GATE_PATHS)).toBe(null)
+})

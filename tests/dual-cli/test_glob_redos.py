@@ -110,6 +110,23 @@ class GlobRedosTest(unittest.TestCase):
             self.assertLess(elapsed, 3)
             self.assertEqual(json.loads(run.stdout), {"miss": None, "hit": ".claude"})
 
+    def test_find_name_with_unknown_expansion_fails_closed(self):
+        """Un patrón de `find -name` con $VAR, ${VAR} o $(cmd) no se conoce hasta ejecutar: no se puede
+        descartar ninguna puerta y cuenta como «alcanza». Entre comillas simples el `$` es literal."""
+        with tempfile.TemporaryDirectory() as root:
+            os.makedirs(os.path.join(root, ".claude", "hooks"))
+            Path(root, ".claude", "hooks", "guard.sh").write_text("")
+
+            def target(command):
+                return shell_targets.protected_target(command, root, root, gates.PROTECTED_PATHS)
+
+            for name in ('"$PATTERN"', "$PATTERN", "'*.'$EXT", '"${P}.sh"', '"$(cat p)"', "`cat p`"):
+                for opt in ("-name", "-iname"):
+                    self.assertEqual(target(f"find .claude {opt} {name} -delete"), ".claude", (opt, name))
+            self.assertIsNone(target("find .claude -name '$PATTERN' -delete"))
+            self.assertIsNone(target("find .claude -name '*.py' -delete"))
+            self.assertIsNone(target('find .claude -name "$PATTERN" -print'))
+
     def test_same_answers_as_the_previous_regex(self):
         compared = 0
         for flags in (0, re.I):
