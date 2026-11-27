@@ -46,11 +46,13 @@ done
 
 [[ -z "$FINDINGS_FILE" ]] && usage
 
-if [[ -n "$ROUND" ]] && ! [[ "$ROUND" =~ ^[0-9]+$ ]]; then
+# Sin ceros a la izquierda ni más de 6 dígitos: (( )) leería "010" como octal
+# (8) y "08" como error, y un número enorme envolvería en 64 bits.
+if [[ -n "$ROUND" ]] && ! [[ "$ROUND" =~ ^(0|[1-9][0-9]{0,5})$ ]]; then
   echo "ERROR: --round must be a non-negative integer, got: '$ROUND'" >&2
   exit 2
 fi
-if [[ -n "$MAX_ROUND" ]] && ! [[ "$MAX_ROUND" =~ ^[0-9]+$ ]]; then
+if [[ -n "$MAX_ROUND" ]] && ! [[ "$MAX_ROUND" =~ ^(0|[1-9][0-9]{0,5})$ ]]; then
   echo "ERROR: --max-round must be a positive integer, got: '$MAX_ROUND'" >&2
   exit 2
 fi

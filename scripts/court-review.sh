@@ -19,7 +19,26 @@ COURT_SCORE_CONDITIONAL="${COURT_SCORE_CONDITIONAL:-70}"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
+# Enteros no negativos validados ANTES de cualquier contexto aritmético:
+# $(( )) y [[ -gt ]] evalúan subíndices, así que "HOME[$(cmd)]" ejecutaría cmd.
+# Bash además envuelve en 64 bits sin aviso, así que la regex acota a 6 dígitos
+# sin ceros a la izquierda (evita la base octal de "08"); solo entonces se
+# compara con el máximo. Mismo criterio que coherence-court.sh. Sale con 2.
+COURT_COUNT_MAX=999999
+_require_uint() {
+  local name="$1" value="$2" max="${3:-$COURT_COUNT_MAX}"
+  if ! [[ "$value" =~ ^(0|[1-9][0-9]{0,5})$ ]]; then
+    echo "ERROR: $name must be an integer 0-$max without leading zeros: '$value'" >&2
+    exit 2
+  fi
+  if [[ "$value" -gt "$max" ]]; then
+    echo "ERROR: $name out of range 0-$max: '$value'" >&2
+    exit 2
+  fi
+}
+
 cmd_check() {
+  _require_uint COURT_MAX_LOC "$COURT_MAX_LOC"
   local loc
   loc=$(git diff origin/main..HEAD --stat 2>/dev/null | tail -1 | grep -oP '[0-9]+ insertion' | grep -oP '[0-9]+') || loc=0
   local del
@@ -87,7 +106,10 @@ EOF
 }
 
 cmd_score() {
-  local c="${1:-0}" h="${2:-0}" m="${3:-0}" l="${4:-0}"
+  local c="${1-0}" h="${2-0}" m="${3-0}" l="${4-0}"
+  _require_uint C "$c"; _require_uint H "$h"; _require_uint M "$m"; _require_uint L "$l"
+  _require_uint COURT_SCORE_PASS "$COURT_SCORE_PASS" 100
+  _require_uint COURT_SCORE_CONDITIONAL "$COURT_SCORE_CONDITIONAL" 100
   local score=$((100 - c * 25 - h * 10 - m * 3 - l * 1))
   [[ "$score" -lt 0 ]] && score=0
 
@@ -111,6 +133,7 @@ cmd_validate() {
   [[ -z "$file" ]] && { echo "Usage: court-review.sh validate FILE" >&2; exit 2; }
   [[ -f "$file" ]] || { echo "ERROR: not found: $file" >&2; exit 2; }
   local max="${COURT_MAX_FIX_ROUNDS:-1}"
+  _require_uint COURT_MAX_FIX_ROUNDS "$max"
   local n
   n=$(awk '/^rounds:/{inr=1; next} inr && /^[^ ]/{inr=0} inr && /^  - /{c++} END{print c+0}' "$file")
   if [[ "$n" -gt "$max" ]]; then
