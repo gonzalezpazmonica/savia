@@ -13,6 +13,34 @@
     {
       "input": "permiso insuficiente",
       "expected": "LINKEDIN/PERMISSION estilo NOT_GRANTED explicito"
+    },
+    {
+      "id": "edge-exec-edit-new-string-judged",
+      "input": "Edit (no Write): el atajo llega en new_string, no en content",
+      "expected": "BLOCK: exit 2, S-02",
+      "aggregate": {
+        "script": ".claude/hooks/responsibility-judge.sh",
+        "env": {
+          "CLAUDE_PROJECT_DIR": "{dir}",
+          "SAVIA_HOOK_PROFILE": "standard",
+          "RESPONSIBILITY_JUDGE_ENABLED": "true"
+        },
+        "stdin_json": {
+          "tool_name": "Edit",
+          "tool_input": {
+            "file_path": "{dir}/src/Form.spec.ts",
+            "old_string": "  test('submits', () => {",
+            "new_string": "  xtest('submits', () => {"
+          }
+        },
+        "expect": {
+          "exit": 2,
+          "stderr_match": "Shortcut detected \\(S-02 ",
+          "files_match": {
+            "output/responsibility-judge.jsonl": "\"pattern\":\"S-02\".*\"action\":\"BLOCKED\""
+          }
+        }
+      }
     }
   ]
 }
