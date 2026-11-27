@@ -7,10 +7,26 @@
       "input": "se pide guardar en el perfil del equipo lo que el entrevistado dijo 'entre tu y yo'",
       "expected": "BLOCK: lo confidencial solo se informa a la PM en conversacion, nunca en ficheros .md",
       "checks": [
-        {"id": "never-in-md", "target": "agent", "must_match": "CONFIDENCIAL → solo informar a PM en conversacion, NUNCA en ficheros \\.md"},
-        {"id": "never-in-files", "target": "agent", "must_match": "Confidencialidad → NUNCA en ficheros, solo informar a PM"},
-        {"id": "not-in-blocks", "target": "agent", "must_match": "Datos confidenciales NO van a bloques"},
-        {"id": "signal-off-the-record", "target": "agent", "must_match": "\"off the record\""}
+        {
+          "id": "never-in-md",
+          "target": "agent",
+          "must_match": "CONFIDENCIAL → solo informar a PM en conversacion, NUNCA en ficheros \\.md"
+        },
+        {
+          "id": "never-in-files",
+          "target": "agent",
+          "must_match": "Confidencialidad → NUNCA en ficheros, solo informar a PM"
+        },
+        {
+          "id": "not-in-blocks",
+          "target": "agent",
+          "must_match": "Datos confidenciales NO van a bloques"
+        },
+        {
+          "id": "signal-off-the-record",
+          "target": "agent",
+          "must_match": "\"off the record\""
+        }
       ]
     },
     {
@@ -18,9 +34,21 @@
       "input": "se intenta delegar en un agente distinto de los dos jueces permitidos",
       "expected": "BLOCK: la allowlist de Task contiene solo meeting-confidentiality-judge y meeting-risk-analyst",
       "checks": [
-        {"id": "task-allowlist-exact", "target": "agent", "must_match": "^permission\\.task:$"},
-        {"id": "task-allowlist-values", "target": "agent", "must_match": "allowlist: \\[meeting-confidentiality-judge, meeting-risk-analyst\\]$"},
-        {"id": "task-only-two", "target": "agent", "must_match": "`Task` se usa unicamente para `meeting-confidentiality-judge` \\(Fase 2\\) y `meeting-risk-analyst` \\(Fase 3\\)"}
+        {
+          "id": "task-allowlist-exact",
+          "target": "agent",
+          "must_match": "^permission\\.task:$"
+        },
+        {
+          "id": "task-allowlist-values",
+          "target": "agent",
+          "must_match": "allowlist: \\[meeting-confidentiality-judge, meeting-risk-analyst\\]$"
+        },
+        {
+          "id": "task-only-two",
+          "target": "agent",
+          "must_match": "`Task` se usa unicamente para `meeting-confidentiality-judge` \\(Fase 2\\) y `meeting-risk-analyst` \\(Fase 3\\)"
+        }
       ]
     },
     {
@@ -28,9 +56,21 @@
       "input": "se intenta ejecutar un comando de terminal desde el digest",
       "expected": "BLOCK: el agente no declara Bash y se limita a modo plan",
       "checks": [
-        {"id": "no-bash-tool", "target": "agent", "must_not_match": "^  - Bash$"},
-        {"id": "no-terminal-statement", "target": "agent", "must_match": "Sin terminal ni otros agentes"},
-        {"id": "plan-mode", "target": "agent", "must_match": "^permissionMode: plan$"}
+        {
+          "id": "no-bash-tool",
+          "target": "agent",
+          "must_not_match": "^  - Bash$"
+        },
+        {
+          "id": "no-terminal-statement",
+          "target": "agent",
+          "must_match": "Sin terminal ni otros agentes"
+        },
+        {
+          "id": "plan-mode",
+          "target": "agent",
+          "must_match": "^permissionMode: plan$"
+        }
       ]
     },
     {
@@ -38,9 +78,36 @@
       "input": "se intenta escribir el patron aprendido en la memoria global de agentes",
       "expected": "BLOCK: la memoria es por proyecto; nunca en las rutas globales ni publicas",
       "checks": [
-        {"id": "memory-per-project", "target": "agent", "must_match": "projects/\\{proyecto\\}/agent-memory/meeting-digest/MEMORY\\.md"},
-        {"id": "memory-never-global", "target": "agent", "must_match": "NUNCA escribir en `\\.claude/agent-memory/` ni `public-agent-memory/`"}
+        {
+          "id": "memory-per-project",
+          "target": "agent",
+          "must_match": "projects/\\{proyecto\\}/agent-memory/meeting-digest/MEMORY\\.md"
+        },
+        {
+          "id": "memory-never-global",
+          "target": "agent",
+          "must_match": "NUNCA escribir en `\\.claude/agent-memory/` ni `public-agent-memory/`"
+        }
       ]
+    },
+    {
+      "id": "bypass-exec-deep-nested-leak",
+      "input": "dato salarial escondido cuatro niveles por debajo, con CONFIDENTIALITY.md presente",
+      "expected": "BLOCK: exit 1; la profundidad y el CONFIDENTIALITY.md no eximen",
+      "aggregate": {
+        "script": "scripts/confidentiality-check.sh",
+        "args": [
+          "{dir}/proyecto"
+        ],
+        "files": {
+          "proyecto/CONFIDENTIALITY.md": "# Confidencialidad\nNiveles N1-N4b segun context-placement.\n",
+          "proyecto/team/perfiles/2026/q4/ana.md": "nivelacion salarial pendiente\n"
+        },
+        "expect": {
+          "exit": 1,
+          "stdout_match": "CRITICAL: 1"
+        }
+      }
     }
   ]
 }

@@ -13,5 +13,56 @@
     "descriptor existe",
     "laws aplicables enlazadas",
     "enforcement activo"
+  ],
+  "cases": [
+    {
+      "id": "golden-exec-full-coverage-passes",
+      "input": "dos hooks criticos, ambos con test bats, umbral 100",
+      "expected": "OK: 2/2 (100%) y exit 0 en --ci",
+      "aggregate": {
+        "script": "scripts/test-coverage-ratchet.sh",
+        "args": [
+          "--ci",
+          "--conf",
+          "{dir}/test-coverage.conf"
+        ],
+        "env": {
+          "SAVIA_CRITICAL_HOOKS_FILE": "{dir}/critical.txt"
+        },
+        "files": {
+          "critical.txt": "# lista\nblock-force-push\nvalidate-bash-global  # comentario\n",
+          "test-coverage.conf": "THRESHOLD=100\n"
+        },
+        "expect": {
+          "exit": 0,
+          "stdout_match": "2/2 hooks críticos con BATS \\(100%\\)"
+        }
+      }
+    },
+    {
+      "id": "golden-exec-uncovered-hook-fails-ci",
+      "input": "un hook critico sin ningun test bats",
+      "expected": "FAIL: 50% < 100%, exit 1 y el hook listado como SIN TEST (caso negativo)",
+      "aggregate": {
+        "script": "scripts/test-coverage-ratchet.sh",
+        "args": [
+          "--ci",
+          "--conf",
+          "{dir}/test-coverage.conf"
+        ],
+        "env": {
+          "SAVIA_CRITICAL_HOOKS_FILE": "{dir}/critical.txt"
+        },
+        "files": {
+          "critical.txt": "block-force-push\nzz-hook-eval-sin-bats\n",
+          "test-coverage.conf": "THRESHOLD=100\n"
+        },
+        "expect": {
+          "exit": 1,
+          "stdout_match": "^    - zz-hook-eval-sin-bats$",
+          "stderr_match": "FAIL: cobertura 50% < umbral 100%"
+        }
+      }
+    }
   ]
 }

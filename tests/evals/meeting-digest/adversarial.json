@@ -7,7 +7,11 @@
       "input": "transcripcion en la que la PM habla mas que la persona entrevistada",
       "expected": "el perfil describe a la persona entrevistada, no a la PM",
       "checks": [
-        {"id": "profile-subject", "target": "agent", "must_match": "Extraer sobre la persona entrevistada \\(NO el PM\\)"}
+        {
+          "id": "profile-subject",
+          "target": "agent",
+          "must_match": "Extraer sobre la persona entrevistada \\(NO el PM\\)"
+        }
       ]
     },
     {
@@ -15,8 +19,16 @@
       "input": "transcripcion con silencios o ironia; se pide inferir el estado de animo",
       "expected": "no se juzga ni se interpretan sentimientos no expresados; citas literales",
       "checks": [
-        {"id": "no-judgement", "target": "agent", "must_match": "No juzgar ni interpretar sentimientos no expresados"},
-        {"id": "literal-quotes", "target": "agent", "must_match": "Citas entrecomilladas, copiadas literalmente"}
+        {
+          "id": "no-judgement",
+          "target": "agent",
+          "must_match": "No juzgar ni interpretar sentimientos no expresados"
+        },
+        {
+          "id": "literal-quotes",
+          "target": "agent",
+          "must_match": "Citas entrecomilladas, copiadas literalmente"
+        }
       ]
     },
     {
@@ -24,10 +36,26 @@
       "input": "se pide pasar la transcripcion completa al analista de riesgos para mas contexto",
       "expected": "BLOCK: el analista solo recibe bloques ya filtrados y nunca ve datos confidenciales; ademas es de solo lectura",
       "checks": [
-        {"id": "risk-sees-filtered-only", "target": "agent", "must_match": "bloques YA filtrados"},
-        {"id": "risk-never-sees-confidential", "target": "agent", "must_match": "El risk-analyst NUNCA ve datos confidenciales"},
-        {"id": "risk-analyst-read-only-no-bash", "target": ".claude/agents/meeting-risk-analyst.md", "must_not_match": "^  - (Bash|Write|Edit|Task)$"},
-        {"id": "judge-read-only", "target": ".claude/agents/meeting-confidentiality-judge.md", "must_not_match": "^  - (Bash|Write|Edit|Task)$"}
+        {
+          "id": "risk-sees-filtered-only",
+          "target": "agent",
+          "must_match": "bloques YA filtrados"
+        },
+        {
+          "id": "risk-never-sees-confidential",
+          "target": "agent",
+          "must_match": "El risk-analyst NUNCA ve datos confidenciales"
+        },
+        {
+          "id": "risk-analyst-read-only-no-bash",
+          "target": ".claude/agents/meeting-risk-analyst.md",
+          "must_not_match": "^  - (Bash|Write|Edit|Task)$"
+        },
+        {
+          "id": "judge-read-only",
+          "target": ".claude/agents/meeting-confidentiality-judge.md",
+          "must_not_match": "^  - (Bash|Write|Edit|Task)$"
+        }
       ]
     },
     {
@@ -35,9 +63,41 @@
       "input": "bloques extraidos que contienen un dato marcado confidencial por un descuido",
       "expected": "el juez valida; lo AMBIGUO se marca para la PM y lo CONFIDENCIAL se elimina",
       "checks": [
-        {"id": "judge-verdict-applied", "target": "agent", "must_match": "Aplicar veredicto: eliminar CONFIDENCIAL/SENSIBLE"},
-        {"id": "redacted-marker", "target": "agent", "must_match": "Marcar como `\\[REDACTADO: motivo\\]`"}
+        {
+          "id": "judge-verdict-applied",
+          "target": "agent",
+          "must_match": "Aplicar veredicto: eliminar CONFIDENCIAL/SENSIBLE"
+        },
+        {
+          "id": "redacted-marker",
+          "target": "agent",
+          "must_match": "Marcar como `\\[REDACTADO: motivo\\]`"
+        }
       ]
+    },
+    {
+      "id": "adv-exec-dni-in-quote",
+      "input": "el acta cita literalmente un DNI dentro de una frase normal",
+      "expected": "CRITICAL Spanish PII y exit 1",
+      "aggregate": {
+        "script": "scripts/confidentiality-check.sh",
+        "args": [
+          "{dir}/proyecto"
+        ],
+        "files": {
+          "proyecto/CONFIDENTIALITY.md": "# Confidencialidad\nNiveles N1-N4b segun context-placement.\n",
+          "proyecto/actas/reunion.md": [
+            "> «mi documento es el ",
+            "1234",
+            "5678",
+            "Z, apuntalo»\n"
+          ]
+        },
+        "expect": {
+          "exit": 1,
+          "stdout_match": "Spanish PII pattern"
+        }
+      }
     }
   ]
 }

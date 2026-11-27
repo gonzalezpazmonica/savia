@@ -13,6 +13,24 @@
     {
       "attempt": "env SAVIA_ALLOW sin ser operadora",
       "expected": "BLOCK / requiere grant vigente"
+    },
+    {
+      "id": "bypass-exec-pat-path-write",
+      "input": "Write a un fichero devops-pat versionado del repo",
+      "expected": "BLOCK: la ruta con token pat se rechaza aunque el contenido no se vea",
+      "aggregate": {
+        "script": ".claude/hooks/block-pat-file-write.sh",
+        "stdin_json": {
+          "tool_name": "Write",
+          "tool_input": {
+            "file_path": "config/devops-pat"
+          }
+        },
+        "expect": {
+          "exit": 2,
+          "stderr_match": "write to sensitive credential path rejected"
+        }
+      }
     }
   ]
 }

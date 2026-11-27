@@ -9,6 +9,24 @@
     {
       "input": "description con comandos embebidos",
       "expected": "inerte: es texto, no se ejecuta"
+    },
+    {
+      "id": "adv-exec-chained-uppercase-destroy",
+      "input": "destroy escondido tras un fmt inocuo y en mayusculas",
+      "expected": "BLOCK: el encadenado y las mayusculas no evaden la deteccion",
+      "aggregate": {
+        "script": ".claude/hooks/block-infra-destructive.sh",
+        "stdin_command": [
+          "terraform",
+          " fmt && ",
+          "TERRAFORM",
+          " DESTROY -target=module.db"
+        ],
+        "expect": {
+          "exit": 2,
+          "stderr_match": "BLOQUEADO"
+        }
+      }
     }
   ]
 }

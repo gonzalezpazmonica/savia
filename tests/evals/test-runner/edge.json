@@ -13,6 +13,31 @@
     {
       "input": "permiso insuficiente",
       "expected": "LINKEDIN/PERMISSION estilo NOT_GRANTED explicito"
+    },
+    {
+      "id": "edge-exec-empty-list-fails-closed",
+      "input": "lista de hooks criticos solo con comentarios",
+      "expected": "exit 2: una lista vacia no mide nada; nunca un 100% vacio",
+      "aggregate": {
+        "script": "scripts/test-coverage-ratchet.sh",
+        "args": [
+          "--ci",
+          "--conf",
+          "{dir}/test-coverage.conf"
+        ],
+        "env": {
+          "SAVIA_CRITICAL_HOOKS_FILE": "{dir}/critical.txt"
+        },
+        "files": {
+          "critical.txt": "# nada\n   \n",
+          "test-coverage.conf": "THRESHOLD=100\n"
+        },
+        "expect": {
+          "exit": 2,
+          "stderr_match": "no lista ningún hook crítico",
+          "stdout_not_match": "100%"
+        }
+      }
     }
   ]
 }

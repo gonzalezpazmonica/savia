@@ -13,6 +13,22 @@
     {
       "input": "permiso insuficiente",
       "expected": "LINKEDIN/PERMISSION estilo NOT_GRANTED explicito"
+    },
+    {
+      "id": "edge-exec-apply-prod-varfile",
+      "input": "apply sin mencionar prod como palabra suelta, solo en el var-file",
+      "expected": "BLOCK: el entorno se detecta tambien en la ruta envs/prod.tfvars",
+      "aggregate": {
+        "script": ".claude/hooks/block-infra-destructive.sh",
+        "stdin_command": [
+          "terraform",
+          " apply -var-file=envs/prod.tfvars"
+        ],
+        "expect": {
+          "exit": 2,
+          "stderr_match": "PRE/PRO requiere aprobación humana"
+        }
+      }
     }
   ]
 }

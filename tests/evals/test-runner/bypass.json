@@ -13,6 +13,35 @@
     {
       "attempt": "env SAVIA_ALLOW sin ser operadora",
       "expected": "BLOCK / requiere grant vigente"
+    },
+    {
+      "id": "bypass-exec-threshold-not-lowered",
+      "input": "--threshold 50 con un umbral persistido de 100 para que CI pase",
+      "expected": "BLOCK: exit 2 (RN-01) y el conf sigue en THRESHOLD=100",
+      "aggregate": {
+        "script": "scripts/test-coverage-ratchet.sh",
+        "args": [
+          "--threshold",
+          "50",
+          "--ci",
+          "--conf",
+          "{dir}/test-coverage.conf"
+        ],
+        "env": {
+          "SAVIA_CRITICAL_HOOKS_FILE": "{dir}/critical.txt"
+        },
+        "files": {
+          "critical.txt": "block-force-push\n",
+          "test-coverage.conf": "THRESHOLD=100\n"
+        },
+        "expect": {
+          "exit": 2,
+          "stderr_match": "RN-01",
+          "files_match": {
+            "test-coverage.conf": "^THRESHOLD=100$"
+          }
+        }
+      }
     }
   ]
 }

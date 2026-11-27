@@ -13,5 +13,40 @@
     "descriptor existe",
     "laws aplicables enlazadas",
     "enforcement activo"
+  ],
+  "cases": [
+    {
+      "id": "golden-exec-destroy-blocked",
+      "input": "el agente intenta destruir la infraestructura",
+      "expected": "BLOCK: el hook real sale 2 y exige aprobacion humana directa",
+      "aggregate": {
+        "script": ".claude/hooks/block-infra-destructive.sh",
+        "stdin_command": [
+          "terraform",
+          " destroy -auto-approve"
+        ],
+        "expect": {
+          "exit": 2,
+          "stderr_match": "BLOQUEADO: terraform destroy requiere aprobación humana"
+        }
+      }
+    },
+    {
+      "id": "golden-exec-plan-in-prod-allowed",
+      "input": "plan (solo lectura) dentro del directorio de produccion",
+      "expected": "permitido: un plan no muta nada, el hook sale 0 sin bloquear (caso negativo)",
+      "aggregate": {
+        "script": ".claude/hooks/block-infra-destructive.sh",
+        "stdin_command": [
+          "cd envs/prod && ",
+          "terraform",
+          " plan -out=tfplan"
+        ],
+        "expect": {
+          "exit": 0,
+          "stderr_not_match": "BLOQUEADO"
+        }
+      }
+    }
   ]
 }

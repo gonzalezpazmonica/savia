@@ -90,3 +90,59 @@ _fixture_agent() { # <frontmatter-line> -> PROJECT_ROOT tree with one agent
 @test "[test-runner] regression: golden fixture versionado" {
   jq -e '.scenario == "golden"' "$E/golden.json" >/dev/null
 }
+
+# --- Comportamiento ejecutado: el ratchet real scripts/test-coverage-ratchet.sh ---
+# (negative_tests del descriptor: "test coverage ratchet"). Ref: tests/bats/l4-exec-lib.bash.
+# Sin modelo. La lista de hooks criticos y el conf viven en el directorio temporal del case.
+load l4-exec-lib
+R="scripts/test-coverage-ratchet.sh"
+
+_ratchet_mutant() { # <expresion-sed> -> copia mutada con tests/ del repo al lado (el script mide $ROOT/tests)
+  mkdir -p "$TMP/r"
+  [ -e "$TMP/r/tests" ] || ln -s "$PWD/tests" "$TMP/r/tests"
+  l4_exec_mutant "$R" "$1" "$TMP/r/scripts/test-coverage-ratchet.sh"
+}
+
+@test "[test-runner] golden ejecutado: 100% pasa, un hook sin test hace fallar --ci" {
+  l4_exec_cases "$E/golden.json"
+}
+
+@test "[test-runner] edge ejecutado: lista de hooks vacia es fallo cerrado, no 100%" {
+  l4_exec_cases "$E/edge.json"
+}
+
+@test "[test-runner] adversarial ejecutado: el conf es dato, no se ejecuta" {
+  l4_exec_cases "$E/adversarial.json"
+}
+
+@test "[test-runner] bypass ejecutado: el umbral no baja por flag" {
+  l4_exec_cases "$E/bypass.json"
+}
+
+@test "[test-runner] mutante: --ci ya no compara con el umbral, golden.json falla" {
+  _ratchet_mutant 's/\(\( ratio < THRESHOLD \)\)/(( ratio < 0 ))/'
+  run l4_exec_cases "$E/golden.json" "$R=$TMP/r/scripts/test-coverage-ratchet.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"golden-exec-uncovered-hook-fails-ci"* ]]
+}
+
+@test "[test-runner] mutante: sin el fallo cerrado de lista vacia, edge.json falla" {
+  _ratchet_mutant '/no lista ningún hook crítico/d'
+  run l4_exec_cases "$E/edge.json" "$R=$TMP/r/scripts/test-coverage-ratchet.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"edge-exec-empty-list-fails-closed"* ]]
+}
+
+@test "[test-runner] mutante: el conf se carga con source, adversarial.json falla" {
+  _ratchet_mutant 's/^  persisted=\$\(sed -n .*$/  source "$CONF_FILE"; persisted="$THRESHOLD"/'
+  run l4_exec_cases "$E/adversarial.json" "$R=$TMP/r/scripts/test-coverage-ratchet.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"adv-exec-conf-not-executed"* ]]
+}
+
+@test "[test-runner] mutante: --threshold puede bajar el umbral, bypass.json falla" {
+  _ratchet_mutant '/RN-01 — el umbral no baja por flag/{n;s/exit 2/:/}'
+  run l4_exec_cases "$E/bypass.json" "$R=$TMP/r/scripts/test-coverage-ratchet.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"bypass-exec-threshold-not-lowered"* ]]
+}

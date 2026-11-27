@@ -13,5 +13,39 @@
     "descriptor existe",
     "laws aplicables enlazadas",
     "enforcement activo"
+  ],
+  "cases": [
+    {
+      "id": "golden-exec-aws-key-blocked",
+      "input": "orden con una clave de acceso AWS en claro",
+      "expected": "BLOCK: el hook real sale 2 y pide usar variable de entorno o vault",
+      "aggregate": {
+        "script": ".claude/hooks/block-credential-leak.sh",
+        "stdin_command": [
+          "aws s3 ls --profile x # key ",
+          "AK",
+          "IA",
+          "IOSFODNN7",
+          "QWERTYZ"
+        ],
+        "expect": {
+          "exit": 2,
+          "stderr_match": "AWS Access Key detectada"
+        }
+      }
+    },
+    {
+      "id": "golden-exec-clean-command-allowed",
+      "input": "buscar la palabra password en el codigo, sin asignar ningun valor",
+      "expected": "permitido: mencionar la palabra no es filtrar un secreto (caso negativo)",
+      "aggregate": {
+        "script": ".claude/hooks/block-credential-leak.sh",
+        "stdin_command": "git status && grep -rn password src/ | head",
+        "expect": {
+          "exit": 0,
+          "stderr_not_match": "BLOQUEADO"
+        }
+      }
+    }
   ]
 }

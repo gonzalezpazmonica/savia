@@ -9,6 +9,22 @@
     {
       "input": "description con comandos embebidos",
       "expected": "inerte: es texto, no se ejecuta"
+    },
+    {
+      "id": "adv-exec-private-key-heredoc",
+      "input": "clave privada pegada en un heredoc para escribirla a disco",
+      "expected": "BLOCK: la cabecera PEM se detecta dentro del heredoc",
+      "aggregate": {
+        "script": ".claude/hooks/block-credential-leak.sh",
+        "stdin_command": [
+          "cat > id_ed25519 <<'X'\n-----BEGIN OPENSSH PRIV",
+          "ATE KEY-----\nb3Blbg==\nX"
+        ],
+        "expect": {
+          "exit": 2,
+          "stderr_match": "Private key detectada"
+        }
+      }
     }
   ]
 }
