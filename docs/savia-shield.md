@@ -260,6 +260,19 @@ El instalador:
 Tras ejecutar, toda comunicacion con la API pasa por el proxy que
 enmascara entidades sensibles automaticamente.
 
+**Token obligatorio:** el daemon nunca sirve sin token. Si
+`~/.savia/shield-token` no existe, lo crea con permisos 0600 (los hooks lo
+leen en cada llamada, sin reinicios); si el fichero esta vacio o no se puede
+crear, el daemon no arranca. Arrancar el daemon a mano o con
+`shield-launcher.py` sin pasar por el instalador funciona igual.
+
+**Lectura acotada al workspace:** la deteccion de credencial partida
+(cross-write) del `/gate` solo lee el fichero existente si su ruta, resuelta
+con `realpath` (relativas contra el workspace, `..` y enlaces simbolicos
+incluidos), queda dentro de `CLAUDE_PROJECT_DIR`. Fuera de el no se lee nada
+y solo se escanea el contenido nuevo; asi ningun proceso local obtiene un
+oraculo sobre ficheros ajenos (alertas CodeQL #30-#32).
+
 **Sin daemon:** los hooks de gate y auditoria siguen funcionando en
 modo fallback (regex + NFKC + base64 + cross-write). Claude Code
 nunca se bloquea por falta de daemon.
