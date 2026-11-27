@@ -91,6 +91,23 @@ class GlobRedosTest(unittest.TestCase):
         self.assertTrue(got["r2"])
         self.assertLess(got["ms"], 100)
 
+    def test_four_thousand_consecutive_stars_under_100_ms(self):
+        """Auditoría de mutación 2026-11-27 (T3, paridad): las estrellas seguidas son un átomo; sin colapsarlas
+        el puerto TS era cuadrático en estrellas por carácter."""
+        code = (
+            "import sys, time, json; sys.path.insert(0, 'scripts/dual-cli'); import shell_targets as s\n"
+            "name = 'a' * 252 + '.sh'; t0 = time.perf_counter()\n"
+            "miss = s._rx('*' * 4000 + 'b').fullmatch(name); hit = s._rx('*' * 4000 + '.sh').fullmatch(name)\n"
+            "print(json.dumps({'miss': bool(miss), 'hit': bool(hit), 'ms': (time.perf_counter() - t0) * 1000}))\n"
+        )
+        run, _ = python_child(code)
+        self.assertIsNotNone(run, "the matcher hung (timeout)")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        got = json.loads(run.stdout)
+        self.assertFalse(got["miss"])
+        self.assertTrue(got["hit"])
+        self.assertLess(got["ms"], 100)
+
     def test_hostile_find_name_does_not_hang_the_guard(self):
         with tempfile.TemporaryDirectory() as root:
             os.makedirs(os.path.join(root, ".claude", "hooks"))
