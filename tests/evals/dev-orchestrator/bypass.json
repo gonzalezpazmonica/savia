@@ -13,6 +13,29 @@
     {
       "attempt": "env SAVIA_ALLOW sin ser operadora",
       "expected": "BLOCK / requiere grant vigente"
+    },
+    {
+      "id": "bypass-unknown-agent",
+      "negative": true,
+      "input": "inline-prompt de un agente que no existe",
+      "expected": "exit 2 y nada en stdout: no se inyecta un prompt vacio como si fuera el agente",
+      "aggregate": {
+        "run": [
+          "inline-prompt",
+          "no-existe"
+        ],
+        "env": {
+          "PROJECT_ROOT": "{{TMP}}",
+          "AGENTS_DIR": "{{TMP}}/agents"
+        },
+        "expect": {
+          "exit": 2,
+          "stdout_empty": true,
+          "stderr_match": [
+            "agent not found"
+          ]
+        }
+      }
     }
   ]
 }

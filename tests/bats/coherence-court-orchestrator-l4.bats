@@ -90,3 +90,52 @@ _fixture_agent() { # <frontmatter-line> -> PROJECT_ROOT tree with one agent
 @test "[coherence-court-orchestrator] regression: golden fixture versionado" {
   jq -e '.scenario == "golden"' "$E/golden.json" >/dev/null
 }
+
+# --- Comportamiento (aggregate): se ejecuta scripts/coherence-court.sh y se compara su salida ---
+# Ejecutor: tests/bats/l4-script-cases-lib.bash. Sin modelo: solo el script determinista.
+load l4-script-cases-lib
+S_BEHAVIOR="scripts/coherence-court.sh"
+
+@test "[coherence-court-orchestrator] behavior: entre 3 y 5 casos ejecutables y al menos uno negativo" {
+  l4_script_cases_shape "$E"
+}
+
+@test "[coherence-court-orchestrator] behavior golden: score 90 es pass; gate 69 cierra la puerta humana" {
+  l4_script_cases "$E/golden.json" "$S_BEHAVIOR" "$TMP"
+}
+
+@test "[coherence-court-orchestrator] behavior edge: score 70 es conditional (exit 2), no fail" {
+  l4_script_cases "$E/edge.json" "$S_BEHAVIOR" "$TMP"
+}
+
+@test "[coherence-court-orchestrator] behavior adversarial: un contador con subindice no ejecuta codigo" {
+  l4_script_cases "$E/adversarial.json" "$S_BEHAVIOR" "$TMP"
+}
+
+@test "[coherence-court-orchestrator] behavior bypass: sin premisas el check falla y para el flujo" {
+  l4_script_cases "$E/bypass.json" "$S_BEHAVIOR" "$TMP"
+}
+
+@test "[coherence-court-orchestrator] mutante: umbral conditional 70 -> 71, edge falla" {
+  sed 's/COHERENCE_SCORE_CONDITIONAL:-70/COHERENCE_SCORE_CONDITIONAL:-71/' "$S_BEHAVIOR" > "$TMP/cc.sh"
+  ! cmp -s "$S_BEHAVIOR" "$TMP/cc.sh"
+  run l4_script_cases "$E/edge.json" "$TMP/cc.sh" "$TMP"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"edge-gate-70-conditional"* ]]
+}
+
+@test "[coherence-court-orchestrator] mutante: sin validar C, adversarial falla" {
+  sed 's/_require_uint C "\$c"; //' "$S_BEHAVIOR" > "$TMP/cc.sh"
+  ! cmp -s "$S_BEHAVIOR" "$TMP/cc.sh"
+  run l4_script_cases "$E/adversarial.json" "$TMP/cc.sh" "$TMP"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"adv-score-subscript-injection"* ]]
+}
+
+@test "[coherence-court-orchestrator] mutante: check acepta 0 premisas, bypass falla" {
+  sed 's/if \[\[ "\$n" -lt 1 \]\]/if [[ "$n" -lt 0 ]]/' "$S_BEHAVIOR" > "$TMP/cc.sh"
+  ! cmp -s "$S_BEHAVIOR" "$TMP/cc.sh"
+  run l4_script_cases "$E/bypass.json" "$TMP/cc.sh" "$TMP"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"bypass-check-without-premises"* ]]
+}

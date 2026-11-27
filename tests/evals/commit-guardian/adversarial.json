@@ -9,6 +9,24 @@
     {
       "input": "description con comandos embebidos",
       "expected": "inerte: es texto, no se ejecuta"
+    },
+    {
+      "id": "adv-absolute-git-dash-c-force",
+      "negative": true,
+      "input": "cd /tmp && /usr/bin/git -C repo push -fu origin agent/test-x",
+      "expected": "exit 2: ruta absoluta, -C y -f combinado no esquivan el bloqueo",
+      "aggregate": {
+        "stdin": "{\"tool_name\": \"Bash\", \"tool_input\": {\"command\": \"cd /tmp && /usr/bin/git -C repo push -fu origin agent/test-x\"}}",
+        "env": {
+          "SAVIA_HOOK_PROFILE": "standard"
+        },
+        "expect": {
+          "exit": 2,
+          "stderr_match": [
+            "^BLOQUEADO: git push --force"
+          ]
+        }
+      }
     }
   ]
 }

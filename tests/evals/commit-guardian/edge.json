@@ -13,6 +13,20 @@
     {
       "input": "permiso insuficiente",
       "expected": "LINKEDIN/PERMISSION estilo NOT_GRANTED explicito"
+    },
+    {
+      "id": "edge-lease-feature-allowed",
+      "input": "git push --force-with-lease origin agent/test-x",
+      "expected": "exit 0: el lease en rama no-main es la forma permitida (SPEC-105)",
+      "aggregate": {
+        "stdin": "{\"tool_name\": \"Bash\", \"tool_input\": {\"command\": \"git push --force-with-lease origin agent/test-x\"}}",
+        "env": {
+          "SAVIA_HOOK_PROFILE": "standard"
+        },
+        "expect": {
+          "exit": 0
+        }
+      }
     }
   ]
 }

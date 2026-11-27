@@ -13,5 +13,39 @@
     "descriptor existe",
     "laws aplicables enlazadas",
     "enforcement activo"
+  ],
+  "cases": [
+    {
+      "id": "golden-feature-push-allowed",
+      "input": "git push origin agent/test-x",
+      "expected": "exit 0: push a rama propia permitido",
+      "aggregate": {
+        "stdin": "{\"tool_name\": \"Bash\", \"tool_input\": {\"command\": \"git push origin agent/test-x\"}}",
+        "env": {
+          "SAVIA_HOOK_PROFILE": "standard"
+        },
+        "expect": {
+          "exit": 0
+        }
+      }
+    },
+    {
+      "id": "golden-force-push-blocked",
+      "negative": true,
+      "input": "git push --force origin agent/test-x",
+      "expected": "exit 2 BLOQUEADO",
+      "aggregate": {
+        "stdin": "{\"tool_name\": \"Bash\", \"tool_input\": {\"command\": \"git push --force origin agent/test-x\"}}",
+        "env": {
+          "SAVIA_HOOK_PROFILE": "standard"
+        },
+        "expect": {
+          "exit": 2,
+          "stderr_match": [
+            "^BLOQUEADO: git push --force"
+          ]
+        }
+      }
+    }
   ]
 }

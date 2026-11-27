@@ -90,3 +90,60 @@ _fixture_agent() { # <frontmatter-line> -> PROJECT_ROOT tree with one agent
 @test "[dev-orchestrator] regression: golden fixture versionado" {
   jq -e '.scenario == "golden"' "$E/golden.json" >/dev/null
 }
+
+# --- Comportamiento (aggregate): se ejecuta scripts/savia-orchestrator-helper.sh y se compara su salida ---
+# Ejecutor: tests/bats/l4-script-cases-lib.bash. Sin modelo: solo el script determinista.
+load l4-script-cases-lib
+S_BEHAVIOR="scripts/savia-orchestrator-helper.sh"
+
+@test "[dev-orchestrator] behavior: entre 3 y 5 casos ejecutables y al menos uno negativo" {
+  l4_script_cases_shape "$E"
+}
+
+@test "[dev-orchestrator] behavior golden: inline-prompt quita el frontmatter; fan-out solo si el entorno lo declara" {
+  l4_script_cases "$E/golden.json" "$S_BEHAVIOR" "$TMP"
+}
+
+@test "[dev-orchestrator] behavior edge: sin savia-env.sh el modo es single-shot (peor caso)" {
+  l4_script_cases "$E/edge.json" "$S_BEHAVIOR" "$TMP"
+}
+
+@test "[dev-orchestrator] behavior adversarial: la salida inline con JSON incrustado queda como dato en el sobre" {
+  l4_script_cases "$E/adversarial.json" "$S_BEHAVIOR" "$TMP"
+}
+
+@test "[dev-orchestrator] behavior bypass: agente inexistente => exit 2, nada que inyectar" {
+  l4_script_cases "$E/bypass.json" "$S_BEHAVIOR" "$TMP"
+}
+
+@test "[dev-orchestrator] mutante: el frontmatter se filtra al prompt, golden falla" {
+  sed 's/c >= 2  { print }/c >= 1  { print }/' "$S_BEHAVIOR" > "$TMP/oh.sh"
+  ! cmp -s "$S_BEHAVIOR" "$TMP/oh.sh"
+  run l4_script_cases "$E/golden.json" "$TMP/oh.sh" "$TMP"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"golden-inline-strips-frontmatter"* ]]
+}
+
+@test "[dev-orchestrator] mutante: sin entorno se supone fan-out, edge falla" {
+  sed 's/# No env script available — assume worst case (no Task tool)/&\n    echo "fan-out"; return/' "$S_BEHAVIOR" > "$TMP/oh.sh"
+  ! cmp -s "$S_BEHAVIOR" "$TMP/oh.sh"
+  run l4_script_cases "$E/edge.json" "$TMP/oh.sh" "$TMP"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"edge-mode-without-env-single-shot"* ]]
+}
+
+@test "[dev-orchestrator] mutante: sobre sin escape JSON, adversarial falla" {
+  sed 's/print(json.dumps({/print("{\\"agent\\": \\"%s\\", \\"mode\\": \\"single-shot\\", \\"result\\": \\"%s\\"}" % (agent, raw)); sys.exit(0); print(json.dumps({/' "$S_BEHAVIOR" > "$TMP/oh.sh"
+  ! cmp -s "$S_BEHAVIOR" "$TMP/oh.sh"
+  run l4_script_cases "$E/adversarial.json" "$TMP/oh.sh" "$TMP"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"adv-wrap-embedded-json-is-data"* ]]
+}
+
+@test "[dev-orchestrator] mutante: agente inexistente devuelve 0, bypass falla" {
+  sed '0,/    return 2/s//    return 0/' "$S_BEHAVIOR" > "$TMP/oh.sh"
+  ! cmp -s "$S_BEHAVIOR" "$TMP/oh.sh"
+  run l4_script_cases "$E/bypass.json" "$TMP/oh.sh" "$TMP"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"bypass-unknown-agent"* ]]
+}

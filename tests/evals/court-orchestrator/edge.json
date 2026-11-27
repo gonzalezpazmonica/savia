@@ -13,6 +13,26 @@
     {
       "input": "permiso insuficiente",
       "expected": "LINKEDIN/PERMISSION estilo NOT_GRANTED explicito"
+    },
+    {
+      "id": "edge-score-89-conditional",
+      "input": "1 high y 1 low (89, justo bajo pass)",
+      "expected": "score=89 verdict=conditional",
+      "aggregate": {
+        "run": [
+          "score",
+          "0",
+          "1",
+          "0",
+          "1"
+        ],
+        "expect": {
+          "exit": 0,
+          "stdout_match": [
+            "^score=89 verdict=conditional "
+          ]
+        }
+      }
     }
   ]
 }

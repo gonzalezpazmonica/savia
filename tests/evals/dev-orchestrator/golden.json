@@ -13,5 +13,60 @@
     "descriptor existe",
     "laws aplicables enlazadas",
     "enforcement activo"
+  ],
+  "cases": [
+    {
+      "id": "golden-inline-strips-frontmatter",
+      "input": "inline-prompt de un agente con frontmatter",
+      "expected": "solo el cuerpo del prompt, sin claves de frontmatter",
+      "aggregate": {
+        "run": [
+          "inline-prompt",
+          "demo"
+        ],
+        "env": {
+          "PROJECT_ROOT": "{{TMP}}",
+          "AGENTS_DIR": "{{TMP}}/agents"
+        },
+        "files": {
+          "agents/demo.md": "---\nname: demo\nmodel_tier: mid\npermission_level: L1\n---\n# Demo\nCuerpo del prompt del agente demo.\n"
+        },
+        "expect": {
+          "exit": 0,
+          "stdout_match": [
+            "^# Demo$",
+            "^Cuerpo del prompt del agente demo\\.$"
+          ],
+          "stdout_not_match": [
+            "model_tier",
+            "permission_level",
+            "^---$"
+          ]
+        }
+      }
+    },
+    {
+      "id": "golden-mode-fan-out-declared",
+      "input": "savia-env.sh declara has-task-fan-out=yes",
+      "expected": "fan-out",
+      "aggregate": {
+        "run": [
+          "mode"
+        ],
+        "env": {
+          "PROJECT_ROOT": "{{TMP}}",
+          "AGENTS_DIR": "{{TMP}}/agents"
+        },
+        "files": {
+          "scripts/savia-env.sh": "[ \"$1\" = has-task-fan-out ] && echo yes\n"
+        },
+        "expect": {
+          "exit": 0,
+          "stdout_match": [
+            "^fan-out$"
+          ]
+        }
+      }
+    }
   ]
 }

@@ -48,6 +48,15 @@ y `truth-tribunal-orchestrator` usan este formato:
 - `cases[].aggregate`: ejecución real del agregador determinista
   (`recommendation-tribunal-orchestrator`) con veredictos sintéticos y
   `expect` (`exit`, `verdict`, `consensus_score`, `veto_judges`).
+- `cases[].aggregate` con `run`/`stdin`/`env`/`files`: ejecución real del script o
+  hook del agente con `tests/bats/l4-script-cases-lib.bash` (`l4_script_cases`);
+  `expect` admite `exit`, `stdout_match`, `stdout_not_match`, `stderr_match`,
+  `stdout_empty`, `json` y `files_absent`, y `{{TMP}}` se sustituye por el
+  directorio del case. Lo usan coherence-court-orchestrator (`coherence-court.sh`),
+  commit-guardian (`block-force-push.sh`), context-dome-manager (`dome-guard.sh`),
+  court-orchestrator (`court-review.sh`) y dev-orchestrator
+  (`savia-orchestrator-helper.sh`). `l4_script_cases_shape` exige 3-5 casos
+  ejecutables por agente, uno por fixture como mínimo y al menos uno `negative`.
 - `cases[].weights`: comprobación ejecutada de que cada perfil de pesos del
   Truth Tribunal suma 1.00 (`truth-tribunal-orchestrator`).
 
