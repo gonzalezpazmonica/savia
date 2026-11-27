@@ -407,3 +407,233 @@ TS
   shield
   assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
 }
+
+
+# Cuarta ronda: tercera revisión HOLD de #1671 (de0b8bdf).
+# Los 32 casos anteriores se conservan íntegros. Los nuevos negativos exigen
+# fallo cerrado, aunque el scanner actual todavía pueda informar active.
+insert_comment_terminator() {
+  python3 - "$GUARDS" "$1" <<'PY_TERMINATOR'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+terminator = chr(int(sys.argv[2], 16))
+source = path.read_text()
+opening = "export const BEFORE_GUARDS = [\n"
+assert source.count(opening) == 1, "apertura del fixture inesperada"
+payload = "  //" + terminator + "], __fake = [\n"
+path.write_bytes(source.replace(opening, opening + payload).encode("utf-8"))
+assert payload.encode("utf-8") in path.read_bytes(), "terminador no preservado"
+PY_TERMINATOR
+}
+
+# Construcción del informe: el backtick pertenece al regex; la declaración
+# local de lista vacía es código, y el supuesto import solo texto del template.
+# El uso final opera sobre la lista local. El escáner defectuoso invierte estados.
+write_regex_import_decoy() {
+  printf '%s\n' "$1" > "$FOUNDATION"
+  cat >> "$FOUNDATION" <<'TS'
+const BEFORE_GUARDS: any[] = [];
+const __s = `
+import { BEFORE_GUARDS } from "./lib/before-guards.ts";
+`;
+// `
+run(BEFORE_GUARDS);
+TS
+}
+
+@test "inactivo: U+2028 termina el comentario y desvía los guards a __fake" {
+  insert_comment_terminator 2028
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: U+2029 termina el comentario y desvía los guards a __fake" {
+  insert_comment_terminator 2029
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: CR suelto termina el comentario y desvía los guards a __fake" {
+  insert_comment_terminator 000D
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: U+0085 como fin de línea ambiguo dentro del comentario" {
+  # NEL no termina // en ECMAScript; se pide rechazo conservador de esta forma.
+  insert_comment_terminator 0085
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: fichero de guards con todos los finales CR sueltos" {
+  # Política solicitada: no aceptar terminadores distintos de LF/CRLF,
+  # incluso cuando read_text() normaliza CR y la sintaxis JS sea equivalente.
+  python3 - "$GUARDS" <<'PY_CR'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+source = path.read_bytes()
+assert b"\n" in source and b"\r" not in source
+path.write_bytes(source.replace(b"\n", b"\r"))
+assert b"\r" in path.read_bytes() and b"\n" not in path.read_bytes()
+PY_CR
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras await oculta la lista local vacía" {
+  write_regex_import_decoy 'await /`/;'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras yield oculta la lista local vacía" {
+  write_regex_import_decoy 'function* probe() { yield /`/; }'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras instanceof oculta la lista local vacía" {
+  write_regex_import_decoy 'function probe() { return {} instanceof /`/; }'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras new oculta la lista local vacía" {
+  # No se invoca probe: el módulo es ejecutable sin construir el RegExp.
+  write_regex_import_decoy 'function probe() { new /`/; }'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras extends oculta la lista local vacía" {
+  # No se invoca probe: la superclase no se evalúa al cargar el módulo.
+  write_regex_import_decoy 'function probe() { class Probe extends /`/ {} }'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras typeof oculta la lista local vacía" {
+  write_regex_import_decoy 'typeof /`/;'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras delete oculta la lista local vacía" {
+  write_regex_import_decoy 'delete /`/;'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras void oculta la lista local vacía" {
+  write_regex_import_decoy 'void /`/;'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras debugger y ASI no es división" {
+  write_regex_import_decoy $'debugger\n/`/;'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras break con etiqueta y ASI no es división" {
+  write_regex_import_decoy $'outer: for (; false;) { break outer\n/`/; }'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras continue con etiqueta y ASI no es división" {
+  write_regex_import_decoy $'outer: for (; false;) { continue outer\n/`/; }'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: BOM entre return y regex no oculta la palabra clave" {
+  write_regex_import_decoy $'function probe() { return\uFEFF/`/; }'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras await separado por comentario de bloque" {
+  write_regex_import_decoy 'await /* separación válida */ /`/;'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras yield delegado tampoco es división" {
+  write_regex_import_decoy 'function* probe() { yield* /`/; }'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras return con construcción del informe" {
+  write_regex_import_decoy 'function probe() { return /`/; }'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "activo: división normal a / b conserva el cableado real" {
+  printf '\nconst a = 8, b = 2; const quotient = a / b;\n' >> "$FOUNDATION"
+  shield
+  assert_shield 0 active
+}
+
+@test "activo: división tras llamada x) / 2 conserva el cableado real" {
+  printf '\nconst x = 8; const quotient = Number(x) / 2;\n' >> "$FOUNDATION"
+  shield
+  assert_shield 0 active
+}
+
+@test "activo: división arr[0] / n conserva el cableado real" {
+  printf '\nconst arr = [8], n = 2; const quotient = arr[0] / n;\n' >> "$FOUNDATION"
+  shield
+  assert_shield 0 active
+}
+
+@test "activo: CRLF en ambos ficheros conserva el cableado real" {
+  python3 - "$GUARDS" "$FOUNDATION" <<'PY_CRLF'
+from pathlib import Path
+import sys
+
+for name in sys.argv[1:]:
+    path = Path(name)
+    source = path.read_bytes()
+    assert b"\n" in source and b"\r" not in source
+    path.write_bytes(source.replace(b"\n", b"\r\n"))
+    assert b"\r\n" in path.read_bytes()
+PY_CRLF
+  shield
+  assert_shield 0 active
+}
+
+@test "inactivo: U+0085 sustituye todos los finales de línea de los guards" {
+  python3 - "$GUARDS" <<'PY_NEL'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+source = path.read_bytes()
+assert b"\n" in source and b"\xc2\x85" not in source
+path.write_bytes(source.replace(b"\n", b"\xc2\x85"))
+assert b"\xc2\x85" in path.read_bytes() and b"\n" not in path.read_bytes()
+PY_NEL
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: regex tras paréntesis de for await no es división" {
+  write_regex_import_decoy 'for await (const item of []) /`/;'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: BOM entre if y paréntesis no convierte regex en división" {
+  write_regex_import_decoy $'if\uFEFF(false) /`/;'
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}

@@ -1,5 +1,81 @@
 # NOTAS — regresión de BEFORE_GUARDS (Codex)
 
+## Cuarta ronda del 2026-11-27 — tercera revisión HOLD de #1671
+
+Base comprobada: `de0b8bdf90eee9a46ef5b9b4354cb8b7729c297d`, rama
+`agent/codex-escudo4-tests-20261127`, sobre la base explícita autorizada
+`origin/agent/fix-20261126-escudo`. Tercera revisión leída entera.
+Solo se amplían esta suite y estas notas. No se modifica `scripts/`,
+ninguna spec ni planning-state; sin commits, push ni PR.
+Los apartados inferiores conservan las mediciones históricas.
+
+Antes: **32/32 pasan**. Después: **59 casos, 43 pasan y 16 fallan; exit BATS 1**.
+Los 32 casos y helpers previos son un prefijo idéntico byte a byte del fichero
+ampliado. Ninguna aserción previa cambia. Reproducción:
+
+```bash
+bats --tap tests/bats/test-shield-check-before-guards-codex.bats
+```
+
+| Caso | Escenario añadido | Resultado sobre la base actual |
+| --- | --- | --- |
+| 33–34 | U+2028 / U+2029 en `//` antes de `], __fake = [` | **Fallan: active / 0** |
+| 35 | CR suelto en el mismo comentario | Pasa: inactive / 2 |
+| 36 | U+0085 en el mismo comentario | **Falla: active / 0** |
+| 37 | Todos los finales de línea del fichero de guards son CR sueltos | **Falla: active / 0** |
+| 38–42 | Regex tras `await`, `yield`, `instanceof`, `new`, `extends` | **Fallan los cinco: active / 0** |
+| 43–45 | Regex tras `typeof`, `delete`, `void` | Pasan: inactive / 2 |
+| 46–48 | Regex tras `debugger`, `break etiqueta`, `continue etiqueta` y salto de línea | **Fallan los tres: active / 0** |
+| 49 | BOM U+FEFF entre `return` y el regex | **Falla: active / 0** |
+| 50 | `await /* comentario */` antes del regex | **Falla: active / 0** |
+| 51–52 | Regex tras `yield*` y `return` | Pasan: inactive / 2 |
+| 53–55 | Divisiones `a / b`, `Number(x) / 2`, `arr[0] / n` con cableado real | Pasan: active / 0 |
+| 56 | CRLF en guards y fundación | Pasa: active / 0 |
+| 57 | U+0085 sustituye todos los finales de línea de los guards | Pasa: inactive / 2 |
+| 58 | Regex tras el paréntesis de `for await (const item of [])` | **Falla: active / 0** |
+| 59 | BOM U+FEFF entre `if` y su paréntesis antes del regex | **Falla: active / 0** |
+
+Los **16 rojos** son 33, 34, 36–42, 46–50, 58 y 59. Todos devuelven los ocho
+componentes y `missing: []`; se exige exit 2 y la ausencia exacta de ambos
+cableados. Cada caso conserva intactos los demás componentes. El caso 1
+(árbol real) sigue verde; el script sobre el propio worktree también devuelve
+active / 0, `missing: []`.
+
+Distinción semántica: Node y Bun confirman que U+2028, U+2029 y CR terminan
+`//` y dejan la lista real vacía en la construcción del informe. **U+0085 no
+es un terminador de comentario de ECMAScript**: en 36 la lista conserva ambos
+guards. El caso 36 exige el rechazo conservador pedido; no demuestra un bypass.
+El caso 37 también comprueba la política conservadora pedida: CR es válido en
+JS y Python lo normaliza, pero el encargo exige que no dé activo. El caso 35
+sí contiene la desviación de guards y hoy ya se rechaza.
+
+Las 17 construcciones de regex incluyen el señuelo del informe: backtick en
+regex, lista local vacía, import canónico dentro de template y uso de la lista
+local. Node y Bun ejecutan los 17 módulos (retirada únicamente la anotación
+TS `: any[]`, con comprobación del argumento en lugar del runner) y confirman
+`BEFORE_GUARDS.length = 0`. `instanceof`, `new` y `extends` están en funciones
+no invocadas para evitar errores de ejecución ajenos al análisis léxico.
+
+Autorrevisión: los 16 negativos rojos fallan sobre el script sin modificar.
+En una copia privada se invierten las aserciones de los 11 casos nuevos verdes
+y del árbol real: **12/12 fallan en la aserción**, sin fallos de setup.
+Cada test nuevo puede fallar. Sin `! cmd`, `|| true`, skips ni rebaja de gates.
+Auditor heurístico: **73/100, certified: false, vacuity: [], weak: []**.
+Se documenta la falta de certificación; no se añaden tests de relleno.
+Los TAP de antes/después, mutaciones y verificación semántica quedan en el log
+privado autorizado del run.
+
+La primera ejecución de baseline se interrumpió por espacio en `/tmp` al
+copiar fixtures. Se descartó como medición y se repitió completa con `TMPDIR`
+en el log autorizado, sin limpiar datos de otras sesiones ni cambiar setup.
+Validación complementaria: suite Claude **51/51** y SPEC-OC-01 **20/20**.
+`git diff --check` pasa; solo cambian esta suite y estas notas.
+Validación rápida: **15 PASS, 0 FAIL, 2 WARN** (coherencia advisory y snapshot
+atrasado). Roadmap consultado. No se lee ni actualiza el traspaso privado,
+ni se ejecuta `--clean-state`: alcanzaría estado externo que el encargo prohíbe.
+Siguiente acción: la autora debe corregir los falsos activos y repetir estos
+59 casos sin debilitar las aserciones; esta entrega es TDD rojo deliberado.
+
 ## Tercera ronda del 2026-11-27 — segunda revisión HOLD de #1671
 
 Base: `272990fceefd82832314a287eb6210f426df821d`, rama

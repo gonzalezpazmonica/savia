@@ -103,6 +103,7 @@ guard_registered() {
   python3 -I - "$FOUNDATION" "$BEFORE_GUARDS_FILE" "$1" 2>/dev/null <<'PY'
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 
@@ -118,6 +119,9 @@ def read_src(path):
     text = Path(path).read_bytes().decode("utf-8").replace("\r\n", "\n")
     if any(ch in text for ch in ("\r", "\u2028", "\u2029", "\x85")):
         raise ValueError("terminador de línea no estándar")
+    # BOM o cualquier carácter de formato Unicode (Cf) fuera de la posición 0: ambiguo.
+    if any(unicodedata.category(ch) == "Cf" for ch in text[1:]):
+        raise ValueError("carácter de formato Unicode")
     return text
 
 
@@ -168,6 +172,9 @@ def scan(src):
                 raise ValueError("posible literal regex")
             if word and word.group(0) in JS_WORDS:
                 raise ValueError("barra tras palabra reservada")
+            # `break etiqueta` / `continue etiqueta` + salto de línea (ASI): la barra abre una regex.
+            if word and re.search(r"\b(?:break|continue)\s+$", tail[:word.start()]):
+                raise ValueError("barra tras etiqueta de break/continue")
             if tail[-1] == ")" and after_paren_is_regex("".join(out).rstrip()):
                 raise ValueError("posible regex tras paréntesis")
             out.append(c)
@@ -192,6 +199,10 @@ def after_paren_is_regex(out):
             if depth == 0:
                 before = "".join(out[:k]).rstrip()
                 word = re.search(r"[A-Za-z_$][\w$]*$", before)
+                if word and word.group(0) == "await":  # for await (...)
+                    before = before[:word.start()].rstrip()
+                    word = re.search(r"[A-Za-z_$][\w$]*$", before)
+                    return bool(word and word.group(0) == "for")
                 return bool(word and word.group(0) in ("if", "while", "for", "with"))
     return True
 

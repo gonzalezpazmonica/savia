@@ -481,3 +481,52 @@ PY
   shield
   wired_missing
 }
+
+# ── Ronda 5 (revisión de la suite de Codex): etiquetas, for await, caracteres Cf ──
+
+@test "regex tras for await (...)" {
+  printf '%s\n' 'async function f(xs: any) { for await (const x of xs) /`/.test(""); }' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "regex tras break con etiqueta y salto de linea" {
+  printf '%s\n' 'a: for (;;) { break a' '/`/.test(""); }' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "regex tras continue con etiqueta y salto de linea" {
+  printf '%s\n' 'a: for (;;) { continue a' '/`/.test(""); }' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "BOM en medio de la fundacion" {
+  printf '%s\n' $'if\xef\xbb\xbf (1) /`/.test("");' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "ZWJ (categoria Cf) en before-guards.ts" {
+  printf '%s\n' $'const x\xe2\x80\x8d = 1;' >> "$GUARDS"
+  shield
+  wired_missing
+}
+
+@test "BOM en la posicion 0 de ambos ficheros sigue valiendo" {
+  python3 - "$FOUNDATION" "$GUARDS" <<'PY'
+import sys
+from pathlib import Path
+for f in sys.argv[1:]:
+    p = Path(f); p.write_bytes(b"\xef\xbb\xbf" + p.read_bytes())
+PY
+  shield
+  [ "$status" -eq 0 ]
+}
+
+@test "division normal tras identificador sigue siendo valida" {
+  printf '%s\n' 'const r = total / 2;' >> "$FOUNDATION"
+  shield
+  [ "$status" -eq 0 ]
+}
