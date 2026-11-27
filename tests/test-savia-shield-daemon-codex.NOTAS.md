@@ -84,3 +84,37 @@ No se ejecutó la suite del daemon vivo, que lee el token personal.
 No se ejecutó `--clean-state` ni se leyó/actualizó el handoff privado:
 acceden a otros worktrees o a ubicaciones privadas fuera del alcance del encargo.
 Sin generación de artefactos, commits, push ni PR, conforme a la tarea específica.
+
+## Cambios de expectativa (daemon2, 2026-11-27)
+
+Decisión de la operadora del 2026-11-27, en pregunta interactiva, literal:
+«No leer, no bloquear (Recommended)». El daemon no abre ni lee ningún fichero
+fuera del workspace (realpath y contención), pero no rechaza la escritura
+solo por estar fuera: decide sobre el contenido nuevo.
+
+Casos 1 a 9 de esta suite (`outside_absolute`, `outside_nonexistent`,
+`outside_private_pattern`, `outside_trivial`, `symlink_file`,
+`symlink_directory`, `parent_escape`, `absolute_parent_escape`,
+`path_alias_escape`): solo cambia `reject_escape`. Antes exigía
+`verdict == "BLOCK"`; ahora exige que el veredicto sea el mismo que el del
+mismo contenido sobre un fichero interno nuevo (`docs/reference-new.txt`, sin
+nada que leer), que ese veredicto sea ALLOW para el contenido público de la
+prueba y que no aparezca `split_write`. Se conserva sin tocar la aserción de
+«no se abre ningún fichero bajo `workspace-sibling`». Los títulos de los nueve
+tests pasan de «rechaza…» a «…no se abre/lee y decide por contenido».
+
+Sin cambios: casos 10 a 20 (ruta relativa, normalización interna, rutas
+internas y los cinco de token).
+
+Caso 11 (`normalized_internal`) no cambia de expectativa: fallaba contra el
+arreglo porque la clasificación privada miraba la cadena cruda
+(`projects/../docs` contenía `projects/`). Se arregla el producto: el gate
+normaliza la ruta con `posixpath.normpath` (léxico, sin tocar disco) antes de
+clasificar el destino.
+
+Caso propio 21 (`outside_credential`): una credencial cruzada completa
+(`Server=…;Password=…`, sintética) escrita sobre un fichero existente fuera
+del workspace se bloquea por contenido (`connection_string`) sin abrir el
+fichero externo.
+
+Resultado: 21/21 verdes en esta suite.

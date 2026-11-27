@@ -306,6 +306,10 @@ def gate(hook_input):
 
     # Normalize path separators (Windows uses \, patterns use /)
     fp_norm = fp.replace("\\", "/")
+    # Classify the canonical path: "projects/../docs/x" is docs/, not private.
+    # Lexical only (no filesystem access), so outside paths are never touched.
+    import posixpath
+    fp_norm = posixpath.normpath(fp_norm)
 
     # Destination classification — private paths skip scanning
     private_patterns = ["/projects/", "projects/", ".local.", "/output/", "private-agent-memory",
