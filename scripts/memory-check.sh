@@ -82,7 +82,7 @@ fi
 # ── Layer 4: SQLite memory-cache ───────────────────────────────────
 section "4/10" "SQLite memory-cache.db"
 if [[ -f "$SAVIA_DIR/memory-cache.db" ]]; then
-  cnt=$(python3 -c "import sqlite3; c=sqlite3.connect('$SAVIA_DIR/memory-cache.db'); print(c.execute('SELECT COUNT(*) FROM cache').fetchone()[0])" 2>/dev/null || echo "?")
+  cnt=$(python3 -c "import sys; import sqlite3; c=sqlite3.connect(sys.argv[1]); print(c.execute('SELECT COUNT(*) FROM cache').fetchone()[0])" "$SAVIA_DIR/memory-cache.db" 2>/dev/null || echo "?")
   ok "memory-cache.db: $cnt entries"
 else
   warn "memory-cache.db not found"
@@ -91,8 +91,8 @@ fi
 # ── Layer 5: Knowledge graph ───────────────────────────────────────
 section "5/10" "Knowledge graph (entities + relations)"
 if [[ -f "$SAVIA_DIR/knowledge-graph.db" ]]; then
-  ents=$(python3 -c "import sqlite3; c=sqlite3.connect('$SAVIA_DIR/knowledge-graph.db'); print(c.execute('SELECT COUNT(*) FROM entities').fetchone()[0])" 2>/dev/null || echo "?")
-  rels=$(python3 -c "import sqlite3; c=sqlite3.connect('$SAVIA_DIR/knowledge-graph.db'); print(c.execute('SELECT COUNT(*) FROM relations').fetchone()[0])" 2>/dev/null || echo "?")
+  ents=$(python3 -c "import sys; import sqlite3; c=sqlite3.connect(sys.argv[1]); print(c.execute('SELECT COUNT(*) FROM entities').fetchone()[0])" "$SAVIA_DIR/knowledge-graph.db" 2>/dev/null || echo "?")
+  rels=$(python3 -c "import sys; import sqlite3; c=sqlite3.connect(sys.argv[1]); print(c.execute('SELECT COUNT(*) FROM relations').fetchone()[0])" "$SAVIA_DIR/knowledge-graph.db" 2>/dev/null || echo "?")
   ok "knowledge-graph.db: $ents entities, $rels relations"
 else
   warn "knowledge-graph.db not found"
@@ -133,7 +133,7 @@ fi
 # ── Layer 9: Instincts registry ────────────────────────────────────
 section "9/10" "Instincts registry"
 if [[ -f "$ROOT/.claude/instincts/registry.json" ]]; then
-  cnt=$(python3 -c "import json; d=json.load(open('$ROOT/.claude/instincts/registry.json')); print(len(d) if isinstance(d,list) else len(d.get('instincts',[])))" 2>/dev/null || echo "?")
+  cnt=$(python3 -c "import sys; import json; d=json.load(open(sys.argv[1])); print(len(d) if isinstance(d,list) else len(d.get('instincts',[])))" "$ROOT/.claude/instincts/registry.json" 2>/dev/null || echo "?")
   ok "instincts registry: $cnt entries"
 else
   warn "instincts registry.json missing"

@@ -4,7 +4,7 @@ set -uo pipefail
 
 g0() {
   [[ ! -f "$FAILURE_FILE" ]] && return
-  local info; info=$(python3 -c "import json;d=json.load(open('$FAILURE_FILE'));print(d['failed_file'],d['ts'],d['gate'])" 2>/dev/null) || { rm -f "$FAILURE_FILE"; return; }
+  local info; info=$(python3 -c "import sys; import json;d=json.load(open(sys.argv[1]));print(d['failed_file'],d['ts'],d['gate'])" "$FAILURE_FILE" 2>/dev/null) || { rm -f "$FAILURE_FILE"; return; }
   local ff ts gate; read -r ff ts gate <<< "$info"
   [[ -z "$ff" || "$ff" == "unknown" ]] && { rm -f "$FAILURE_FILE"; return; }
   local file_ts; file_ts=$(git log -1 --format=%cI -- "$ff" 2>/dev/null) || file_ts=""

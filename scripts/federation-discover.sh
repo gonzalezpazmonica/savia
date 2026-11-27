@@ -43,7 +43,7 @@ mkdir -p "$(dirname "$REGISTRY")"
 
 # Helper python para leer/escribir el registry en el mismo formato del TS.
 load_registry() {
-  if [[ -f "$REGISTRY" ]]; then python3 -c "import json,sys; print(json.dumps(json.load(open('$REGISTRY'))))" 2>/dev/null || echo "[]"; else echo "[]"; fi
+  if [[ -f "$REGISTRY" ]]; then python3 -c "import sys; import json,sys; print(json.dumps(json.load(open(sys.argv[1]))))" "$REGISTRY" 2>/dev/null || echo "[]"; else echo "[]"; fi
 }
 
 add() {

@@ -37,7 +37,7 @@ qualify_name() {
 
 # Detect KG backend
 kg_available() {
-  [[ -f "$KG_DB" ]] && python3 -c "import sqlite3; sqlite3.connect('$KG_DB')" 2>/dev/null && return 0
+  [[ -f "$KG_DB" ]] && python3 -c "import sys; import sqlite3; sqlite3.connect(sys.argv[1])" "$KG_DB" 2>/dev/null && return 0
   [[ -f "$KG_JSON" ]] && return 0
   return 1
 }
