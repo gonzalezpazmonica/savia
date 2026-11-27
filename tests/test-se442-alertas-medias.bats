@@ -48,6 +48,8 @@ no_finding() { # ruta KIND
   v2="$(grep -E '^DEFAULT_V2=' "$ROOT/scripts/opencode-install.sh" | cut -d'"' -f2)"
   grep -q "OC_NPM_VER=\"$v1\"" "$ROOT/install.sh"
   grep -q "OC_NPM_VER=\"$v2\"" "$ROOT/install.sh"
+  grep -q "npm install -g opencode-ai@$v1" "$ROOT/install.sh"
+  grep -q "npm install -g @opencode/cli@$v2" "$ROOT/install.sh"
 }
 @test "#95 savia-travel-ops.sh instala Claude Code con versión exacta" {
   no_finding scripts/savia-travel-ops.sh NPM_G_UNPINNED

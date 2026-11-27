@@ -11,26 +11,50 @@ class MiniHTTPServer:
 
     Endpoints:
       GET  /ping           → {"pong": true, "ip": "..."}
-      POST /cmd            → execute command, return JSON
-      GET  /status         → device info
-    """
+      POST /cmd            → execute command, return JSON   (token)
+      GET  /status         → device info                    (token)
 
-    def __init__(self, handler, port=80):
+    SE-442 #25: binds only to the STA interface address (not every
+    interface) and refuses to start without a shared token of
+    MIN_TOKEN_LEN+ chars; /cmd and /status need header X-Zeroclaw-Token.
+    """
+    MIN_TOKEN_LEN = 16
+
+    def __init__(self, handler, port=80, token=None):
         self.handler = handler
         self.port = port
+        self.token = token or ""
         self.sock = None
 
     def start(self):
-        """Start listening. Non-blocking via poll()."""
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.bind(('0.0.0.0', self.port))
-        self.sock.listen(2)
-        self.sock.setblocking(False)
+        """Start listening on the STA IP. Non-blocking via poll()."""
+        if len(self.token) < self.MIN_TOKEN_LEN:
+            raise ValueError("http_token missing or shorter than %d chars" % self.MIN_TOKEN_LEN)
         import network
         ip = network.WLAN(network.STA_IF).ifconfig()[0]
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.bind((ip, self.port))
+        self.sock.listen(2)
+        self.sock.setblocking(False)
         print(f"HTTP server on {ip}:{self.port}")
         return ip
+
+    def _authorized(self, lines):
+        """Constant-time compare of X-Zeroclaw-Token (no hmac in MicroPython)."""
+        got = ""
+        for ln in lines[1:]:
+            if not ln:
+                break
+            if ':' in ln and ln.split(':', 1)[0].strip().lower() == 'x-zeroclaw-token':
+                got = ln.split(':', 1)[1].strip()
+        want = self.token
+        if not want or len(got) != len(want):
+            return False
+        diff = 0
+        for a, b in zip(got, want):
+            diff |= ord(a) ^ ord(b)
+        return diff == 0
 
     def poll(self):
         """Check for incoming requests. Non-blocking."""
@@ -74,6 +98,9 @@ class MiniHTTPServer:
             import network
             ip = network.WLAN(network.STA_IF).ifconfig()[0]
             return json.dumps({"pong": True, "ip": ip})
+
+        if path in ("/status", "/cmd") and not self._authorized(lines):
+            return json.dumps({"error": "unauthorized"})
 
         if path == "/status":
             return json.dumps(self.handler.process("info"))
