@@ -19,7 +19,9 @@
       "input": "gate con score 70 (borde inferior de conditional)",
       "expected": "CONDITIONAL, exit 2",
       "aggregate": {
-        "run": [
+        "script": "scripts/coherence-court.sh",
+        "cwd": "{dir}",
+        "args": [
           "gate",
           "70"
         ],

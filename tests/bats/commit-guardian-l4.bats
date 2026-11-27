@@ -92,12 +92,12 @@ _fixture_agent() { # <frontmatter-line> -> PROJECT_ROOT tree with one agent
 }
 
 # --- Comportamiento (aggregate): se ejecuta el hook del agente (.claude/hooks/block-force-push.sh) ---
-# Ejecutor: tests/bats/l4-script-cases-lib.bash. Sin modelo: el hook recibe el payload PreToolUse real.
-load l4-script-cases-lib
+# Ejecutor: tests/bats/l4-exec-lib.bash (l4_exec_eval.py). Sin modelo: el hook recibe el payload PreToolUse real.
+load l4-exec-lib
 S_BEHAVIOR=".claude/hooks/block-force-push.sh"
 
 @test "[commit-guardian] behavior: entre 3 y 5 casos ejecutables y al menos uno negativo" {
-  l4_script_cases_shape "$E"
+  l4_exec_shape "$E"
 }
 
 @test "[commit-guardian] behavior: el hook ejecutado es el que declara el frontmatter del agente" {
@@ -105,26 +105,26 @@ S_BEHAVIOR=".claude/hooks/block-force-push.sh"
 }
 
 @test "[commit-guardian] behavior golden: push a rama agent/* pasa; push --force se bloquea" {
-  l4_script_cases "$E/golden.json" "$S_BEHAVIOR" "$TMP"
+  l4_exec_cases "$E/golden.json"
 }
 
 @test "[commit-guardian] behavior edge: --force-with-lease a rama no-main pasa" {
-  l4_script_cases "$E/edge.json" "$S_BEHAVIOR" "$TMP"
+  l4_exec_cases "$E/edge.json"
 }
 
 @test "[commit-guardian] behavior adversarial: ruta absoluta, -C y -f combinado siguen bloqueados" {
-  l4_script_cases "$E/adversarial.json" "$S_BEHAVIOR" "$TMP"
+  l4_exec_cases "$E/adversarial.json"
 }
 
 @test "[commit-guardian] behavior bypass: reset --hard dentro de bash -c se bloquea" {
-  l4_script_cases "$E/bypass.json" "$S_BEHAVIOR" "$TMP"
+  l4_exec_cases "$E/bypass.json"
 }
 
 @test "[commit-guardian] mutante: el force push deja de bloquear, golden falla" {
   l4_hook_copy "$S_BEHAVIOR" "$TMP/hooks"
   sed -i 's/^  IS_BARE_FORCE=yes$/  IS_BARE_FORCE=no/' "$TMP/hooks/block-force-push.sh"
   ! cmp -s "$S_BEHAVIOR" "$TMP/hooks/block-force-push.sh"
-  run l4_script_cases "$E/golden.json" "$TMP/hooks/block-force-push.sh" "$TMP"
+  run l4_exec_cases "$E/golden.json" "$S_BEHAVIOR=$TMP/hooks/block-force-push.sh"
   [ "$status" -eq 1 ]
   [[ "$output" == *"golden-force-push-blocked"* ]]
 }
@@ -133,7 +133,7 @@ S_BEHAVIOR=".claude/hooks/block-force-push.sh"
   l4_hook_copy "$S_BEHAVIOR" "$TMP/hooks"
   sed -i 's/^  IS_FORCE_WITH_LEASE=yes$/  IS_BARE_FORCE=yes/' "$TMP/hooks/block-force-push.sh"
   ! cmp -s "$S_BEHAVIOR" "$TMP/hooks/block-force-push.sh"
-  run l4_script_cases "$E/edge.json" "$TMP/hooks/block-force-push.sh" "$TMP"
+  run l4_exec_cases "$E/edge.json" "$S_BEHAVIOR=$TMP/hooks/block-force-push.sh"
   [ "$status" -eq 1 ]
   [[ "$output" == *"edge-lease-feature-allowed"* ]]
 }
@@ -142,7 +142,7 @@ S_BEHAVIOR=".claude/hooks/block-force-push.sh"
   l4_hook_copy "$S_BEHAVIOR" "$TMP/hooks"
   sed -i 's|(\\\\\|\[^\[:space:\]\]\*/)?git(|git(|' "$TMP/hooks/block-force-push.sh"
   ! cmp -s "$S_BEHAVIOR" "$TMP/hooks/block-force-push.sh"
-  run l4_script_cases "$E/adversarial.json" "$TMP/hooks/block-force-push.sh" "$TMP"
+  run l4_exec_cases "$E/adversarial.json" "$S_BEHAVIOR=$TMP/hooks/block-force-push.sh"
   [ "$status" -eq 1 ]
   [[ "$output" == *"adv-absolute-git-dash-c-force"* ]]
 }
@@ -151,7 +151,7 @@ S_BEHAVIOR=".claude/hooks/block-force-push.sh"
   l4_hook_copy "$S_BEHAVIOR" "$TMP/hooks"
   sed -i 's/reset\[\[:space:\]\]+--hard/reset[[:space:]]+--hardx/' "$TMP/hooks/block-force-push.sh"
   ! cmp -s "$S_BEHAVIOR" "$TMP/hooks/block-force-push.sh"
-  run l4_script_cases "$E/bypass.json" "$TMP/hooks/block-force-push.sh" "$TMP"
+  run l4_exec_cases "$E/bypass.json" "$S_BEHAVIOR=$TMP/hooks/block-force-push.sh"
   [ "$status" -eq 1 ]
   [[ "$output" == *"bypass-reset-hard-in-bash-c"* ]]
 }

@@ -19,12 +19,16 @@
       "input": "git push --force-with-lease origin agent/test-x",
       "expected": "exit 0: el lease en rama no-main es la forma permitida (SPEC-105)",
       "aggregate": {
+        "script": ".claude/hooks/block-force-push.sh",
+        "cwd": "{dir}",
         "stdin": "{\"tool_name\": \"Bash\", \"tool_input\": {\"command\": \"git push --force-with-lease origin agent/test-x\"}}",
         "env": {
           "SAVIA_HOOK_PROFILE": "standard"
         },
         "expect": {
-          "exit": 0
+          "exit": 0,
+          "stderr_not_match": ["BLOQUEADO"],
+          "stdout_empty": true
         }
       }
     }

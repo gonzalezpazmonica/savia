@@ -16,9 +16,11 @@
       "input": "contador C con subindice aritmetico que ejecuta una orden",
       "expected": "rechazo antes de evaluar: exit 1 y la orden no se ejecuta",
       "aggregate": {
-        "run": [
+        "script": "scripts/coherence-court.sh",
+        "cwd": "{dir}",
+        "args": [
           "score",
-          "HOME[$(touch {{TMP}}/pwned)]",
+          "HOME[$(touch {dir}/pwned)]",
           "0",
           "0",
           "0"

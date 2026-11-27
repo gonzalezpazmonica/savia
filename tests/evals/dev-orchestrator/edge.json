@@ -19,12 +19,14 @@
       "input": "sin scripts/savia-env.sh",
       "expected": "single-shot (se supone el peor caso: sin Task)",
       "aggregate": {
-        "run": [
+        "script": "scripts/savia-orchestrator-helper.sh",
+        "cwd": "{dir}",
+        "args": [
           "mode"
         ],
         "env": {
-          "PROJECT_ROOT": "{{TMP}}",
-          "AGENTS_DIR": "{{TMP}}/agents"
+          "PROJECT_ROOT": "{dir}",
+          "AGENTS_DIR": "{dir}/agents"
         },
         "expect": {
           "exit": 0,

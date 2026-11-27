@@ -20,13 +20,15 @@
       "input": "inline-prompt de un agente que no existe",
       "expected": "exit 2 y nada en stdout: no se inyecta un prompt vacio como si fuera el agente",
       "aggregate": {
-        "run": [
+        "script": "scripts/savia-orchestrator-helper.sh",
+        "cwd": "{dir}",
+        "args": [
           "inline-prompt",
           "no-existe"
         ],
         "env": {
-          "PROJECT_ROOT": "{{TMP}}",
-          "AGENTS_DIR": "{{TMP}}/agents"
+          "PROJECT_ROOT": "{dir}",
+          "AGENTS_DIR": "{dir}/agents"
         },
         "expect": {
           "exit": 2,

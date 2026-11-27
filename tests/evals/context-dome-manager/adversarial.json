@@ -43,14 +43,16 @@
       "input": "Bash 'cat vaults/secreta/plan.md' con cwd en la raiz",
       "expected": "deny: la ruta relativa se resuelve contra cwd",
       "aggregate": {
-        "stdin": "{\"hook_event_name\": \"PreToolUse\", \"tool_name\": \"Bash\", \"tool_input\": {\"command\": \"cat vaults/secreta/plan.md\"}, \"session_id\": \"eval-s1\", \"cwd\": \"{{TMP}}\"}",
+        "script": ".claude/hooks/dome-guard.sh",
+        "cwd": "{dir}",
+        "stdin": "{\"hook_event_name\": \"PreToolUse\", \"tool_name\": \"Bash\", \"tool_input\": {\"command\": \"cat vaults/secreta/plan.md\"}, \"session_id\": \"eval-s1\", \"cwd\": \"{dir}\"}",
         "env": {
-          "CLAUDE_PROJECT_DIR": "{{TMP}}",
-          "SAVIA_DOME_READ_DIR": "{{TMP}}/.dome-read",
+          "CLAUDE_PROJECT_DIR": "{dir}",
+          "SAVIA_DOME_READ_DIR": "{dir}/.dome-read",
           "SAVIA_HOOK_PROFILE": "standard"
         },
         "files": {
-          "projects/savia-vaults/savia-vaults.domes.json": "{\"version\": 1, \"domes\": {\"interna\": {\"path\": \"{{TMP}}/vaults/interna\", \"confidentiality\": \"N2\"}, \"secreta\": {\"path\": \"{{TMP}}/vaults/secreta\", \"confidentiality\": \"N3\"}}}",
+          "projects/savia-vaults/savia-vaults.domes.json": "{\"version\": 1, \"domes\": {\"interna\": {\"path\": \"{dir}/vaults/interna\", \"confidentiality\": \"N2\"}, \"secreta\": {\"path\": \"{dir}/vaults/secreta\", \"confidentiality\": \"N3\"}}}",
           "vaults/interna/nota.md": "---\ntitle: nota\n---\ncuerpo\n",
           "vaults/secreta/plan.md": "plan N3\n",
           "src/main.rs": "fn main() {}\n"

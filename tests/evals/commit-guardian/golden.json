@@ -20,12 +20,16 @@
       "input": "git push origin agent/test-x",
       "expected": "exit 0: push a rama propia permitido",
       "aggregate": {
+        "script": ".claude/hooks/block-force-push.sh",
+        "cwd": "{dir}",
         "stdin": "{\"tool_name\": \"Bash\", \"tool_input\": {\"command\": \"git push origin agent/test-x\"}}",
         "env": {
           "SAVIA_HOOK_PROFILE": "standard"
         },
         "expect": {
-          "exit": 0
+          "exit": 0,
+          "stderr_not_match": ["BLOQUEADO"],
+          "stdout_empty": true
         }
       }
     },
@@ -35,6 +39,8 @@
       "input": "git push --force origin agent/test-x",
       "expected": "exit 2 BLOQUEADO",
       "aggregate": {
+        "script": ".claude/hooks/block-force-push.sh",
+        "cwd": "{dir}",
         "stdin": "{\"tool_name\": \"Bash\", \"tool_input\": {\"command\": \"git push --force origin agent/test-x\"}}",
         "env": {
           "SAVIA_HOOK_PROFILE": "standard"

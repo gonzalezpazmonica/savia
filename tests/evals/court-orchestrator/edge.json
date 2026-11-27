@@ -19,7 +19,9 @@
       "input": "1 high y 1 low (89, justo bajo pass)",
       "expected": "score=89 verdict=conditional",
       "aggregate": {
-        "run": [
+        "script": "scripts/court-review.sh",
+        "cwd": "{dir}",
+        "args": [
           "score",
           "0",
           "1",

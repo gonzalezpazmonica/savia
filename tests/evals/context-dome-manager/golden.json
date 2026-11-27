@@ -47,14 +47,16 @@
       "input": "Edit de src/main.rs con registro de cupulas presente",
       "expected": "sin salida: fuera de las cupulas el guard no decide",
       "aggregate": {
-        "stdin": "{\"hook_event_name\": \"PreToolUse\", \"tool_name\": \"Edit\", \"tool_input\": {\"file_path\": \"{{TMP}}/src/main.rs\", \"old_string\": \"a\", \"new_string\": \"b\"}, \"session_id\": \"eval-s1\", \"cwd\": \"{{TMP}}\"}",
+        "script": ".claude/hooks/dome-guard.sh",
+        "cwd": "{dir}",
+        "stdin": "{\"hook_event_name\": \"PreToolUse\", \"tool_name\": \"Edit\", \"tool_input\": {\"file_path\": \"{dir}/src/main.rs\", \"old_string\": \"a\", \"new_string\": \"b\"}, \"session_id\": \"eval-s1\", \"cwd\": \"{dir}\"}",
         "env": {
-          "CLAUDE_PROJECT_DIR": "{{TMP}}",
-          "SAVIA_DOME_READ_DIR": "{{TMP}}/.dome-read",
+          "CLAUDE_PROJECT_DIR": "{dir}",
+          "SAVIA_DOME_READ_DIR": "{dir}/.dome-read",
           "SAVIA_HOOK_PROFILE": "standard"
         },
         "files": {
-          "projects/savia-vaults/savia-vaults.domes.json": "{\"version\": 1, \"domes\": {\"interna\": {\"path\": \"{{TMP}}/vaults/interna\", \"confidentiality\": \"N2\"}, \"secreta\": {\"path\": \"{{TMP}}/vaults/secreta\", \"confidentiality\": \"N3\"}}}",
+          "projects/savia-vaults/savia-vaults.domes.json": "{\"version\": 1, \"domes\": {\"interna\": {\"path\": \"{dir}/vaults/interna\", \"confidentiality\": \"N2\"}, \"secreta\": {\"path\": \"{dir}/vaults/secreta\", \"confidentiality\": \"N3\"}}}",
           "vaults/interna/nota.md": "---\ntitle: nota\n---\ncuerpo\n",
           "vaults/secreta/plan.md": "plan N3\n",
           "src/main.rs": "fn main() {}\n"
@@ -71,14 +73,16 @@
       "input": "Edit de una nota dentro de la cupula N2",
       "expected": "ask con el aviso de propuesta: la cupula no se edita a mano",
       "aggregate": {
-        "stdin": "{\"hook_event_name\": \"PreToolUse\", \"tool_name\": \"Edit\", \"tool_input\": {\"file_path\": \"{{TMP}}/vaults/interna/nota.md\", \"old_string\": \"cuerpo\", \"new_string\": \"x\"}, \"session_id\": \"eval-s1\", \"cwd\": \"{{TMP}}\"}",
+        "script": ".claude/hooks/dome-guard.sh",
+        "cwd": "{dir}",
+        "stdin": "{\"hook_event_name\": \"PreToolUse\", \"tool_name\": \"Edit\", \"tool_input\": {\"file_path\": \"{dir}/vaults/interna/nota.md\", \"old_string\": \"cuerpo\", \"new_string\": \"x\"}, \"session_id\": \"eval-s1\", \"cwd\": \"{dir}\"}",
         "env": {
-          "CLAUDE_PROJECT_DIR": "{{TMP}}",
-          "SAVIA_DOME_READ_DIR": "{{TMP}}/.dome-read",
+          "CLAUDE_PROJECT_DIR": "{dir}",
+          "SAVIA_DOME_READ_DIR": "{dir}/.dome-read",
           "SAVIA_HOOK_PROFILE": "standard"
         },
         "files": {
-          "projects/savia-vaults/savia-vaults.domes.json": "{\"version\": 1, \"domes\": {\"interna\": {\"path\": \"{{TMP}}/vaults/interna\", \"confidentiality\": \"N2\"}, \"secreta\": {\"path\": \"{{TMP}}/vaults/secreta\", \"confidentiality\": \"N3\"}}}",
+          "projects/savia-vaults/savia-vaults.domes.json": "{\"version\": 1, \"domes\": {\"interna\": {\"path\": \"{dir}/vaults/interna\", \"confidentiality\": \"N2\"}, \"secreta\": {\"path\": \"{dir}/vaults/secreta\", \"confidentiality\": \"N3\"}}}",
           "vaults/interna/nota.md": "---\ntitle: nota\n---\ncuerpo\n",
           "vaults/secreta/plan.md": "plan N3\n",
           "src/main.rs": "fn main() {}\n"

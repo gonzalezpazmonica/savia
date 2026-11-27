@@ -92,34 +92,34 @@ _fixture_agent() { # <frontmatter-line> -> PROJECT_ROOT tree with one agent
 }
 
 # --- Comportamiento (aggregate): se ejecuta scripts/court-review.sh y se compara su salida ---
-# Ejecutor: tests/bats/l4-script-cases-lib.bash. Sin modelo: solo el script determinista.
-load l4-script-cases-lib
+# Ejecutor: tests/bats/l4-exec-lib.bash (l4_exec_eval.py). Sin modelo: solo el script determinista.
+load l4-exec-lib
 S_BEHAVIOR="scripts/court-review.sh"
 
 @test "[court-orchestrator] behavior: entre 3 y 5 casos ejecutables y al menos uno negativo" {
-  l4_script_cases_shape "$E"
+  l4_exec_shape "$E"
 }
 
 @test "[court-orchestrator] behavior golden: sin hallazgos 100 pass; un critico y dos medios 69 fail" {
-  l4_script_cases "$E/golden.json" "$S_BEHAVIOR" "$TMP"
+  l4_exec_cases "$E/golden.json"
 }
 
 @test "[court-orchestrator] behavior edge: 89 es conditional, no pass" {
-  l4_script_cases "$E/edge.json" "$S_BEHAVIOR" "$TMP"
+  l4_exec_cases "$E/edge.json"
 }
 
 @test "[court-orchestrator] behavior adversarial: hallazgos inflados no dan score negativo" {
-  l4_script_cases "$E/adversarial.json" "$S_BEHAVIOR" "$TMP"
+  l4_exec_cases "$E/adversarial.json"
 }
 
 @test "[court-orchestrator] behavior bypass: una segunda ronda de fix en la misma review falla" {
-  l4_script_cases "$E/bypass.json" "$S_BEHAVIOR" "$TMP"
+  l4_exec_cases "$E/bypass.json"
 }
 
 @test "[court-orchestrator] mutante: umbral conditional 70 -> 69, golden falla" {
   sed 's/COURT_SCORE_CONDITIONAL:-70/COURT_SCORE_CONDITIONAL:-69/' "$S_BEHAVIOR" > "$TMP/cr.sh"
   ! cmp -s "$S_BEHAVIOR" "$TMP/cr.sh"
-  run l4_script_cases "$E/golden.json" "$TMP/cr.sh" "$TMP"
+  run l4_exec_cases "$E/golden.json" "$S_BEHAVIOR=$TMP/cr.sh"
   [ "$status" -eq 1 ]
   [[ "$output" == *"golden-score-critical-fail"* ]]
 }
@@ -127,7 +127,7 @@ S_BEHAVIOR="scripts/court-review.sh"
 @test "[court-orchestrator] mutante: sin suelo en 0, adversarial falla" {
   sed 's/\[\[ "\$score" -lt 0 \]\] && score=0/:/' "$S_BEHAVIOR" > "$TMP/cr.sh"
   ! cmp -s "$S_BEHAVIOR" "$TMP/cr.sh"
-  run l4_script_cases "$E/adversarial.json" "$TMP/cr.sh" "$TMP"
+  run l4_exec_cases "$E/adversarial.json" "$S_BEHAVIOR=$TMP/cr.sh"
   [ "$status" -eq 1 ]
   [[ "$output" == *"adv-score-floor-zero"* ]]
 }
@@ -135,7 +135,7 @@ S_BEHAVIOR="scripts/court-review.sh"
 @test "[court-orchestrator] mutante: COURT_MAX_FIX_ROUNDS 1 -> 2, bypass falla" {
   sed 's/COURT_MAX_FIX_ROUNDS:-1}/COURT_MAX_FIX_ROUNDS:-2}/' "$S_BEHAVIOR" > "$TMP/cr.sh"
   ! cmp -s "$S_BEHAVIOR" "$TMP/cr.sh"
-  run l4_script_cases "$E/bypass.json" "$TMP/cr.sh" "$TMP"
+  run l4_exec_cases "$E/bypass.json" "$S_BEHAVIOR=$TMP/cr.sh"
   [ "$status" -eq 1 ]
   [[ "$output" == *"bypass-second-fix-round"* ]]
 }

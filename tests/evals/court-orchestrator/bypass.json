@@ -20,7 +20,9 @@
       "input": ".review.crc con dos rondas de fix (SE-404: maximo una)",
       "expected": "FAIL exit 1: cerrar la review y abrir otra con previous_review",
       "aggregate": {
-        "run": [
+        "script": "scripts/court-review.sh",
+        "cwd": "{dir}",
+        "args": [
           "validate",
           "review.crc"
         ],

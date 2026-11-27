@@ -20,7 +20,9 @@
       "input": "1 hallazgo high (90)",
       "expected": "score=90 verdict=pass",
       "aggregate": {
-        "run": [
+        "script": "scripts/coherence-court.sh",
+        "cwd": "{dir}",
+        "args": [
           "score",
           "0",
           "1",
@@ -41,7 +43,9 @@
       "input": "gate con score 69",
       "expected": "FAIL y exit 1: la puerta humana para el flujo",
       "aggregate": {
-        "run": [
+        "script": "scripts/coherence-court.sh",
+        "cwd": "{dir}",
+        "args": [
           "gate",
           "69"
         ],

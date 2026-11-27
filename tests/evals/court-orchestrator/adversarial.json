@@ -16,7 +16,9 @@
       "input": "5 criticos (score bruto -25)",
       "expected": "score=0 verdict=fail: el score nunca es negativo",
       "aggregate": {
-        "run": [
+        "script": "scripts/court-review.sh",
+        "cwd": "{dir}",
+        "args": [
           "score",
           "5",
           "0",

@@ -111,12 +111,12 @@ setup() {
 
 # --- Comportamiento (aggregate): se ejecuta el guard de cupulas (.claude/hooks/dome-guard.sh) ---
 # Es el enforcement «dome-guard» del descriptor: el agente no edita cupulas a mano ni lee N3 hacia la nube.
-# Ejecutor: tests/bats/l4-script-cases-lib.bash. Sin modelo: el hook recibe el payload PreToolUse real.
-load l4-script-cases-lib
+# Ejecutor: tests/bats/l4-exec-lib.bash (l4_exec_eval.py). Sin modelo: el hook recibe el payload PreToolUse real.
+load l4-exec-lib
 S_BEHAVIOR=".claude/hooks/dome-guard.sh"
 
 @test "[context-dome-manager] behavior: entre 3 y 5 casos ejecutables y al menos uno negativo" {
-  l4_script_cases_shape "$E"
+  l4_exec_shape "$E"
 }
 
 @test "[context-dome-manager] behavior: el guard ejecutado es el enforcement del descriptor" {
@@ -124,26 +124,26 @@ S_BEHAVIOR=".claude/hooks/dome-guard.sh"
 }
 
 @test "[context-dome-manager] behavior golden: fuera de cupulas no decide; editar una nota de cupula pregunta" {
-  l4_script_cases "$E/golden.json" "$S_BEHAVIOR" "$TMP"
+  l4_exec_cases "$E/golden.json"
 }
 
 @test "[context-dome-manager] behavior edge: leer una cupula N3 con proveedor de nube se deniega" {
-  l4_script_cases "$E/edge.json" "$S_BEHAVIOR" "$TMP"
+  l4_exec_cases "$E/edge.json"
 }
 
 @test "[context-dome-manager] behavior adversarial: una ruta relativa en Bash no esquiva la N3" {
-  l4_script_cases "$E/adversarial.json" "$S_BEHAVIOR" "$TMP"
+  l4_exec_cases "$E/adversarial.json"
 }
 
 @test "[context-dome-manager] behavior bypass: reescribir el registro de cupulas no pasa sin la persona" {
-  l4_script_cases "$E/bypass.json" "$S_BEHAVIOR" "$TMP"
+  l4_exec_cases "$E/bypass.json"
 }
 
 @test "[context-dome-manager] mutante: N3 en nube pasa a ask, edge falla" {
   l4_hook_copy "$S_BEHAVIOR" "$TMP/hooks"
   sed -i 's/return "deny", f"la cúpula «{d\[.id.\]}» es {level_name(d\[.level.\])}: {CLOUD_DENIED}"/return "ask", "rebajado"/' "$TMP/hooks/lib/dome_guard.py"
   ! cmp -s .claude/hooks/lib/dome_guard.py "$TMP/hooks/lib/dome_guard.py"
-  run l4_script_cases "$E/edge.json" "$TMP/hooks/dome-guard.sh" "$TMP"
+  run l4_exec_cases "$E/edge.json" "$S_BEHAVIOR=$TMP/hooks/dome-guard.sh"
   [ "$status" -eq 1 ]
   [[ "$output" == *"edge-read-n3-cloud-denied"* ]]
 }
@@ -152,7 +152,7 @@ S_BEHAVIOR=".claude/hooks/dome-guard.sh"
   l4_hook_copy "$S_BEHAVIOR" "$TMP/hooks"
   sed -i 's/^# Camino rápido: sin registro no hay cúpulas que proteger.$/exit 0/' "$TMP/hooks/dome-guard.sh"
   ! cmp -s "$S_BEHAVIOR" "$TMP/hooks/dome-guard.sh"
-  run l4_script_cases "$E/golden.json" "$TMP/hooks/dome-guard.sh" "$TMP"
+  run l4_exec_cases "$E/golden.json" "$S_BEHAVIOR=$TMP/hooks/dome-guard.sh"
   [ "$status" -eq 1 ]
   [[ "$output" == *"golden-edit-in-dome-asks"* ]]
 }

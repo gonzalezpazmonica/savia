@@ -1,17 +1,26 @@
 # l4-exec-lib.bash — evals L4 de COMPORTAMIENTO que ejecutan el guardarrail real.
+# Ejecutor unico para los agentes cuyo script determinista es un hook o script
+# (el agregador del Recommendation Tribunal usa l4_aggregate_cases de l4-eval-lib.bash).
 #
 # Formato de un case ejecutable en tests/evals/<agente>/{golden,edge,adversarial,bypass}.json:
 #   "aggregate": {
 #     "script": "<ruta repo del script o hook real>",
 #     "args":   ["..."],                       # opcional; "{dir}" = directorio temporal del case
+#     "cwd":    "{dir}",                       # opcional; por defecto, la raiz del repo
 #     "stdin_command": "<orden>" | ["parte", "parte"],   # entrada de hook PreToolUse (Bash)
 #     "stdin_json": {...} | "stdin": "<texto>" | [partes],  # otras entradas
 #     "files": {"<ruta relativa a {dir}>": "<contenido>" | [partes]},
 #     "env":   {"VAR": "valor"},
 #     "expect": {"exit": N, "stdout_match": re, "stdout_not_match": re,
-#                "stderr_match": re, "stderr_not_match": re,
+#                "stderr_match": re, "stderr_not_match": re,   # re = regex o lista (todas)
+#                "stdout_empty": true, "json": {"<ruta jq>": <valor>},
 #                "files_match": {"<ruta>": re}, "files_absent": ["<ruta>"]}
 #   }
+# Un case con "negative": true espera rechazo o bloqueo (l4_exec_shape).
+# El script se resuelve desde la raiz del repo y corre sin las variables del
+# operador que cambian su decision (ISOLATE en l4_exec_eval.py); el env del case
+# se aplica despues. Fallan cerrado: claves desconocidas, "{{TMP}}" (marcador
+# retirado) y un exit 0 sin otra expectativa.
 # Las partes se concatenan al ejecutar: asi los fixtures no contienen literales
 # con forma de credencial o PII que disparen los escaneres del repo.
 # La matriz (scripts/eval-coverage-matrix.py) cuenta estos cases como comportamiento.
@@ -42,4 +51,26 @@ l4_exec_mutant() {
   if [[ "$src" == .claude/hooks/* && ! -e "$(dirname "$dst")/lib" ]]; then
     ln -s "$PWD/.claude/hooks/lib" "$(dirname "$dst")/lib"
   fi
+}
+
+# l4_hook_copy <hook> <dstdir> — copia el hook y su lib/ para mutarlos sin tocar el repo.
+l4_hook_copy() {
+  mkdir -p "$2"
+  cp "$1" "$2/"
+  cp -R "$(dirname "$1")/lib" "$2/lib"
+}
+
+# l4_exec_shape <evaldir>
+# Cada fixture (golden, edge, adversarial, bypass) tiene al menos un case ejecutable,
+# el agente suma entre 3 y 5 y al menos uno es "negative".
+l4_exec_shape() {
+  local dir="$1" s c total=0 neg=0
+  for s in golden edge adversarial bypass; do
+    c=$(jq '[.cases // [] | .[] | select(has("aggregate"))] | length' "$dir/$s.json")
+    [ "$c" -ge 1 ] || { echo "l4: $dir/$s.json sin case ejecutable" >&2; return 1; }
+    total=$((total + c))
+    neg=$((neg + $(jq '[.cases // [] | .[] | select(has("aggregate") and .negative == true)] | length' "$dir/$s.json")))
+  done
+  [ "$total" -ge 3 ] && [ "$total" -le 5 ] || { echo "l4: $total cases ejecutables (3-5)" >&2; return 1; }
+  [ "$neg" -ge 1 ] || { echo "l4: ningun case negativo" >&2; return 1; }
 }
