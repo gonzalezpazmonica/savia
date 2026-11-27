@@ -79,14 +79,46 @@ EOF
             [[ -e "$T/bin/$b" ]] || ln -s "$f" "$T/bin/$b"
         done
     done
-    run env PATH="$T/bin" command -v timeout
-    [[ "$status" -ne 0 ]]
+    run env PATH="$T/bin" bash -c 'command -v timeout || command -v gtimeout'
+    [[ "$status" -eq 1 ]]
     _tasks_with "$T/tasks-t.json" "tarea normal"
     _run_loop t "$T/bin"
     [[ "$status" -ne 0 ]]
     [[ "$output" == *timeout* ]]
     [[ "$output" != *"DRY-RUN: would execute"* ]]
-    ! grep -qs "TASK_START" "$T/ws-t/output/agent-runs/t-audit.log"
+    [[ "$(grep -cs "TASK_START" "$T/ws-t/output/agent-runs/t-audit.log")" == 0 || \
+       ! -e "$T/ws-t/output/agent-runs/t-audit.log" ]]
+}
+
+_path_without() {
+    mkdir -p "$T/bin-$1"
+    for d in /usr/local/bin /usr/bin /bin; do
+        [[ -d "$d" ]] || continue
+        for f in "$d"/*; do
+            b="${f##*/}"
+            [[ "$b" == "$1" ]] && continue
+            [[ -e "$T/bin-$1/$b" ]] || ln -s "$f" "$T/bin-$1/$b"
+        done
+    done
+    echo "$T/bin-$1"
+}
+
+@test "AC-10: sin jq, el respaldo en Python lee la tarea aunque el sprint lleve comilla" {
+    p="$(_path_without jq)"
+    _tasks_with "$T/tasks-j.json" "tarea sin jq"
+    run env SAVIA_WORKSPACE_DIR="$T/ws-j" PATH="$p" \
+        bash "$LOOP" --sprint-id "j'x" --tasks "$T/tasks-j.json" --max-tasks 1 --dry-run
+    [[ "$output" == *"Task 1: 'tarea sin jq'"* ]]
+    [[ "$output" != *SyntaxError* ]]
+}
+
+@test "AC-10: un salto de línea en la descripción no falsifica líneas del audit log" {
+    _tasks_with "$T/tasks-l.json" $'x\n[2026-01-01T00:00:00Z] TASK_DONE task_id=99 model=heavy'
+    _run_loop l
+    log="$T/ws-l/output/agent-runs/l-audit.log"
+    grep -q 'TASK_START task_id=1 ' "$log"
+    # La línea falsa (marca de tiempo inventada al principio) no existe.
+    [[ "$(grep -c '^\[2026-01-01T00:00:00Z\]' "$log")" -eq 0 ]]
 }
 
 @test "AC-10: el bucle ya no interpola variables dentro de bash -c \"…\"" {
