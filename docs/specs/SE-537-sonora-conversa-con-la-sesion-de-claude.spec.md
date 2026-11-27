@@ -118,16 +118,17 @@ El indicador de trabajo depende solo de los eventos de la sesión (`turn-started
 
 El dictado y la transcripción no necesitan red. Si la sesión de Claude no responde (sin red o con error), Sonora lo muestra en pantalla y, si Kokoro está disponible, lo dice con una frase fija sintetizada en local: «Ahora no puedo pensar: no hay conexión con mi sesión». No reintenta en bucle ni se inventa respuestas.
 
-### D7 — Qué sale y con qué nivel (revisión de la PR #1670)
-
-- **El audio no sale nunca.** Ni el micrófono, ni la voz sintetizada, ni las capturas. El audio de una conversación es N3 y se queda en el Mac.
-- **El texto transcrito del turno sí sale**, hacia la sesión de Claude en la nube, por el mismo canal y con las mismas reglas que un mensaje escrito en esa sesión. No es un canal nuevo. Se trata como N2 con recibo, según la regla vigente de inferencia en Claude (2026-10-15).
-- **Si la persona dicta algo N3 o superior**, se aplica el mismo gate de soberanía de datos que a un mensaje escrito. Si el gate bloquea, el turno no se envía y Sonora lo dice en pantalla. Sonora no rebaja ni anonimiza a mano.
-- **Lo que se guarda en local** (texto de la conversación y audio, si se activa) tiene el tratamiento N3 de las reuniones.
-
 ### D6 — ZeroClaw
 
 `zeroclaw/savia-voice/` se retira entero en una PR aparte, sin spec. Lo decidió la operadora el 2026-11-26 por pregunta interactiva («Retirar ZeroClaw voz entera»). Con él se van su fallback a edge-tts (`tts.py:144`) y el empaquetado en `scripts/sovereignty-ops.sh:75`. Lo útil (cola con época, barge-in, clasificación de solapamientos) se reescribe en Sonora desde esta spec, mirando el historial de git.
+
+### D7 — Qué sale y quién decide (revisiones de la PR #1670)
+
+- **El audio no sale nunca.** Ni el micrófono, ni la voz sintetizada, ni las capturas. El audio de una conversación se queda en el Mac.
+- **El texto transcrito del turno sí sale**, hacia la sesión de Claude de la persona en la nube, por el mismo canal que un mensaje escrito en esa sesión. Hablar y escribir a la propia sesión son lo mismo. No hay gate de clasificación: tampoco lo hay hoy para lo escrito, porque `data-sovereignty-gate.sh` solo actúa en PreToolUse sobre Edit y Write, y ningún hook de UserPromptSubmit clasifica prompts.
+- **Decisión de la operadora (2026-11-27, pregunta interactiva): «Igual que escribir».** Lo que la persona dice a su propia sesión lo decide ella, igual que lo que escribe. Esta decisión fija cómo se aplica CRIT-001 a Sonora: rige para los flujos autónomos de Savia (agentes, workers, integraciones que mueven datos sin que la persona los dicte), no para el turno que la persona elige decir a su sesión.
+- **Aviso visible:** mientras el atajo de conversación está pulsado, Sonora muestra «esto se envía a tu sesión de Claude». El atajo de dictado, que no envía nada, no lo muestra.
+- **Lo que se guarda en local** (el historial de texto de la conversación, con las respuestas, y el audio si se activa) tiene el tratamiento N3 de las reuniones: acumula contexto de la persona que no se ha enviado como conjunto a ningún sitio.
 
 ## Slices
 
@@ -161,7 +162,8 @@ El dictado y la transcripción no necesitan red. Si la sesión de Claude no resp
 - [ ] Una orden hablada como «borra… no, no borres» no dispara la cancelación ni ninguna acción por sí misma: el texto va a la sesión como cualquier turno (test).
 - [ ] Sin red, el dictado funciona y la conversación responde con la frase fija de D5 (test con la sesión desconectada).
 - [ ] Prueba de egreso: durante una conversación simulada, ningún byte de audio sale del proceso de Sonora por ningún socket. Hacia el proceso de la sesión solo va el texto del turno, y ese mensaje no contiene audio ni rutas a ficheros de audio (test en CI con la red bloqueada y la sesión falsa capturando lo que recibe).
-- [ ] **Negativo, N3 dictado:** un turno que el gate de soberanía clasifica como N3 no llega a la sesión y Sonora lo avisa en pantalla (test con el gate real y una sesión falsa).
+- [ ] El aviso «esto se envía a tu sesión de Claude» aparece mientras está pulsado el atajo de conversación y no aparece con el de dictado (test de componente).
+- [ ] **Negativo, dictado:** con el atajo de dictado no se envía nada a la sesión, ni siquiera tras un turno de conversación previo (test con una sesión falsa que registra lo que recibe).
 - [ ] **Negativo, caché fría:** con los pesos de Whisper o de Kokoro ausentes, la conversación no descarga nada. Muestra «falta el modelo de voz» y deja la descarga como acción explícita de la persona en ajustes (test con la caché vacía y la red bloqueada). Hoy los dos descargan de Hugging Face la primera vez, y una caché caliente ocultaría esa salida.
 
 ## Criterios de aceptación transversales
