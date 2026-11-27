@@ -383,3 +383,39 @@ _verd() { echo "$output" | jq -r .verdict; }
   run env RISK_GATE_THRESHOLD=0.8 bash "$SCRIPT" --decision deploy --context '{"risk_score":0.5}'
   [[ "$output" != *'"gate":"G3"'* ]]
 }
+
+# ── G3 falla cerrado (barrido Python, hallazgo fuera de clase) ──────────────
+
+@test "G3 fail-closed: risk_score no numérico bloquea" {
+  _w
+  for v in '"alto"' 'null' '"NaN"' '"inf"' '[0.9]' '""' 'true'; do
+    run _g --decision deploy --context "{\"risk_score\":$v}"
+    [ "$status" -eq 1 ]
+    [ "$(_gate)" = "G3" ]
+    [ "$(_verd)" = "BLOCK" ]
+    [[ "$output" == *"no numérico"* ]]
+  done
+}
+
+@test "G3 fail-closed: umbral no numérico bloquea si hay risk_score" {
+  _w
+  for t in abc nan inf 0.8x; do
+    RISK_GATE_THRESHOLD="$t" run _g --decision deploy --context '{"risk_score":0.1}'
+    [ "$status" -eq 1 ]
+    [ "$(_gate)" = "G3" ]
+    [[ "$output" == *"RISK_GATE_THRESHOLD"* ]]
+  done
+}
+
+@test "G3 fail-closed: números válidos siguen funcionando" {
+  _w
+  run _g --decision deploy --context '{"risk_score": 0}'
+  [ "$status" -eq 0 ]
+  run _g --decision deploy --context '{"risk_score":1e-3}'
+  [ "$status" -eq 0 ]
+  run _g --decision deploy --context '{"risk_score":-0.2}'
+  [ "$status" -eq 0 ]
+  run _g --decision deploy --context '{"risk_score":9E-1}'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"> threshold"* ]]
+}
