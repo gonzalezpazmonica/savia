@@ -27,7 +27,7 @@ timeline:
 Sonora graba y transcribe reuniones, y lo hace bien: el backend pasa 401 tests y el frontend 27. Pero no conversa con nadie. La única conversación por voz con Claude que existe está en otro sitio y lleva meses sin uso.
 
 1. **No hay servicio de conversación.** `projects/savia-sonora/app/src-pyloid/` no tiene `services/conversation/` ni nada con otro nombre que haga lo mismo. SE-310 lo describe, pero sigue PROPOSED desde 2026-08-07.
-2. **SE-310 elige un cerebro que ya no vale.** Su tabla de decisiones pone Ollama como cerebro, a través de `OpenAICompatibleProvider` (`services/recording/llm.py:32`). Desde el 2026-10-15 la inferencia de Savia va a los modelos de Claude, y Ollama trunca el prompt en silencio. Hoy ese proveedor solo genera el resumen y el título de las reuniones (`recording/controller.py:706,769`).
+2. **SE-310 elige un cerebro que ya no vale.** Su tabla de decisiones pone Ollama como cerebro, a través de `OpenAICompatibleProvider` (`services/recording/llm.py:32`). Desde el 2026-10-15 la inferencia de Savia va a los modelos de Claude, y Ollama trunca el prompt en silencio. Hoy ese proveedor solo genera el resumen y el título de las reuniones (`recording/controller.py:763-769`, `_provider_from_config`) y prueba la conexión (`:706`, `_probe_provider`).
 3. **La voz de Savia no tiene consumidor.** `scripts/savia-kokoro.py` y `savia-voice-*.sh` funcionan y tienen tests, pero nadie los llama. Son una CLI que escribe un WAV, no un proceso que reproduce por frases.
 4. **El único binding a Claude está dormido y sale a la nube.** `zeroclaw/savia-voice/session.py:56` lanza un `claude -p --output-format stream-json --include-partial-messages --resume` en cada turno. Tiene barge-in y cola de voz (`daemon.py:74-136`, `tts.py:59-108`), pero no hay servicio instalado ni nadie que lo llame. Y `tts.py:144` recurre a edge-tts, la voz en la nube de Microsoft, ante cualquier error de Kokoro, sin preguntar.
 5. **Cortar la voz no es cancelar el trabajo, y en ZeroClaw se confunden.** `tts.cancel()` calla la voz, pero el `claude -p` del turno solo muere por timeout (`session.py:80`). Encima hay rellenos pregrabados («Déjame que lo mire», `session.py:83-99`) que anuncian una acción que ningún evento real respalda.
@@ -49,7 +49,7 @@ Un atajo propio, distinto del de dictado, para hablar con Savia. Savia contesta 
 1. **Pregunta por voz.** En el Mac, la persona mantiene pulsado el atajo, dice en castellano «¿cómo van las PR de hoy?» y lo suelta. Sonora lo transcribe en local, la sesión de Claude de Savia responde y la persona la oye con voz local, frase a frase, mientras lee el texto debajo.
 2. **Interrumpir sin cancelar.** Mientras Savia contesta, la persona vuelve a pulsar el atajo. La voz se calla al instante, pero el trabajo que Savia tenía en marcha sigue. Se ve en un indicador aparte.
 3. **La cara.** Encima de los subtítulos hay una cara 2D sencilla, no realista, que solo mueve la boca cuando suena la voz y que indica si escucha o habla. La persona puede elegir entre al menos dos estilos o quitarla, y la conversación sigue igual. *(Esta escena la desarrolla SE-538. Aquí solo cuenta que la conversación no depende de la cara.)*
-4. **Nada sale del Mac.** Ni la voz ni el audio salen del Mac. Si se cae la red, el dictado sigue funcionando y Sonora avisa de que no puede razonar, sin inventarse respuestas.
+4. **Ninguna voz ni audio sale del Mac.** Ni la voz ni el audio salen del Mac; lo único que sale es el texto del turno hacia la sesión de Claude, como cuando se escribe en ella (ver D7). Si se cae la red, el dictado sigue funcionando y Sonora avisa de que no puede razonar, sin inventarse respuestas.
 
 ### Palabras de la persona
 
@@ -103,7 +103,7 @@ SE-310 está en el formato antiguo (`projects/savia-sonora/specs/`), no figura e
 
 ### D3 — Voz: proceso Kokoro con cola y época
 
-`services/conversation/tts_worker.py` es un proceso hijo con Kokoro cargado una sola vez. Recibe frases del separador existente (`scripts/lib/sentence-splitter.py`) y reproduce PCM. Cada turno tiene una **época**: `interrupt_speech` sube la época, vacía la cola y corta la reproducción en curso. Cualquier frase de una época anterior se descarta. Sin fallback en la nube: si Kokoro falla, Sonora dice «no tengo voz» y deja el texto en pantalla.
+`services/conversation/tts_worker.py` es un proceso hijo con Kokoro cargado una sola vez. Recibe frases del separador existente (`scripts/lib/sentence-splitter.py`) y reproduce PCM. Cada turno tiene una **época**: `interrupt_speech` sube la época, vacía la cola y corta la reproducción en curso. Cualquier frase de una época anterior se descarta. Sin fallback en la nube: si Kokoro falla, Sonora muestra en pantalla «no tengo voz» y deja el texto de la respuesta.
 
 ### D4 — Callar no es cancelar
 
@@ -116,7 +116,14 @@ El indicador de trabajo depende solo de los eventos de la sesión (`turn-started
 
 ### D5 — Sin red
 
-El dictado y la transcripción no necesitan red. Si la sesión de Claude no responde (sin red o con error), Sonora lo muestra y lo dice con una frase fija sintetizada en local: «Ahora no puedo pensar: no hay conexión con mi sesión». No reintenta en bucle ni se inventa respuestas.
+El dictado y la transcripción no necesitan red. Si la sesión de Claude no responde (sin red o con error), Sonora lo muestra en pantalla y, si Kokoro está disponible, lo dice con una frase fija sintetizada en local: «Ahora no puedo pensar: no hay conexión con mi sesión». No reintenta en bucle ni se inventa respuestas.
+
+### D7 — Qué sale y con qué nivel (revisión de la PR #1670)
+
+- **El audio no sale nunca.** Ni el micrófono, ni la voz sintetizada, ni las capturas. El audio de una conversación es N3 y se queda en el Mac.
+- **El texto transcrito del turno sí sale**, hacia la sesión de Claude en la nube, por el mismo canal y con las mismas reglas que un mensaje escrito en esa sesión. No es un canal nuevo. Se trata como N2 con recibo, según la regla vigente de inferencia en Claude (2026-10-15).
+- **Si la persona dicta algo N3 o superior**, se aplica el mismo gate de soberanía de datos que a un mensaje escrito. Si el gate bloquea, el turno no se envía y Sonora lo dice en pantalla. Sonora no rebaja ni anonimiza a mano.
+- **Lo que se guarda en local** (texto de la conversación y audio, si se activa) tiene el tratamiento N3 de las reuniones.
 
 ### D6 — ZeroClaw
 
@@ -153,7 +160,8 @@ El dictado y la transcripción no necesitan red. Si la sesión de Claude no resp
 - [ ] «Parar trabajo» pide confirmación y, si se confirma, interrumpe el turno. La voz se calla también.
 - [ ] Una orden hablada como «borra… no, no borres» no dispara la cancelación ni ninguna acción por sí misma: el texto va a la sesión como cualquier turno (test).
 - [ ] Sin red, el dictado funciona y la conversación responde con la frase fija de D5 (test con la sesión desconectada).
-- [ ] Prueba de egreso: durante una conversación simulada, ningún socket sale con audio ni texto de voz hacia hosts que no sean el proceso local de la sesión (test en CI con la red bloqueada).
+- [ ] Prueba de egreso: durante una conversación simulada, ningún byte de audio sale del proceso de Sonora por ningún socket. Hacia el proceso de la sesión solo va el texto del turno, y ese mensaje no contiene audio ni rutas a ficheros de audio (test en CI con la red bloqueada y la sesión falsa capturando lo que recibe).
+- [ ] **Negativo, N3 dictado:** un turno que el gate de soberanía clasifica como N3 no llega a la sesión y Sonora lo avisa en pantalla (test con el gate real y una sesión falsa).
 - [ ] **Negativo, caché fría:** con los pesos de Whisper o de Kokoro ausentes, la conversación no descarga nada. Muestra «falta el modelo de voz» y deja la descarga como acción explícita de la persona en ajustes (test con la caché vacía y la red bloqueada). Hoy los dos descargan de Hugging Face la primera vez, y una caché caliente ocultaría esa salida.
 
 ## Criterios de aceptación transversales
@@ -190,7 +198,7 @@ Micrófono abierto y AEC; voz a voz; catálogo y selección de motores; gallego 
 ## Riesgos
 
 - **Mac sin probar.** Pyloid, Qt WebEngine, los atajos y el micrófono no se han probado nunca en macOS arm64. *Mitigación:* el primer trabajo de S1 es arrancar la app en el Mac, antes de escribir código.
-- **Cuenta de empresa.** En el Mac del trabajo solo vale la cuenta de Claude de la empresa. *Mitigación:* el directorio y la cuenta los configura la persona; Sonora no guarda credenciales.
+- **Cuenta de la organización.** En algunos equipos solo vale la cuenta de Claude que fija la organización. *Mitigación:* el directorio y la cuenta los configura la persona; Sonora no guarda credenciales.
 - **Latencia.** La sesión de Claude añade segundos antes de la primera frase. *Mitigación:* el texto que aparece por partes y la cara en estado «pensando» (SE-538) hacen visible la espera. No se usan rellenos que anuncien acciones.
 
 ## Aprobación

@@ -55,7 +55,7 @@ Una cara 2D sencilla, no realista, encima de los subtítulos de la conversación
 - Una boca que se mueve por la amplitud (RMS) **del audio que se reproduce**, ligada a la época de voz de SE-537.
 - Estados visibles: en reposo, escucha, piensa, habla, sin red.
 - Respeto de `prefers-reduced-motion`.
-- La misma definición de cara para Sonora y para Space, si la persona lo decide así en la D2 de SE-432 (ver D3).
+- La misma definición de cara para Sonora y para Space (decidido el 2026-11-26; ver D3).
 
 ### Qué NO será
 
@@ -105,7 +105,7 @@ Space y Sonora comparten la misma cara: un solo formato de estilos que usan las 
 | Slice | Contenido | Tier | Depende de |
 |---|---|---|---|
 | S0 | Prototipo navegable y confirmación | 1 | — |
-| S1 | Componente `SaviaFace` con estados, dos estilos, «sin cara» y movimiento reducido, alimentado por los eventos de estado | 1 | S0 confirmado; SE-537 S1 |
+| S1 | Componente `SaviaFace` con estados, dos estilos, «sin cara» y movimiento reducido, alimentado por los eventos de estado | 1 | S0 confirmado; SE-537 S1. Los estados «habla» y «voz callada» se prueban en S1 con eventos simulados; con eventos reales, en S2 |
 | S2 | Boca por `speech-level` ligada a la época | 2 | SE-537 S2 |
 
 ### Criterios de aceptación
@@ -117,11 +117,11 @@ Space y Sonora comparten la misma cara: un solo formato de estilos que usan las 
 - [ ] S2: tras `speech-interrupted`, la boca queda cerrada en ≤ 1 fotograma (test con reloj falso).
 - [ ] S2: con amplitud de micrófono y sin voz reproducida, la boca no se mueve (test negativo).
 - [ ] S2: un PCM estéreo en contrafase produce un nivel distinto de cero, y PCM vacío, NaN o Inf dejan la boca neutral sin propagar NaN (tests).
-- [ ] S2: un activo de estilo que intenta cargar una URL externa se rechaza y la cara cae al estilo por defecto (test negativo).
+- [ ] S1: un activo de estilo que intenta cargar una URL externa se rechaza y la cara cae al estilo por defecto (test negativo).
 
 ## Fuera de alcance
 
-Visemas, 3D, expresiones emocionales, cara en Space (eso depende de la D2 de SE-432) y avatares con la imagen de una persona.
+Visemas, 3D, expresiones emocionales, llevar la cara a Space (la D2 de SE-432 ya está decidida; la implementación es trabajo de Space) y avatares con la imagen de una persona.
 
 ## Preguntas abiertas
 

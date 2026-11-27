@@ -91,7 +91,7 @@ Para actualizar se pasa otro commit al importador. El cambio llega en una PR con
 
 ## Fuera de alcance
 
-- La skill `chrome-extensions` y las guías `built-in-ai` (APIs de IA del navegador, solo Chrome) se copian como texto y no se recomiendan. Usarlas exigiría una decisión aparte de soberanía.
+- La skill `chrome-extensions` no se copia (D1). Las guías `built-in-ai` (APIs de IA del navegador, solo Chrome) sí se copian, porque están en `guides/`, pero el agente de front no las recomienda. Usarlas exigiría una decisión aparte de soberanía.
 - La orden `legacy-scan` y la modernización masiva del front existente.
 - Otros frontends (OpenCode): la copia es texto y sirve igual, pero el paso de consulta solo se añade al agente de Claude Code en esta spec.
 
