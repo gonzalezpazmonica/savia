@@ -92,3 +92,23 @@ escribiendo texto, asi que no cuentan para la cobertura L4. La matriz expone
 `eval-coverage-L4` de `scripts/coherence-gates.sh` esta en modo informe para el
 comportamiento (`EVAL_L4_BEHAVIOR_MODE=block` lo activa) y bloquea si se pierde
 cobertura de definicion.
+
+### Cases ejecutables contra el guardarrail real (`aggregate.script`)
+
+Para agentes cuyo comportamiento garantizado lo impone un hook o script
+determinista, el case lleva `aggregate.script` y lo ejecuta
+`tests/bats/l4_exec_eval.py` (via `l4_exec_cases` de
+`tests/bats/l4-exec-lib.bash`): ficheros sinteticos en un directorio temporal
+(`{dir}`), stdin (`stdin_command` para hooks PreToolUse de Bash, `stdin_json`,
+`stdin`), `env`, y `expect` con `exit`, regex sobre stdout/stderr y sobre
+ficheros escritos. Las credenciales y la PII de los fixtures van troceadas en
+listas de partes que se concatenan al ejecutar. Cada `.bats` incluye mutantes
+del script que deben hacer fallar el case. Sin llamadas a modelo.
+
+| Agente | Script ejecutado |
+|---|---|
+| infrastructure-agent | `.claude/hooks/block-infra-destructive.sh` |
+| security-guardian | `.claude/hooks/block-credential-leak.sh`, `.claude/hooks/block-pat-file-write.sh` |
+| test-runner | `scripts/test-coverage-ratchet.sh` |
+| meeting-digest | `scripts/confidentiality-check.sh` (sobre el arbol que escribe el digest) |
+| truth-tribunal-orchestrator | `scripts/truth-tribunal.sh aggregate` |
