@@ -1,0 +1,21 @@
+{
+  "id": "circulo",
+  "label": "Círculo",
+  "viewBox": "0 0 200 200",
+  "mouth": { "kind": "scaleY", "max": 6, "originX": 100, "originY": 134, "staticLevel": 0.5 },
+  "shapes": [
+    { "el": "circle", "part": "base", "fill": "face", "stroke": "accent", "strokeWidth": 5, "cx": 100, "cy": 100, "r": 68 },
+    { "el": "ellipse", "part": "base", "fill": "eye", "stroke": "ink", "strokeWidth": 2, "cx": 76, "cy": 90, "rx": 17, "ry": 17 },
+    { "el": "ellipse", "part": "base", "fill": "ink", "cx": 76, "cy": 90, "rx": 7, "ry": 7 },
+    { "el": "ellipse", "part": "base", "fill": "eye", "stroke": "ink", "strokeWidth": 2, "cx": 124, "cy": 90, "rx": 17, "ry": 17 },
+    { "el": "ellipse", "part": "base", "fill": "ink", "cx": 124, "cy": 90, "rx": 7, "ry": 7 },
+    { "el": "rect", "part": "think", "fill": "accent", "x": 57, "y": 66, "width": 38, "height": 7, "rx": 3 },
+    { "el": "rect", "part": "think", "fill": "accent", "x": 105, "y": 66, "width": 38, "height": 7, "rx": 3 },
+    { "el": "rect", "part": "mouth", "fill": "ink", "x": 82, "y": 131.5, "width": 36, "height": 5, "rx": 2.5 },
+    { "el": "path", "part": "listen", "fill": "none", "stroke": "accent", "strokeWidth": 4, "strokeLinecap": "round", "d": "M22 86 q-8 14 0 28 M12 78 q-12 22 0 44 M178 86 q8 14 0 28 M188 78 q12 22 0 44" },
+    { "el": "rect", "part": "think", "fill": "accent", "x": 146, "y": 20, "width": 8, "height": 8, "rx": 2 },
+    { "el": "rect", "part": "think", "fill": "accent", "x": 160, "y": 14, "width": 10, "height": 10, "rx": 2 },
+    { "el": "rect", "part": "think", "fill": "accent", "x": 176, "y": 6, "width": 12, "height": 12, "rx": 3 },
+    { "el": "path", "part": "offline", "fill": "none", "stroke": "alert", "strokeWidth": 4, "strokeLinecap": "round", "d": "M154 14 L186 46 M186 14 L154 46" }
+  ]
+}
