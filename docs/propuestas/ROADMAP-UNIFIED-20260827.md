@@ -1,7 +1,8 @@
 ---
 id: ROADMAP-UNIFIED-20260827
 title: "Plan unificado Labs + General — priorización cruzada"
-status: PROPOSED
+status: SUPERSEDED
+superseded_by: ROADMAP.md
 priority: P0
 area: Planning / Roadmap
 ---

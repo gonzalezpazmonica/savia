@@ -209,6 +209,18 @@ case "$CMD" in
       done < <(jq -r '.initiatives[] | select(.id | test("^SE-[0-9]+$")) | [.id, .status] | @tsv' "$STATE")
       [[ -n "$NOLOG" ]] && { echo "FAIL: estado vigente sin registro en LOG.md: $NOLOG"; ERR=1; }
     fi
+    # 7b. No volver atrás desde IMPLEMENTED (SE-378 §3): ninguna entrada de LOG.md con fecha
+    #     estrictamente posterior a la primera IMPLEMENTED puede dejar la iniciativa en un estado
+    #     previo. Salidas legítimas: SUPERSEDED, RETIRED, REJECTED, DEFERRED. El orden dentro de un
+    #     mismo día no es fiable en la vista; solo se comparan fechas distintas.
+    REGRESS=$(awk '/^## [0-9]{4}-[0-9]{2}-[0-9]{2} SE-[0-9]+( |$)/ {
+        d=$2; id=$3; st=$NF; n++; D[n]=d; I[n]=id; S[n]=st
+        if (st=="IMPLEMENTED" && (!(id in imp) || d<imp[id])) imp[id]=d
+      } END {
+        for (i=1;i<=n;i++) if ((I[i] in imp) && D[i]>imp[I[i]] && S[i] ~ /^(IDEA|PROPOSED|APPROVED|IMPLEMENTING)$/) seen[I[i]]=1
+        for (k in seen) print k
+      }' "$LOG" 2>/dev/null | sort -V | tr '\n' ' ')
+    [[ -n "${REGRESS// /}" ]] && { echo "FAIL: vuelta atrás desde IMPLEMENTED en LOG.md: ${REGRESS% }"; ERR=1; }
     # 8. Ruta declarada (ADR-002): límite WIP y fase válida en iniciativas no terminales.
     if jq -e '.route' "$STATE" >/dev/null 2>&1; then
       WIP=$(jq -r '.route.wip_limit.savia_implementing // empty' "$STATE")

@@ -557,6 +557,9 @@ Post-auditoria de alineacion OpenCode (inicio de sesion 2026-05-02). 4 gaps dete
 
 ## Critical Path Q2-Q3 2026 (priorización unificada 2026-05-02 — post audit OpenCode)
 
+> **Histórico (2026-08-27; ya no rige):** la prioridad vigente es la cola de sesiones de
+> `docs/propuestas/planning-state.json` (`bash scripts/roadmap.sh current`).
+>
 > **Prioridad única (2026-08-27)**: este pipeline y `labs/ROADMAP.md` se
 > unifican en `docs/propuestas/ROADMAP-UNIFIED-20260827.md` (plan unificado
 > Labs × General). Batch activo: **L14 deuda estructural** (SE-338 rule-manifest,
