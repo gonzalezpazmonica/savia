@@ -150,3 +150,30 @@ test("a hook declaring N2, N3 or N4 is withheld from the cloud, N1 goes", async 
     expect(shipped, level).toBe(PUBLIC)
   }
 })
+
+// Fallo intermitente de la suite («config.get timeout» en un test ajeno de mcp-effect-guard): si config.get
+// lanzaba de forma síncrona (o no había cliente), el temporizador de 3 s quedaba armado y, al vencer, su
+// promesa se rechazaba sin manejador; Bun lo achacaba al test que estuviera corriendo entonces.
+test("a config.get that throws synchronously, or no client at all, leaves no timer behind", async () => {
+  const leaked: unknown[] = []
+  const onRejection = (e: unknown) => leaked.push(e)
+  process.on("unhandledRejection", onRejection)
+  try {
+    const clients = [undefined, { config: { get: () => { throw new Error("síncrono") } } }]
+    for (const client of clients) {
+      const root = await workspace()
+      process.env.SAVIA_GATES_ENGINE_LANE = "local"
+      process.env.SAVIA_GATES_LOCAL_PROVIDERS = "ollama"
+      process.env.SAVIA_PLUGIN_DIR = join(root, ".manifest-test")
+      const hooks: any = await SaviaGates({ $: Bun.$, directory: root, client } as any)
+      const output: any = { message: { id: "msg_1" }, parts: [{ type: "text", text: "hola" }] }
+      await hooks["chat.message"]({ sessionID: "ses_1", agent: "build" }, output)
+      // Unknown providers count as cloud: only N1 goes.
+      expect(output.parts.slice(1).map((p: any) => p.text).join("\n")).toBe(PUBLIC)
+    }
+    await new Promise((r) => setTimeout(r, 3300))
+    expect(leaked.map(String)).toEqual([])
+  } finally {
+    process.off("unhandledRejection", onRejection)
+  }
+}, 10000)
