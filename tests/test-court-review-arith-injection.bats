@@ -74,6 +74,26 @@ teardown() { cd /; }
   [[ "$output" == score=100* ]]
 }
 
+# Auditoría de mutación 2026-11-27, C6 y C7: los umbrales son porcentajes y
+# su tope es 100, no el tope genérico de contadores (999999).
+@test "score: COURT_SCORE_PASS above 100 is out of range, 100 is accepted" {
+  COURT_SCORE_PASS=101 run bash "$COURT" score 0 0 0 0
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"COURT_SCORE_PASS out of range 0-100"* ]]
+  COURT_SCORE_PASS=100 run bash "$COURT" score 0 0 0 0
+  [ "$status" -eq 0 ]
+  [ "$output" = "score=100 verdict=pass (C=0 H=0 M=0 L=0)" ]
+}
+
+@test "score: COURT_SCORE_CONDITIONAL above 100 is out of range, 100 is accepted" {
+  COURT_SCORE_CONDITIONAL=101 run bash "$COURT" score 0 0 0 0
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"COURT_SCORE_CONDITIONAL out of range 0-100"* ]]
+  COURT_SCORE_PASS=100 COURT_SCORE_CONDITIONAL=100 run bash "$COURT" score 0 0 0 0
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"verdict=pass"* ]]
+}
+
 @test "validate: COURT_MAX_FIX_ROUNDS payload does not execute" {
   COURT_MAX_FIX_ROUNDS="$PAYLOAD" run bash "$COURT" validate "$CRC"
   [ ! -e "$MARK" ]
@@ -104,6 +124,20 @@ teardown() { cd /; }
   done
   run bash "$ROUTER" --findings "$FINDINGS" --max-round 09
   [ "$status" -eq 2 ]
+}
+
+# Auditoría de mutación 2026-11-27, C15: --round y --max-round tienen el mismo
+# tope de 6 dígitos; con 7 o más, (( )) podría envolver en 64 bits.
+@test "router: --round and --max-round with 7 digits are rejected, 6 are accepted" {
+  for flag in --round --max-round; do
+    for bad in 1000000 99999999999999999999; do
+      run bash "$ROUTER" --findings "$FINDINGS" "$flag" "$bad"
+      [ "$status" -eq 2 ] || { echo "accepted: $flag '$bad'"; return 1; }
+      [[ "$output" == *"$flag must be"* ]]
+    done
+  done
+  run bash "$ROUTER" --findings "$FINDINGS" --round 999999 --max-round 999999
+  [ "$status" -eq 0 ]
 }
 
 @test "router: payload in --round does not execute" {
