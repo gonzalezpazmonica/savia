@@ -11,9 +11,9 @@ Códigos de salida (R3): 0 éxito · 2 uso o fuente local ilegible · 3 status i
 8 check con época de grant inválida · 9 resume cubierto por otra entrada.
 
 Fuera de F0 (no implementado aquí): adaptadores concretos (F1), gate de frontend (F2),
-integración con SE-493 y SE-496 (F3). `reconcile` lee un ledger JSONL si existe; la
-transición `abandon` necesita `scripts/effect-ledger.py` y, sin él, el efecto queda
-INDETERMINATE (fail-closed).
+integración con SE-496 (F3). `reconcile` lee un ledger JSONL si existe. SE-493 se
+retiró el 2026-11-14 y con ella el guion que hacía la transición `abandon`: este
+plano no lo invoca, y un efecto PREPARED queda siempre INDETERMINATE (fail-closed).
 """
 import argparse
 import fcntl
@@ -834,14 +834,6 @@ def covers(scope, rec):
     return ident in own[kind]
 
 
-def abandon(effect_id):
-    tool = os.path.join(SCRIPT_DIR, "effect-ledger.py")
-    if not os.path.exists(tool):
-        return False
-    rc, _, _ = run([sys.executable, "-I", tool, "abandon", effect_id, "--reason", "control-reconcile"])
-    return rc == 0
-
-
 def classify(ctx, rec):
     st, receipt = rec.get("state"), rec.get("receipt")
     comp = rec.get("compensation") or {}
@@ -854,12 +846,9 @@ def classify(ctx, rec):
         return "REJECTED"
     if st == "ABANDONED":
         return "REJECTED"
-    if st == "PREPARED":
-        if not abandon(rec["effect_id"]):
-            return "INDETERMINATE"
-        fresh = Ctx()  # ¿sigue parado el ámbito tras la transición?
-        mode, _ = fresh.mode_of([s for s in fresh.stops if covers(s, rec)])
-        return "REJECTED" if mode != "RUNNING" else "INDETERMINATE"
+    # PREPARED: no existe ninguna transición de abandono (el libro de efectos de SE-493
+    # se retiró), así que no se puede demostrar que el efecto no ocurrió. Cae en el
+    # caso general: INDETERMINATE.
     return "INDETERMINATE"
 
 

@@ -85,3 +85,29 @@ Con las respuestas 1 y 2, F1 se concreta en **SE-486** (PROPOSED).
 
 - **F6 y parte de F4 pasan a SE-489**, que ya construyó y midió reranker, vecino y banco con abstención y contradicción (M0–M7). Este paraguas deja de listarlas como fases pendientes.
 - Quedan aquí F1 (SE-486), F2, F3, F5 y F7.
+
+## Enmienda propuesta 2026-11-25: medir escrituras perdidas antes de añadir control de concurrencia a las notas
+
+> Propuesta. No cambia el estado de esta spec; vale cuando la operadora fusione la PR que la trae.
+> Origen: Radar de metaorquestación y factorías (documento de la operadora, 2026-11-25, líneas M01–M15), cruzado con main c7987ac94 por una analista independiente. El inventario completo vive en Savia Labs. Absorbe M04 (memoria transaccional, ramas y fusiones semánticas).
+
+**Lo que hay.** Files ya tiene clave de idempotencia, diario y control optimista de versión de política. Las notas no:
+`vault_write` sobrescribe sin revisión base, así que gana la última escritura, y los conflictos semánticos solo avisan.
+
+**Lo que se propone, dentro de F2 y en este orden:**
+
+1. **Medir primero.** Un guion de solo lectura sobre el historial git de cada cúpula en uso que detecte escrituras
+   consecutivas sobre la misma nota desde sesiones distintas en poco tiempo, más un test con dos escritores
+   concurrentes que muestre si la pérdida es posible hoy.
+2. **Solo si hay incidencia real:** un `expectedSha` opcional en `vault_write`, que rechaza la escritura cuando la
+   nota cambió desde que se leyó. El servidor HTTP ya traduce a 409 los errores `CONFLICT` de Files, pero ninguna
+   ruta de notas lo emite, y F2 ya usa `CONFLICT` para el conflicto semántico determinista. La escritura obsoleta
+   necesita un código propio (por ejemplo `STALE_REVISION`) para no mezclar los dos casos.
+
+**Hipótesis refutable.** En las cúpulas en uso hay al menos una sobrescritura en la que el escritor partía de una
+revisión que ya no era la vigente.
+
+**Criterio de descarte.** Incidencia real cero: se documenta que gana la última escritura y no se toca nada.
+
+**Fuera.** Ramas por trabajo, fusión de tres vías, CRDT y motores de grafo externos: sin consumidor ni incidencia
+medida.

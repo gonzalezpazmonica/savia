@@ -1,11 +1,14 @@
 ---
-status: PROPOSED
+status: APPROVED
+approved_at: 2026-11-23
+approved_by: "operadora, pregunta interactiva 2026-11-23 (alcance aprobado: solo S0)"
 priority: P1
 developer_type: agent-team
 created: 2026-11-01
 author: Savia
 phase: D
 risk: L3
+human_surface: false
 depends_on: [SE-213, SCL-001, SE-364]
 related_specs: [SE-162, SE-213, SE-364, SE-486, SE-488, SCL-001, SCL-006, SE-489]
 origin: "Investigación externa de repositorios de IA difundidos públicamente (2026-11-01), líneas SAVIA-RESEARCH-04 y 05 (validaciones V5 y V6). Estudio solo de lectura de MEX, Graphify y Agentic Context Engine, contrastado con main 6b0658b28."
@@ -15,6 +18,10 @@ timeline:
     learned: "2026-11-01"
     value: "PROPOSED"
     source: "spec-lifecycle:auto"
+  - from: "2026-11-23"
+    learned: "2026-11-23"
+    value: "APPROVED"
+    source: "operadora, pregunta interactiva; «Aprobar solo esa entrega y hacerla (Recommended)»; alcance: solo S0"
 ---
 # SE-497 — Conocimiento vinculado a código con deriva, y aprendizaje sin autoautoridad
 
@@ -329,3 +336,38 @@ Cada slice es una PR aparte; revertirla devuelve el comportamiento anterior. `co
 - **Target `skill`**: la propuesta de skill de SE-409 S1 sale como LP por este camino, no por un canal aparte.
 - **Relación con SE-515**: una obligación `guarded` o `review_required` exige la aprobación auténtica que define esta Parte 2. Mientras no esté implementada, SE-515 no pasa de `advisory`.
 - **R13 y SCL-006**: confirmado en main que `learning-autonomy.sh` solo lo consume el orquestador como informe y nadie aplica el nivel. El riesgo es de etiqueta, no de permisos concedidos hoy.
+
+## Aprobación parcial 2026-11-23 — solo S0
+
+**Alcance aprobado: S0 y nada más.** Aprobado por la operadora el 2026-11-23 por pregunta interactiva; respuesta literal: «Aprobar solo esa entrega y hacerla (Recommended)». S1 a S7 siguen sin aprobar y cada uno necesita su propia decisión. Se formaliza al fusionar esta PR (SE-488).
+
+**Por qué ahora.** El 2026-11-23 se reprodujeron en una copia aislada de `scripts/learning-lifecycle.sh` (main `e3687a8cd`) los dos fallos del apartado «Problema» y tres más. La pieza está en uso: 5 lecciones `active` y 30 transiciones registradas.
+
+| Caso reproducido | Resultado observado |
+|---|---|
+| `--to active --human-trailer x` con `actor=agent` | `lifecycle: active`, `provenance: human_authored`, salida 0 |
+| `canary → active` con una sola métrica | promociona, salida 0 |
+| `--reason` con comillas | línea del registro que no es JSON válido |
+| trailer con `/` y `;` | reescribe el cuerpo de la lección |
+| trailer con salto de línea | añade un campo arbitrario a la cabecera |
+| misma activación dos veces | dos filas en el registro |
+
+**S0 queda ampliado con tres puntos**, todos dentro de `learning-lifecycle.sh` y sin mecanismo nuevo:
+
+1. El trailer se valida contra una expresión regular cerrada sobre la cadena completa **antes** de tocar el fichero; se rechaza cualquier salto de línea, carácter de control o metacarácter. El fichero no se modifica si la validación falla.
+2. **Cierre provisional del fail-open de métricas:** mientras no exista el recibo de R9 (S5), `canary → active` sin las dos métricas se niega con salida 5. Cuando S5 entre, esta condición se sustituye por la validación del recibo.
+3. **Idempotencia del registro:** repetir una transición que no cambia el estado no añade fila.
+
+**Criterios de aceptación de S0** (todos con su test; los negativos se comprueban con una mutación que quita la defensa):
+
+| AC | Criterio |
+|---|---|
+| S0-1 | Trailer ausente, vacío o que no cumple el formato → salida 4; la lección queda byte a byte igual |
+| S0-2 | Trailer con `/`, `&`, `;`, comillas, barra invertida, tabulador, salto de línea o Unicode de control → salida 4; cuerpo y cabecera intactos |
+| S0-3 | `--reason`, `--actor` e `id` con comillas, barra invertida o salto de línea → cada línea del registro es JSON válido y conserva el valor |
+| S0-4 | `canary → active` con cero o una métrica → salida 5; con regresión → salida 5 y vuelta a `proposed` |
+| S0-5 | Segunda activación idéntica → no añade fila al registro |
+| S0-6 | Trailer con formato válido y las dos métricas sin regresión → promociona; las 5 lecciones hoy activas siguen leyéndose como activas |
+| S0-7 | Ningún `sed` del guion interpola un valor recibido por argumento |
+
+**Límite declarado.** S0 cierra la inyección y la firma trivial. No prueba que quien escribe el trailer sea una persona: un agente que conozca el formato puede escribirlo. Eso lo resuelve R10 (estado derivado de un recibo y de un commit fusionado), en S5 y S6. Pieza de autoridad: lleva TDD cruzado, con tests de dos proveedores.

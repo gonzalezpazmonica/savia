@@ -29,11 +29,51 @@ teardown() {
 
 # ── Empty memory dir ───────────────────────────────────────────────────────
 
-@test "lint reports healthy on nonexistent memory dir" {
-  export MEMORY_DIR="/tmp/nonexistent-lint-$(date +%s)"
+# Antes este caso esperaba salida 0 y «Nothing to lint»: daba por sano no haber
+# revisado nada. La ruta por defecto apuntaba a una carpeta inexistente y el lint
+# semanal llevaba semanas sin mirar la memoria (hallazgo P-3, 2026-11-15).
+@test "error: nonexistent memory dir fails closed with exit 3 and says nothing was checked" {
+  export MEMORY_DIR="$TMPDIR_MEM/no-existe"
+  run bash "$SCRIPT"
+  [[ "$status" -eq 3 ]]
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"No se ha revisado nada"* ]]
+  [[ "$output" != *"HEALTHY"* ]]
+}
+
+@test "error: --summary on a nonexistent memory dir also fails closed" {
+  export MEMORY_DIR="$TMPDIR_MEM/no-existe"
+  run bash "$SCRIPT" --summary
+  [[ "$status" -eq 3 ]]
+  [[ "$output" != *"HEALTHY"* ]]
+}
+
+@test "empty: an existing but empty memory dir is checked and exits 0" {
+  export MEMORY_DIR="$TMPDIR_MEM"
   run bash "$SCRIPT"
   [[ "$status" -eq 0 ]]
-  [[ "$output" == *"No memory directory"* ]] || [[ "$output" == *"Nothing to lint"* ]]
+  [[ "$output" == *"Items checked"* ]]
+}
+
+@test "default dir derives from the repo path, not from a fixed machine path" {
+  unset MEMORY_DIR
+  local fake_home="$TMPDIR_MEM/home"
+  local slug; slug="$(printf '%s' "$REPO_ROOT" | sed 's#[^A-Za-z0-9]#-#g')"
+  mkdir -p "$fake_home/.claude/projects/$slug/memory"
+  HOME="$fake_home" run bash "$SCRIPT"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == *"/.claude/projects/$slug/memory"* ]]
+}
+
+@test "error: with no MEMORY_DIR and no project memory, the default fails closed" {
+  unset MEMORY_DIR
+  HOME="$TMPDIR_MEM/home-vacio" run bash "$SCRIPT"
+  [[ "$status" -eq 3 ]]
+}
+
+@test "the script no longer carries a machine-specific default path" {
+  run grep -c 'home-monica-claude' "$SCRIPT"
+  [[ "$output" -eq 0 ]]
 }
 
 # ── Orphan index detection ─────────────────────────────────────────────────
