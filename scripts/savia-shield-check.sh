@@ -20,6 +20,20 @@ set -uo pipefail
 #   bash scripts/savia-shield-check.sh --json
 #
 # Reference: SPEC-OC-01, docs/rules/domain/savia-shield-opencode.md
+#
+# ── Alcance y amenaza ────────────────────────────────────────────────────────
+# Decisión de la operadora, 2026-11-28 (pregunta interactiva): «Delimitar el alcance
+# (Recommended)». Este comprobador detecta configuraciones ACCIDENTALES (un guard retirado
+# de BEFORE_GUARDS, un import huérfano, un comentario que aparenta cableado). NO es una
+# defensa adversaria: quien puede escribir savia-foundation.ts o lib/before-guards.ts puede
+# quitar los guards sin más. El contrato es: errores plausibles + fallo cerrado ante lo
+# ambiguo (checks 6 y 7: forma canónica estricta; cualquier duda = inactivo).
+# Límites conocidos, documentados y no perseguidos:
+#   - «usa BEFORE_GUARDS» es heurístico: no se demuestra que la lista llegue a ejecutarse.
+#   - Sombreado (`(BEFORE_GUARDS) => ...`) y código muerto (`if (false) ...`) lo satisfacen.
+#   - runGuardsOnVariants se identifica por nombre: una función local homónima también vale.
+#   - Construcciones deliberadamente ofuscadas o sabotaje semántico arbitrario (el escáner
+#     no es un parser de JS completo) quedan fuera del contrato.
 
 set -uo pipefail
 
@@ -236,6 +250,12 @@ def canonical_list(blank_lines):
     opens = [k for k, ln in enumerate(blank_lines) if "BEFORE_GUARDS" in ln]
     if len(opens) != 1 or blank_lines[opens[0]].rstrip() != "export const BEFORE_GUARDS = [":
         raise ValueError("apertura no canónica")
+    # Tras el cierre, nada. Antes de la lista, nada que reabra el módulo (import * / import()
+    # / require / export): una autoimportación podría mutar la lista. El resto de líneas
+    # ajenas se juzga por guard (el import canónico del guard concreto).
+    for ln in blank_lines[:opens[0]]:
+        if re.search(r"(?a)\bimport\s*(?:\*|\()|\brequire\s*\(|\bexport\b", ln):
+            raise ValueError("referencia al módulo antes de la lista")
     ids = []
     for k in range(opens[0] + 1, len(blank_lines)):
         ln = blank_lines[k]
@@ -246,6 +266,13 @@ def canonical_list(blank_lines):
             ids.append(m.group(1))
             continue
         if re.fullmatch(r"(?a)\](?: as const)?;?\s*", ln):
+            if ";" not in ln:
+                # Sin `;` la sentencia puede continuar en la línea siguiente (ASI): la
+                # siguiente línea de código debe empezar por un identificador que no sea
+                # un operador (`.filter`, `[0]`, `(`, `in`, `instanceof`, `as`...).
+                nxt = next((r.lstrip() for r in blank_lines[k + 1:] if r.strip()), "")
+                if nxt and not re.match(r"(?a)(?!(?:instanceof|in|as|satisfies)(?![\w$]))[A-Za-z_$]", nxt):
+                    raise ValueError("el cierre de la lista continúa en la línea siguiente")
             return ids
         raise ValueError("línea no canónica en la lista")
     raise ValueError("lista sin cierre")
@@ -275,13 +302,21 @@ try:
     if len(hits) != 1:
         sys.exit(1)
     body = "\n".join("" if k == hits[0] else ln for k, ln in enumerate(f_blank))
-    if re.search(r"(?a)\bBEFORE_GUARDS\s*(?:\?\.|\.|\[|=(?!=))", body):
+    # Ninguna otra referencia al módulo de la lista: import * / import() / require(, ni una
+    # cadena de código que nombre before-guards (los comentarios se admiten).
+    if re.search(r"(?a)\bimport\s*(?:\*|\()|\brequire\s*\(", body):
         sys.exit(1)
-    if re.search(r"(?a)\b(?:const|let|var|function|class)\s+BEFORE_GUARDS\b", body):
+    for k, (o, b) in enumerate(zip(f_orig, f_blank)):
+        if k != hits[0] and "before-guards" in o and re.search(r"[\"'`]", b):
+            sys.exit(1)
+    B = r"(?<![\w$])BEFORE_GUARDS(?![\w$])"
+    if re.search(r"(?a)" + B + r"\s*(?:\?\.|\.|\[|=(?!=))", body):
         sys.exit(1)
-    body = re.sub(r"(?a)\btypeof\s+BEFORE_GUARDS\b", " ", body)
-    uses = re.findall(r"(?a)(?<![\w$])BEFORE_GUARDS\b(?!\s*:)", body)
-    ok_uses = re.findall(r"(?a)\brunGuardsOnVariants\(\s*BEFORE_GUARDS\b", body)
+    if re.search(r"(?a)\b(?:const|let|var|function|class)\s+BEFORE_GUARDS(?![\w$])", body):
+        sys.exit(1)
+    body = re.sub(r"(?a)(?<![\w$])typeof\s+BEFORE_GUARDS(?![\w$])", " ", body)
+    uses = re.findall(r"(?a)" + B + r"(?!\s*:)", body)
+    ok_uses = re.findall(r"(?a)(?<![\w$.])runGuardsOnVariants\(\s*BEFORE_GUARDS(?![\w$])\s*[,)]", body)
     if not uses or len(uses) != len(ok_uses):
         sys.exit(1)
 except Exception:

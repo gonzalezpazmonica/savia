@@ -670,3 +670,71 @@ PY
   shield
   [ "$status" -eq 0 ]
 }
+
+# ── Ronda final (revisión #1671e): fichero entero, argumento exacto, fronteras con $ ──
+
+@test "cierre ] sin punto y coma seguido de .filter en la linea siguiente" {
+  sub "$GUARDS" '] as const;' $']\n  .filter(() => false);'
+  shield
+  wired_missing
+}
+
+@test "cierre sin punto y coma seguido de operador instanceof o corchete" {
+  sub "$GUARDS" '] as const;' $']\n[0];'
+  shield
+  wired_missing
+}
+
+@test "autoimportacion en before-guards.ts antes de la lista" {
+  sub "$GUARDS" 'export const BEFORE_GUARDS = [' $'import * as self from "./before-guards.ts";\nexport const BEFORE_GUARDS = ['
+  shield
+  wired_missing
+}
+
+@test "primer argumento BEFORE_GUARDS && []" {
+  sub "$FOUNDATION" 'runGuardsOnVariants(BEFORE_GUARDS,' 'runGuardsOnVariants(BEFORE_GUARDS && [],'
+  shield
+  wired_missing
+}
+
+@test "BEFORE_GUARDS$ como identificador distinto" {
+  sub "$FOUNDATION" 'runGuardsOnVariants(BEFORE_GUARDS,' 'runGuardsOnVariants(BEFORE_GUARDS$,'
+  shield
+  wired_missing
+}
+
+@test "import * as del modulo de la lista en la fundacion" {
+  printf '%s\n' 'import * as bgns from "./lib/before-guards.ts";' '(bgns as any)["BEFORE_" + "GUARDS"].splice(0);' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "import dinamico del modulo de la lista en la fundacion" {
+  printf '%s\n' 'import("./lib/before-guards.ts").then((m) => m);' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "require del modulo de la lista en la fundacion" {
+  printf '%s\n' 'const m = require("./lib/before-guards.ts");' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "metodo x.runGuardsOnVariants no cuenta como uso" {
+  sub "$FOUNDATION" 'runGuardsOnVariants(BEFORE_GUARDS,' 'x.runGuardsOnVariants(BEFORE_GUARDS,'
+  shield
+  wired_missing
+}
+
+@test "funcion \$runGuardsOnVariants no cuenta como uso" {
+  sub "$FOUNDATION" 'runGuardsOnVariants(BEFORE_GUARDS,' '$runGuardsOnVariants(BEFORE_GUARDS,'
+  shield
+  wired_missing
+}
+
+@test "BEFORE_GUARDS como unico argumento seguido de ) es valido" {
+  sub "$FOUNDATION" 'runGuardsOnVariants(BEFORE_GUARDS, input, output)' 'runGuardsOnVariants(BEFORE_GUARDS)'
+  shield
+  [ "$status" -eq 0 ]
+}
