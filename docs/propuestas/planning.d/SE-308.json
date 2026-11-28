@@ -1,0 +1,8 @@
+{
+  "id": "SE-308",
+  "status": "PROPOSED",
+  "title": "Savia Transcriptor (núcleo de audio, VAD, capturas, transcripción y digestión)",
+  "phase": "D",
+  "evidence": "docs/evidence/sonora/se308-se312-reconciliacion.md",
+  "note": "Registro mecánico, sin cambio de estado: la spec seguía en PROPOSED y fuera del registro aunque S1-S5 están entregados. El informe de reconciliación propone IMPLEMENTED con resto (instaladores, verificación en Windows y macOS, selector automático de modelo Whisper). La decisión de estado es de la operadora."
+}
