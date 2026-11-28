@@ -82,8 +82,16 @@ check_component \
 # solo el identificador). Un import o un comentario no bastan: un guard
 # importado pero retirado de BEFORE_GUARDS no protege nada.
 FOUNDATION="$WORKSPACE_DIR/.opencode/plugins/savia-foundation.ts"
+# SE-510 AC-7: la lista BEFORE_GUARDS vive en lib/before-guards.ts y el plugin la
+# importa. Esa lista solo cuenta si savia-foundation.ts realmente la usa.
+BEFORE_GUARDS_FILE="$WORKSPACE_DIR/.opencode/plugins/lib/before-guards.ts"
 guard_registered() {
-  [[ -f "$FOUNDATION" ]] && grep -qE "^[[:space:]]*$1,?[[:space:]]*(//.*)?$" "$FOUNDATION" 2>/dev/null
+  local pat="^[[:space:]]*$1,?[[:space:]]*(//.*)?$"
+  [[ -f "$FOUNDATION" ]] || return 1
+  grep -qE "$pat" "$FOUNDATION" 2>/dev/null && return 0
+  [[ -f "$BEFORE_GUARDS_FILE" ]] \
+    && grep -q "BEFORE_GUARDS" "$FOUNDATION" 2>/dev/null \
+    && grep -qE "$pat" "$BEFORE_GUARDS_FILE" 2>/dev/null
 }
 if guard_registered "dataSovereigntyGate"; then
   COMPONENTS+=("savia-foundation-wired")
