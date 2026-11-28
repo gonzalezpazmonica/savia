@@ -10,7 +10,7 @@
 #   - reescribe ``(via `npx -y modern-web-guidance@latest retrieve "<id>"`)``
 #     a enlaces relativos; un id inexistente aborta con el id en el mensaje
 #   - la copia final no contiene «npx»
-#   - todo o nada: se construye en un directorio temporal y se sustituye al final
+#   - todo o nada: se construye en un temporal y se sustituye al final por renombrado junto al destino
 #
 # Uso: web-guidance-import.sh <commit40>
 # Entorno (tests): WEB_GUIDANCE_TARBALL=<tar.gz local> evita la red;
@@ -50,6 +50,11 @@ tar -tzf "$TGZ" > "$WORK/names.txt"
 if grep -qE '(^|/)\.\.(/|$)|^/' "$WORK/names.txt"; then
   die "el tarball contiene rutas con '..' o absolutas: importación rechazada"
 fi
+# Topes sobre el listado (tamaño declarado, columna 3 de GNU tar -tv): un tar.gz que se infla al
+# extraer se rechaza antes de escribir nada. Tras extraer se vuelven a comprobar sobre disco.
+read -r L_FILES L_BYTES < <(awk '/^-/ && /\/skills\/modern-web-guidance\/guides\// {n++; s+=$3} END{print n+0, s+0}' "$WORK/list.txt")
+[ "$L_FILES" -le "$MAX_FILES" ] || die "demasiados ficheros en el listado: $L_FILES > $MAX_FILES"
+[ "$L_BYTES" -le "$MAX_BYTES" ] || die "demasiado grande según el listado: $L_BYTES > $MAX_BYTES bytes"
 
 # 2. Extracción acotada a guides/ y LICENSE (sin propietario ni permisos del origen).
 mkdir "$WORK/x"
@@ -130,10 +135,18 @@ Tree-SHA256: $TREE_HASH
 EOF
 chmod 644 "$OUT/NOTICE"
 
-# 6. Sustitución atómica de la copia anterior (solo si todo lo anterior pasó).
+# 6. Sustitución de la copia anterior (solo si todo lo anterior pasó). La copia nueva se prepara en un
+# temporal junto a DEST (mismo sistema de ficheros): los dos mv son renombrados, no copia y borrado.
+# Si el segundo falla, la copia anterior vuelve a su sitio. Hay un instante sin DEST entre ambos.
 mkdir -p "$(dirname "$DEST")"
+STAGE="$(mktemp -d "$(dirname "$DEST")/.wg.XXXXXX")"
+trap 'rm -rf "$WORK" "$STAGE"' EXIT
+cp -R "$OUT" "$STAGE/new"
 if [ -e "$DEST" ]; then
-  mv "$DEST" "$WORK/old"
+  mv "$DEST" "$STAGE/old"
 fi
-mv "$OUT" "$DEST"
+if ! mv "$STAGE/new" "$DEST"; then
+  [ -e "$STAGE/old" ] && mv "$STAGE/old" "$DEST"
+  die "no se pudo colocar la copia nueva en $DEST; se conserva la anterior"
+fi
 echo "OK: $NFILES guías importadas de $REPO@$COMMIT en $DEST (tree $TREE_HASH)"

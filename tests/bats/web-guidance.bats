@@ -97,6 +97,85 @@ _import() { WEB_GUIDANCE_TARBALL="$TMP/f.tgz" WEB_GUIDANCE_DEST="$DEST" bash "$I
   [ ! -e "$DEST" ]
 }
 
+# _shim <orden> <script> — instala en $TMP/bin un envoltorio de la orden real (REAL_<ORDEN>).
+_shim() {
+  mkdir -p "$TMP/bin"
+  printf '#!/usr/bin/env bash\nREAL=%q\n%s\n' "$(command -v "$1")" "$2" > "$TMP/bin/$1"
+  chmod +x "$TMP/bin/$1"
+}
+
+@test "P2-2 negativo: los topes se comprueban en el listado, antes de extraer nada" {
+  # 5 MB de ceros: el tar.gz ocupa unos KB y se inflaría al extraer.
+  head -c 5000000 /dev/zero > "$G/ui-components/bomba.md"
+  _pack
+  _shim tar 'for a in "$@"; do case "$a" in -x*|--extract) echo x >> "$TMP/tar-x.log";; esac; done; exec "$REAL" "$@"'
+  run env PATH="$TMP/bin:$PATH" TMP="$TMP" WEB_GUIDANCE_TARBALL="$TMP/f.tgz" WEB_GUIDANCE_DEST="$DEST" bash "$IMP" "$SHA"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"demasiado grande"* ]]
+  [ ! -e "$TMP/tar-x.log" ]
+  [ ! -e "$DEST" ]
+}
+
+@test "P2-2 negativo: mas de 300 ficheros en el listado se rechaza antes de extraer" {
+  for i in $(seq 1 299); do echo "# g$i" > "$G/ui-components/g$i.md"; done
+  _pack
+  _shim tar 'for a in "$@"; do case "$a" in -x*|--extract) echo x >> "$TMP/tar-x.log";; esac; done; exec "$REAL" "$@"'
+  run env PATH="$TMP/bin:$PATH" TMP="$TMP" WEB_GUIDANCE_TARBALL="$TMP/f.tgz" WEB_GUIDANCE_DEST="$DEST" bash "$IMP" "$SHA"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"demasiados ficheros"* ]]
+  [ ! -e "$TMP/tar-x.log" ]
+}
+
+@test "P2-1 negativo: si la sustitucion final falla, la copia anterior sigue en su sitio" {
+  _pack
+  run _import
+  [ "$status" -eq 0 ]
+  echo previa > "$DEST/guides/marca.md"
+  # El primer mv cuyo destino es DEST falla (disco lleno simulado); el resto, normal.
+  _shim mv 'last="${!#}"; if [ "$last" = "$DEST" ] && [ ! -e "$TMP/mv-fallo" ]; then : > "$TMP/mv-fallo"; echo "mv: no space left" >&2; exit 1; fi; exec "$REAL" "$@"'
+  mkdir -p "$TMP/othertmp"
+  run env PATH="$TMP/bin:$PATH" TMP="$TMP" DEST="$DEST" TMPDIR="$TMP/othertmp" \
+    WEB_GUIDANCE_TARBALL="$TMP/f.tgz" WEB_GUIDANCE_DEST="$DEST" bash "$IMP" "$SHA"
+  [ "$status" -ne 0 ]
+  [ -e "$TMP/mv-fallo" ]
+  [ "$(cat "$DEST/guides/marca.md")" = previa ]
+  [ -f "$DEST/NOTICE" ]
+  # Sin restos del temporal junto al destino.
+  [ -z "$(find "$(dirname "$DEST")" -maxdepth 1 -name '.wg.*')" ]
+}
+
+@test "P2-1 positivo: la sustitucion se prepara junto al destino, no en TMPDIR" {
+  _pack
+  run _import
+  [ "$status" -eq 0 ]
+  _shim mv 'printf "%s\n" "$*" >> "$TMP/mv.log"; exec "$REAL" "$@"'
+  mkdir -p "$TMP/othertmp"
+  run env PATH="$TMP/bin:$PATH" TMP="$TMP" TMPDIR="$TMP/othertmp" \
+    WEB_GUIDANCE_TARBALL="$TMP/f.tgz" WEB_GUIDANCE_DEST="$DEST" bash "$IMP" "$SHA"
+  [ "$status" -eq 0 ]
+  [ -s "$TMP/mv.log" ]
+  run grep -c othertmp "$TMP/mv.log"
+  [ "$output" = 0 ]
+  [ -z "$(find "$(dirname "$DEST")" -maxdepth 1 -name '.wg.*')" ]
+}
+
+@test "P2-6 negativo: enlace duro en el arbol rechaza todo" {
+  ln "$G/ui-components/dialog.md" "$G/ui-behaviors/duro.md"
+  _pack
+  run _import
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"enlaces"* ]]
+  [ ! -e "$DEST" ]
+}
+
+@test "P2-6 negativo: el listado rechaza el enlace simbolico por si solo (guarda 1)" {
+  ln -s /etc/passwd "$G/ui-components/evil.md"
+  _pack
+  run _import
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"contiene enlaces"* ]]
+}
+
 @test "AC-5 negativo: referencia a id inexistente falla con el id y no deja copia" {
   printf '# Bad\n\nSee (via `npx -y modern-web-guidance@latest retrieve "no-existe-xyz"`).\n' > "$G/ui-components/bad.md"
   _pack
