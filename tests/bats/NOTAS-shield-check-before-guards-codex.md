@@ -1,5 +1,98 @@
 # NOTAS — regresión de BEFORE_GUARDS (Codex)
 
+## Quinta ronda del 2026-11-28 — revisión HOLD sobre b4bd7e2
+
+Base comprobada: `b4bd7e2bac14b13723a82355281e71976c260e7d`, rama
+`agent/codex-escudo5-tests-20261128`, base explícita autorizada
+`origin/agent/fix-20261126-escudo`. Revisión leída completa. Solo se modifican
+esta suite y estas notas; sin cambios en `scripts/`, specs o planning-state,
+sin operaciones de escritura en Git, commits, push ni PR, por encargo.
+
+**Antes: 59/59 pasan. Después: 101 casos, 67 pasan y 34 fallan; BATS exit 1.**
+Los 59 casos originales y sus helpers siguen idénticos byte a byte, comprobado
+contra la copia inicial; solo cambia su setup. Los 42 casos añadidos cubren
+cada escenario en **before-guards.ts y savia-foundation.ts** por separado.
+
+```bash
+bats --tap tests/bats/test-shield-check-before-guards-codex.bats
+```
+
+| Casos | Escenario nuevo (ambos ficheros) | Resultado actual |
+| --- | --- | --- |
+| 60–63 | `#!/*` en primera línea, sin/con BOM inicial; construcción del informe | **Fallan: active / 0** |
+| 64–67 | `-->` al principio de línea, sin/con espacios y tabulador; mismo señuelo | **Fallan: active / 0** |
+| 68–69 | `<!--` fuera de cadenas; mismo señuelo | **Fallan: active / 0** |
+| 70–75 | Identificadores con U+0301 (Mn), U+0903 (Mc), U+203F (Pc) | **Fallan: active / 0** |
+| 76–79 | Identificadores con a cirílica U+0430 y o griega U+03BF | **Fallan: active / 0** |
+| 80–87 | Controles U+001C/U+001D/U+001E/U+001F como espacios de regex Python | **Fallan: active / 0** |
+| 88–91 | Espacios no ASCII U+00A0 y U+3000 en código | **Fallan: active / 0** |
+| 92–93 | Salto LF literal dentro de una cadena con comillas simples | **Fallan: active / 0** |
+| 94–97 | Mn/Mc/Pc y letras no ASCII dentro de comentario o cadena | Pasan: active / 0 |
+| 98–101 | Hashbang y tokens HTML dentro de comentario o cadena | Pasan: active / 0 |
+
+**Fallan hoy todos los negativos nuevos: 60–93.** Todos devuelven ocho
+componentes, `missing: []` y exit 0. Se exige exit 2, estado inactive y la
+ausencia exacta de ambos cableados, conservando los demás componentes.
+El caso 1 del árbol real y los ocho positivos nuevos siguen verdes.
+
+Semántica comprobada localmente con **Bun 1.4.2 y Node v22.14.0**:
+
+- Hashbang, también con BOM inicial: los cuatro módulos sintéticos exportan
+  una lista real de longitud **0** en ambos runtimes. Se retiró únicamente
+  `: any[]` para ejecutar las copias como `.mjs`; imports y lista del señuelo
+  siguen dentro del template. El escáner los interpreta como código real.
+- `-->` al principio de línea, también indentado: Bun ejecuta los cuatro
+  módulos y obtiene longitud **0**. Node rechaza comentarios HTML en módulos.
+  **Bun tampoco admite `<!--` en esta versión**: devuelve
+  `Unsupported syntax: Legacy HTML comments not implemented yet!`.
+  Los casos 68–69 exigen rechazo de sintaxis inesperada, sin afirmar un bypass
+  ejecutable en esa variante.
+- En fundación (71, 73, 75) se conserva el import real, se declara por
+  desestructuración `BEFORE_GUARDS` seguido de la marca/conector y se pasa
+  ese identificador distinto al runner. Un módulo mínimo con el mismo patrón
+  muestra **2 0** en ambos runtimes: lista importada de dos elementos frente
+  a lista local vacía. Python corta el límite de palabra donde JS permite
+  continuar el identificador. Los puntos de código y categorías se verifican
+  al generar los fixtures; U+0301 no se sustituye por una letra precompuesta.
+- En guards (70, 72, 74), los homógrafos (76–79) y los espacios Unicode
+  (88–91), el cableado real sigue intacto. Son pruebas de la política
+  conservadora pedida: cualquier no ASCII fuera de comentarios/cadenas debe
+  dar inactivo. No se presentan como bypass de ejecución de guards.
+- Hallazgos adicionales propios: Python acepta U+001C–U+001F como `\s`
+  (`isspace()` verdadero), pero Bun y Node los rechazan como tokens en esos
+  lugares. El escáner también permite LF literal dentro de cadenas simples;
+  ambos runtimes lo rechazan. Los casos 80–87 y 92–93 detectan falsos activos
+  ante ficheros que JS no puede cargar.
+
+El setup ya no copia `.opencode` entero ni sigue sus enlaces recursivamente.
+Copia exactamente los siete ficheros que lee el escudo: tres guards, dos libs,
+la fundación y el hook materializado, más el documento requerido. El contenido
+copiado de `.opencode` baja de unos **55 MiB a 48 KiB por fixture** (`du`,
+documento aparte). No hacen falta las dependencias importadas porque esta
+suite inspecciona texto y nunca ejecuta plugins ni hooks TS. La baseline
+59/59 se ejecutó completa con este setup reducido.
+
+Autorrevisión: los 34 negativos fallan contra el script sin modificar. Una
+copia privada con las 42 aserciones nuevas mutadas falla **42/42**, en las
+aserciones y sin errores de setup. Además, los ocho positivos nuevos fallan
+**8/8** al cambiar solo su estado JSON esperado a inactive, manteniendo exit 0.
+Cada test nuevo puede fallar. Sin skips, `! cmd`, `|| true` ni cambios en las
+aserciones originales. Auditor heurístico: **73/100, certified: false,
+vacuity: [], weak: []**; se conserva la limitación, sin tests de relleno.
+Los TAP, copias mutadas y pruebas de runtime quedan en el log privado del run.
+
+Validación complementaria: suite Claude **75/75** y SPEC-OC-01 **20/20**, exit 0.
+El script sobre el propio worktree devuelve **active / 0**, `missing: []`.
+`git diff --check` pasa; solo cambian esta suite y estas notas.
+Arranque: validación rápida **15 PASS, 0 FAIL, 2 WARN** (coherencia advisory y
+snapshot de cúpula atrasado); roadmap consultado. No se accede al traspaso
+privado ni se ejecuta `--clean-state`: consultarían otros worktrees o estado
+externo prohibido por el encargo. Esta entrega es TDD rojo deliberado; el
+escáner sigue pendiente de corrección por su autora.
+
+Siguiente acción: corregir los falsos activos 60–93 y repetir los 101 casos
+sin rebajar las aserciones. Las mediciones inferiores son históricas.
+
 ## Cuarta ronda del 2026-11-27 — tercera revisión HOLD de #1671
 
 Base comprobada: `de0b8bdf90eee9a46ef5b9b4354cb8b7729c297d`, rama

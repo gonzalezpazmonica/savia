@@ -125,6 +125,10 @@ def read_src(path):
     text = raw.decode("utf-8").replace("\r\n", "\n")
     if text[:1] == "\ufeff":
         text = text[1:]
+    # Control ASCII (salvo \t y \n) en cualquier parte: Python los trata como espacio
+    # (split/strip/\s) y JS no.
+    if any((ord(ch) < 32 and ch not in "\t\n") or ord(ch) == 127 for ch in text):
+        raise ValueError("carácter de control")
     if text.startswith("#!"):
         raise ValueError("shebang")
     if any(ch in text for ch in ("\r", "\u2028", "\u2029", "\x85")):
@@ -168,6 +172,8 @@ def scan(src):
             while j < n and src[j] != c:
                 if c == "`" and src[j:j + 2] == "${":
                     raise ValueError("interpolación en template")
+                if c != "`" and (src[j] == "\n" or src[j:j + 2] == "\\\n"):
+                    raise ValueError("cadena simple con salto de línea")
                 j += 2 if src[j] == "\\" else 1
             if j >= n:
                 raise ValueError("cadena sin cierre")
@@ -177,13 +183,13 @@ def scan(src):
             # Regla general: una `/` solo es división si va justo tras [A-Za-z0-9_$)\]]
             # (ignorando espacios) y, si es un identificador, no es palabra reservada.
             tail = _tail(out).rstrip()
-            word = re.search(r"[A-Za-z0-9_$]+$", tail)
+            word = re.search(r"(?a)[A-Za-z0-9_$]+$", tail)
             if not tail or tail[-1] not in ")]" and not word:
                 raise ValueError("posible literal regex")
             if word and word.group(0) in JS_WORDS:
                 raise ValueError("barra tras palabra reservada")
             # `break etiqueta` / `continue etiqueta` + salto de línea (ASI): la barra abre una regex.
-            if word and re.search(r"\b(?:break|continue)\s+$", tail[:word.start()]):
+            if word and re.search(r"(?a)\b(?:break|continue)\s+$", tail[:word.start()]):
                 raise ValueError("barra tras etiqueta de break/continue")
             if tail[-1] == ")" and after_paren_is_regex("".join(out).rstrip()):
                 raise ValueError("posible regex tras paréntesis")
@@ -212,10 +218,10 @@ def after_paren_is_regex(out):
             depth -= 1
             if depth == 0:
                 before = "".join(out[:k]).rstrip()
-                word = re.search(r"[A-Za-z_$][\w$]*$", before)
+                word = re.search(r"(?a)[A-Za-z_$][\w$]*$", before)
                 if word and word.group(0) == "await":  # for await (...)
                     before = before[:word.start()].rstrip()
-                    word = re.search(r"[A-Za-z_$][\w$]*$", before)
+                    word = re.search(r"(?a)[A-Za-z_$][\w$]*$", before)
                     return bool(word and word.group(0) == "for")
                 return bool(word and word.group(0) in ("if", "while", "for", "with"))
     return True
@@ -233,13 +239,13 @@ def canonical_list(blank_lines):
     ids = []
     for k in range(opens[0] + 1, len(blank_lines)):
         ln = blank_lines[k]
-        if re.fullmatch(r"\s*", ln):
+        if re.fullmatch(r"(?a)\s*", ln):
             continue
-        m = re.fullmatch(r"\s*(" + IDENT + r")\s*,\s*", ln)
+        m = re.fullmatch(r"(?a)\s*(" + IDENT + r")\s*,\s*", ln)
         if m:
             ids.append(m.group(1))
             continue
-        if re.fullmatch(r"\](?: as const)?;?\s*", ln):
+        if re.fullmatch(r"(?a)\](?: as const)?;?\s*", ln):
             return ids
         raise ValueError("línea no canónica en la lista")
     raise ValueError("lista sin cierre")
@@ -252,10 +258,10 @@ try:
     if guard not in canonical_list(g_blank):
         sys.exit(1)
     # El guard debe estar importado en el mismo fichero con una línea canónica.
-    kebab = re.sub(r"(?<!^)([A-Z])", lambda m: "-" + m.group(1).lower(), guard[0].lower() + guard[1:])
-    imp_g = re.compile(r"import \{ " + re.escape(guard) + r" \} from \"\.\./guards/" + re.escape(kebab) + r"\.ts\";\s*(?://.*)?")
+    kebab = re.sub(r"(?a)(?<!^)([A-Z])", lambda m: "-" + m.group(1).lower(), guard[0].lower() + guard[1:])
+    imp_g = re.compile(r"(?a)import \{ " + re.escape(guard) + r" \} from \"\.\./guards/" + re.escape(kebab) + r"\.ts\";\s*(?://.*)?")
     if sum(1 for o, b in zip(g_orig, g_blank)
-           if re.fullmatch(r"import \{ " + re.escape(guard) + r" \} from \"\s*\";\s*", b)
+           if re.fullmatch(r"(?a)import \{ " + re.escape(guard) + r" \} from \"\s*\";\s*", b)
            and imp_g.fullmatch(o)) != 1:
         sys.exit(1)
 
@@ -263,19 +269,19 @@ try:
     f_blank = scan("\n".join(f_orig)).split("\n")
     # La línea del import se localiza sobre el texto con cadenas vaciadas (estado «código»)
     # y el especificador se lee del original en esa misma línea.
-    imp_f = re.compile(r"import \{ BEFORE_GUARDS \} from \"\./lib/before-guards(?:\.ts)?\";\s*(?://.*)?")
+    imp_f = re.compile(r"(?a)import \{ BEFORE_GUARDS \} from \"\./lib/before-guards(?:\.ts)?\";\s*(?://.*)?")
     hits = [k for k, (o, b) in enumerate(zip(f_orig, f_blank))
-            if re.fullmatch(r"import \{ BEFORE_GUARDS \} from \"\s*\";\s*", b) and imp_f.fullmatch(o)]
+            if re.fullmatch(r"(?a)import \{ BEFORE_GUARDS \} from \"\s*\";\s*", b) and imp_f.fullmatch(o)]
     if len(hits) != 1:
         sys.exit(1)
     body = "\n".join("" if k == hits[0] else ln for k, ln in enumerate(f_blank))
-    if re.search(r"\bBEFORE_GUARDS\s*(?:\?\.|\.|\[|=(?!=))", body):
+    if re.search(r"(?a)\bBEFORE_GUARDS\s*(?:\?\.|\.|\[|=(?!=))", body):
         sys.exit(1)
-    if re.search(r"\b(?:const|let|var|function|class)\s+BEFORE_GUARDS\b", body):
+    if re.search(r"(?a)\b(?:const|let|var|function|class)\s+BEFORE_GUARDS\b", body):
         sys.exit(1)
-    body = re.sub(r"\btypeof\s+BEFORE_GUARDS\b", " ", body)
-    uses = re.findall(r"(?<![\w$])BEFORE_GUARDS\b(?!\s*:)", body)
-    ok_uses = re.findall(r"\brunGuardsOnVariants\(\s*BEFORE_GUARDS\b", body)
+    body = re.sub(r"(?a)\btypeof\s+BEFORE_GUARDS\b", " ", body)
+    uses = re.findall(r"(?a)(?<![\w$])BEFORE_GUARDS\b(?!\s*:)", body)
+    ok_uses = re.findall(r"(?a)\brunGuardsOnVariants\(\s*BEFORE_GUARDS\b", body)
     if not uses or len(uses) != len(ok_uses):
         sys.exit(1)
 except Exception:

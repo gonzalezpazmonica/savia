@@ -10,10 +10,16 @@ setup() {
   ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
   SCRIPT="$ROOT/scripts/savia-shield-check.sh"
   WS="$BATS_TEST_TMPDIR/workspace"
-  mkdir -p "$WS/docs/rules/domain"
-  # .opencode/hooks es un enlace: materializarlo evita un fixture incompleto
-  # y garantiza que todas las mutaciones se quedan en el árbol temporal.
-  cp -RL "$ROOT/.opencode" "$WS/.opencode"
+  mkdir -p "$WS/docs/rules/domain" "$WS/.opencode/plugins/guards" \
+    "$WS/.opencode/plugins/lib" "$WS/.opencode/hooks"
+  # Solo los siete ficheros que lee el escudo; materializar el hook enlazado
+  # evita copiar skills, node_modules o escribir accidentalmente en el origen.
+  cp "$ROOT/.opencode/plugins/savia-foundation.ts" "$WS/.opencode/plugins/"
+  cp "$ROOT/.opencode/plugins/guards/"{data-sovereignty-gate,data-sovereignty-audit,block-credential-leak}.ts \
+    "$WS/.opencode/plugins/guards/"
+  cp "$ROOT/.opencode/plugins/lib/"{before-guards,sovereignty-patterns}.ts \
+    "$WS/.opencode/plugins/lib/"
+  cp -L "$ROOT/.opencode/hooks/context-sanitize-input.sh" "$WS/.opencode/hooks/"
   cp "$ROOT/docs/rules/domain/savia-shield-opencode.md" "$WS/docs/rules/domain/"
   FOUNDATION="$WS/.opencode/plugins/savia-foundation.ts"
   GUARDS="$WS/.opencode/plugins/lib/before-guards.ts"
@@ -636,4 +642,333 @@ PY_NEL
   write_regex_import_decoy $'if\uFEFF(false) /`/;'
   shield
   assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+
+# Quinta ronda: revisión completa HOLD b4bd7e2. Se conservan los 59 casos;
+# las entradas ambiguas deben fallar cerrado en cualquiera de los dos módulos.
+# Fixtures sintéticos mínimos: los tokens canónicos son texto para JS, código
+# para el escáner defectuoso. No se cargan plugins ni se ejecutan guards reales.
+mutate_lexical_fixture() {
+  python3 - "$GUARDS" "$FOUNDATION" "$@" <<'PY_LEXICAL'
+from pathlib import Path
+import sys
+import unicodedata
+
+guards, foundation = map(Path, sys.argv[1:3])
+target, mode = sys.argv[3:5]
+assert target in ("guards", "foundation"), target
+path = guards if target == "guards" else foundation
+source = path.read_text()
+if mode in ("hashbang", "hashbang-bom", "html-close", "html-close-indent", "html-open"):
+    prefix = {
+        "hashbang": "#!/*\n",
+        "hashbang-bom": "\ufeff#!/*\n",
+        "html-close": "// cabecera\n--> /*\n",
+        "html-close-indent": "// cabecera\n  \t--> /*\n",
+        "html-open": "<!-- /*\n",
+    }[mode]
+    if target == "guards":
+        decoy = (
+            'import { dataSovereigntyGate } from "../guards/data-sovereignty-gate.ts";\n'
+            'import { blockCredentialLeak } from "../guards/block-credential-leak.ts";\n'
+            'export const BEFORE_GUARDS = [\n'
+            '  dataSovereigntyGate,\n  blockCredentialLeak,\n] as const;\n'
+        )
+        real = 'export const BEFORE_GUARDS: any[] = [];'
+    else:
+        decoy = ('import { BEFORE_GUARDS } from "./lib/before-guards.ts";\n'
+                 'run(BEFORE_GUARDS);\n')
+        real = 'const BEFORE_GUARDS: any[] = []; export default BEFORE_GUARDS;'
+    source = prefix + 'const __real = ` */\n' + decoy + '\n`;\n' + real + ' // `\n'
+    assert source.startswith(prefix) and decoy in source and real in source
+elif mode == "identifier":
+    char = chr(int(sys.argv[5], 16))
+    category = sys.argv[6]
+    assert not char.isascii() and unicodedata.category(char) == category
+    if target == "foundation" and category in ("Mn", "Mc", "Pc"):
+        old = 'await runGuardsOnVariants(BEFORE_GUARDS, input, output);'
+        new = f'await runGuardsOnVariants(BEFORE_GUARDS{char}, input, output);'
+        assert source.count(old) == 1, "uso canónico inesperado"
+        source = source.replace(old, new)
+        source = f'const {{ a: BEFORE_GUARDS{char} }} = {{ a: [] as any[] }};\n' + source
+    else:
+        # Rechazo conservador solicitado: un identificador Unicode sin uso no
+        # desactiva guards, pero la política exige ASCII fuera de texto/comentarios.
+        source += f'\nconst __probe{char} = 0;\n'
+elif mode in ("control-space", "unicode-space"):
+    char = chr(int(sys.argv[5], 16))
+    assert char.isspace() and char not in " \t\r\n"
+    if mode == "control-space":
+        assert ord(char) < 32  # Python lo acepta como \s; ECMAScript no.
+    old = ('  dataSovereigntyGate,\n' if target == "guards" else
+           'import { BEFORE_GUARDS } from "./lib/before-guards.ts";\n')
+    assert source.count(old) == 1, "línea canónica inesperada"
+    source = source.replace(old, old.rstrip("\n") + char + "\n")
+elif mode == "raw-newline-string":
+    # El escáner acepta LF dentro de comillas simples; JS da SyntaxError.
+    source += "\nconst __invalid = 'primera\nsegunda';\n"
+elif mode in ("unicode-comment", "unicode-string", "html-comment", "html-string"):
+    text = ("a\u0301 \u0903 \u203f \u0430 \u03bf" if mode.startswith("unicode")
+            else "#!/* <!-- -->")
+    source += (f"\n/* {text} */\n" if mode.endswith("comment") else
+               f"\nconst __text = '{text}';\n")
+else:
+    raise AssertionError(f"modo inesperado: {mode}")
+encoded = source.encode("utf-8")
+path.write_bytes(encoded)
+assert path.read_bytes() == encoded, "fixture alterado al escribir"
+PY_LEXICAL
+}
+
+@test "inactivo: hashbang #!/* en primera línea con señuelo del informe en before-guards.ts" {
+  mutate_lexical_fixture guards hashbang
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: hashbang #!/* en primera línea con señuelo del informe en savia-foundation.ts" {
+  mutate_lexical_fixture foundation hashbang
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: BOM inicial y hashbang #!/* con señuelo en before-guards.ts" {
+  mutate_lexical_fixture guards hashbang-bom
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: BOM inicial y hashbang #!/* con señuelo en savia-foundation.ts" {
+  mutate_lexical_fixture foundation hashbang-bom
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: HTML --> a principio de línea con señuelo en before-guards.ts" {
+  mutate_lexical_fixture guards html-close
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: HTML --> a principio de línea con señuelo en savia-foundation.ts" {
+  mutate_lexical_fixture foundation html-close
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: HTML --> tras espacios y tabulador con señuelo en before-guards.ts" {
+  mutate_lexical_fixture guards html-close-indent
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: HTML --> tras espacios y tabulador con señuelo en savia-foundation.ts" {
+  mutate_lexical_fixture foundation html-close-indent
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: HTML <!-- fuera de cadenas con señuelo en before-guards.ts" {
+  mutate_lexical_fixture guards html-open
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: HTML <!-- fuera de cadenas con señuelo en savia-foundation.ts" {
+  mutate_lexical_fixture foundation html-open
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: identificador con marca combinante U+0301 en before-guards.ts" {
+  mutate_lexical_fixture guards identifier 0301 Mn
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: identificador con marca combinante U+0301 en savia-foundation.ts" {
+  mutate_lexical_fixture foundation identifier 0301 Mn
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: identificador con marca espaciadora U+0903 en before-guards.ts" {
+  mutate_lexical_fixture guards identifier 0903 Mc
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: identificador con marca espaciadora U+0903 en savia-foundation.ts" {
+  mutate_lexical_fixture foundation identifier 0903 Mc
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: identificador con conector U+203F en before-guards.ts" {
+  mutate_lexical_fixture guards identifier 203F Pc
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: identificador con conector U+203F en savia-foundation.ts" {
+  mutate_lexical_fixture foundation identifier 203F Pc
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: identificador con a cirílica U+0430 en before-guards.ts" {
+  mutate_lexical_fixture guards identifier 0430 Ll
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: identificador con a cirílica U+0430 en savia-foundation.ts" {
+  mutate_lexical_fixture foundation identifier 0430 Ll
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: identificador con o griega U+03BF en before-guards.ts" {
+  mutate_lexical_fixture guards identifier 03BF Ll
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: identificador con o griega U+03BF en savia-foundation.ts" {
+  mutate_lexical_fixture foundation identifier 03BF Ll
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: falso espacio Python U+001C fuera de cadenas en before-guards.ts" {
+  mutate_lexical_fixture guards control-space 001C
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: falso espacio Python U+001C fuera de cadenas en savia-foundation.ts" {
+  mutate_lexical_fixture foundation control-space 001C
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: falso espacio Python U+001D fuera de cadenas en before-guards.ts" {
+  mutate_lexical_fixture guards control-space 001D
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: falso espacio Python U+001D fuera de cadenas en savia-foundation.ts" {
+  mutate_lexical_fixture foundation control-space 001D
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: falso espacio Python U+001E fuera de cadenas en before-guards.ts" {
+  mutate_lexical_fixture guards control-space 001E
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: falso espacio Python U+001E fuera de cadenas en savia-foundation.ts" {
+  mutate_lexical_fixture foundation control-space 001E
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: falso espacio Python U+001F fuera de cadenas en before-guards.ts" {
+  mutate_lexical_fixture guards control-space 001F
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: falso espacio Python U+001F fuera de cadenas en savia-foundation.ts" {
+  mutate_lexical_fixture foundation control-space 001F
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: espacio no ASCII U+00A0 en código de before-guards.ts" {
+  mutate_lexical_fixture guards unicode-space 00A0
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: espacio no ASCII U+00A0 en código de savia-foundation.ts" {
+  mutate_lexical_fixture foundation unicode-space 00A0
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: espacio no ASCII U+3000 en código de before-guards.ts" {
+  mutate_lexical_fixture guards unicode-space 3000
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: espacio no ASCII U+3000 en código de savia-foundation.ts" {
+  mutate_lexical_fixture foundation unicode-space 3000
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: LF literal dentro de cadena simple en before-guards.ts" {
+  mutate_lexical_fixture guards raw-newline-string
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "inactivo: LF literal dentro de cadena simple en savia-foundation.ts" {
+  mutate_lexical_fixture foundation raw-newline-string
+  shield
+  assert_shield 2 inactive savia-foundation-wired block-credential-leak-wired
+}
+
+@test "activo: Unicode Mn Mc Pc y letras dentro de comentario en before-guards.ts" {
+  mutate_lexical_fixture guards unicode-comment
+  shield
+  assert_shield 0 active
+}
+
+@test "activo: Unicode Mn Mc Pc y letras dentro de comentario en savia-foundation.ts" {
+  mutate_lexical_fixture foundation unicode-comment
+  shield
+  assert_shield 0 active
+}
+
+@test "activo: Unicode Mn Mc Pc y letras dentro de cadena en before-guards.ts" {
+  mutate_lexical_fixture guards unicode-string
+  shield
+  assert_shield 0 active
+}
+
+@test "activo: Unicode Mn Mc Pc y letras dentro de cadena en savia-foundation.ts" {
+  mutate_lexical_fixture foundation unicode-string
+  shield
+  assert_shield 0 active
+}
+
+@test "activo: tokens HTML y hashbang dentro de comentario en before-guards.ts" {
+  mutate_lexical_fixture guards html-comment
+  shield
+  assert_shield 0 active
+}
+
+@test "activo: tokens HTML y hashbang dentro de comentario en savia-foundation.ts" {
+  mutate_lexical_fixture foundation html-comment
+  shield
+  assert_shield 0 active
+}
+
+@test "activo: tokens HTML y hashbang dentro de cadena en before-guards.ts" {
+  mutate_lexical_fixture guards html-string
+  shield
+  assert_shield 0 active
+}
+
+@test "activo: tokens HTML y hashbang dentro de cadena en savia-foundation.ts" {
+  mutate_lexical_fixture foundation html-string
+  shield
+  assert_shield 0 active
 }

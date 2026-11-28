@@ -610,3 +610,63 @@ PY
   shield
   wired_missing
 }
+
+# ── Ronda 7: caracteres de control, cadenas simples con salto de linea, \s ASCII ──
+
+@test "U+001C fuera de cadenas en la fundacion" {
+  printf '%s\n' $'const a\x1c= 1;' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "U+001F entre if y parentesis" {
+  printf '%s\n' $'if\x1f(1) /`/.test("");' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "caracter de control dentro de un comentario" {
+  printf '%s\n' $'// x\x1dy' >> "$GUARDS"
+  shield
+  wired_missing
+}
+
+@test "NUL y DEL dentro de una cadena" {
+  python3 - "$FOUNDATION" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]); p.write_text(p.read_text() + 'const s = "a\x00b\x7fc";\n')
+PY
+  shield
+  wired_missing
+}
+
+@test "tabuladores son validos" {
+  printf '%s\n' $'const\tz\t=\t1;\t// ok' >> "$FOUNDATION"
+  shield
+  [ "$status" -eq 0 ]
+}
+
+@test "cadena con comilla doble que no cierra antes del fin de linea" {
+  printf '%s\n' 'const s = "abc' 'const t = "d";' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "cadena con comilla simple que no cierra antes del fin de linea" {
+  printf '%s\n' "const s = 'abc" "const t = 'd';" >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "continuacion de linea con barra invertida dentro de una cadena" {
+  printf '%s\n' 'const s = "abc\' 'def";' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "template literal multilinea sigue siendo valido" {
+  printf '%s\n' 'const s = `abc' 'def`;' >> "$FOUNDATION"
+  shield
+  [ "$status" -eq 0 ]
+}
