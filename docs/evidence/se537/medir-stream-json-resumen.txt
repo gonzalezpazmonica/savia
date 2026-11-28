@@ -1,0 +1,15 @@
+import json,sys
+skip=('hook_started','hook_response','status','commands_changed','init','thinking_tokens')
+for l in open(sys.argv[1]):
+    o=json.loads(l)
+    if o['ev']!='msg':
+        if o['ev']!='spawn': print(json.dumps(o,ensure_ascii=False)[:500])
+        continue
+    if o['type']=='stream_event' or o['sub'] in skip or o['type']=='rate_limit_event': continue
+    ob=o['obj']
+    if o['type']=='assistant':
+        c=ob['message']['content'][0]; s=c['type']+':'+json.dumps(c.get('input') or c.get('text') or '',ensure_ascii=False)[:200]
+    elif o['type']=='user': s=json.dumps(ob['message']['content'],ensure_ascii=False)[:260]
+    elif o['type']=='result': s=f"{ob['subtype']} stop={ob.get('stop_reason')} denials={ob.get('permission_denials')} cost={ob['total_cost_usd']:.4f} result={str(ob.get('result'))[:120]}"
+    else: s=json.dumps(ob,ensure_ascii=False)[:300]
+    print(o['dt'],o['type'],o['sub'],s)
