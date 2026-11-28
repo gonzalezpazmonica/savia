@@ -13,10 +13,12 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/dual-cli"))
+import gates
 import shell_targets
+from protocol import ProtocolError
 
-NAMES = ["hooks", "]ooks", "xooks", "[]", "[!]", "!ooks", "^ooks"]
-PATTERNS = ["[]h]ooks", "[!]x]ooks", "[^]x]ooks", "[]x]ooks", "[!]h]ooks", "[]", "[!]", "[]!]ooks", "[]^]ooks"]
+NAMES = ["hooks", "]ooks", "xooks", "!ooks", "^ooks"]
+PATTERNS = ["[]h]ooks", "[!]x]ooks", "[^]x]ooks", "[]x]ooks", "[!]h]ooks", "[]!]ooks", "[]^]ooks"]
 
 
 class GlobClassBracketTest(unittest.TestCase):
@@ -40,8 +42,15 @@ class GlobClassBracketTest(unittest.TestCase):
         self.assertFalse(rx("[]h]ooks").fullmatch("xooks"))
         self.assertTrue(rx("[!]x]ooks").fullmatch("hooks"))
         self.assertFalse(rx("[!]x]ooks").fullmatch("]ooks"))
-        self.assertTrue(rx("[]").fullmatch("[]"))
-        self.assertTrue(rx("[!]").fullmatch("[!]"))
+
+    def test_without_later_close_keeps_refusal(self):
+        # `[]` y `[!]` sin cierre posterior: la lectura anterior (re.error -> INVALID_EVENT, el gate
+        # deniega), que fija la batería de equivalencia de la alerta #116. Ninguna puerta lleva corchetes.
+        for p in ("[]", "[!]", "hooks[]"):
+            with self.assertRaises(ProtocolError):
+                shell_targets._rx(p)
+        for gate in gates.PROTECTED_PATHS:
+            self.assertNotRegex(gate, r"[][]")
 
     @unittest.skipUnless(shutil.which("find"), "sin find no hay oráculo")
     def test_parity_with_real_find(self):

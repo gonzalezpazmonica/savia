@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test"
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { PROTECTED_GATE_PATHS } from "../lib/hook-vocabulary"
 import { globMatcher, protectedTarget } from "../lib/shell-targets"
 
 // P2 de la revisión de la PR #1672: en POSIX (y en fnmatch, que usa find) un `]` justo después de `[`
@@ -38,10 +39,15 @@ test("globMatcher: ] tras [ o [! es literal dentro de la clase", () => {
   expect(globMatcher("[!]x]ooks").test("hooks")).toBe(true)
   expect(globMatcher("[!]x]ooks").test("]ooks")).toBe(false)
   expect(globMatcher("[^]x]ooks").test("xooks")).toBe(false)
-  // Sin cierre tras el ] literal, el [ es literal (fnmatch y find).
-  expect(globMatcher("[]").test("[]")).toBe(true)
-  expect(globMatcher("[!]").test("[!]")).toBe(true)
-  expect(globMatcher("[]").test("")).toBe(false)
+})
+
+// Sin cierre tras el ] inicial (`[]`, `[!]`) se conserva la lectura anterior, que la batería de
+// equivalencia de la alerta #116 fija: `[]` no casa nada y `[!]` casa un carácter. find los lee como
+// literales; la diferencia no desprotege ninguna puerta porque ninguna ruta protegida lleva corchetes.
+test("sin cierre posterior se conserva la lectura anterior y ninguna puerta lleva corchetes", () => {
+  expect(globMatcher("[]").test("[]")).toBe(false)
+  expect(globMatcher("[!]").test("x")).toBe(true)
+  for (const gate of PROTECTED_GATE_PATHS) expect(gate).not.toMatch(/[[\]]/)
 })
 
 test("paridad con find real en patrones con ] inicial", () => {
@@ -49,9 +55,9 @@ test("paridad con find real en patrones con ] inicial", () => {
   if (found.exitCode !== 0) return // sin GNU find no hay oráculo; el resto de tests cubre el contrato
   const root = mkdtempSync(join(tmpdir(), "glob-bracket-"))
   roots.push(root)
-  const names = ["hooks", "]ooks", "xooks", "[]", "[!]", "!ooks", "^ooks"]
+  const names = ["hooks", "]ooks", "xooks", "!ooks", "^ooks"]
   for (const n of names) mkdirSync(join(root, n))
-  const patterns = ["[]h]ooks", "[!]x]ooks", "[^]x]ooks", "[]x]ooks", "[!]h]ooks", "[]", "[!]", "[]!]ooks", "[]^]ooks"]
+  const patterns = ["[]h]ooks", "[!]x]ooks", "[^]x]ooks", "[]x]ooks", "[!]h]ooks", "[]!]ooks", "[]^]ooks"]
   for (const p of patterns) {
     const run = Bun.spawnSync(["find", root, "-mindepth", "1", "-maxdepth", "1", "-name", p, "-printf", "%f\n"])
     const real = run.stdout.toString().split("\n").filter(Boolean).sort()

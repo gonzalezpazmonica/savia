@@ -692,7 +692,12 @@ function globAtoms(pattern: string): (string | null)[] {
       if (out.length === 0 || out[out.length - 1] !== null) out.push(null)
     } else if (c === "?") out.push("[^/]")
     else if (c === "[") {
-      const j = pattern.indexOf("]", i + 1 < n && "!^".includes(pattern[i + 1]) ? i + 2 : i + 1)
+      // As fnmatch and find: a `]` right after `[` or `[!`/`[^` is a literal member when a later `]` closes
+      // the class (`[]h]ooks` reaches `hooks`). With no later close (`[]`, `[!]`) the old reading stays: it
+      // never under-protects, since no gate path has a bracket, and the Python twin refuses it.
+      const from = i + 1 < n && "!^".includes(pattern[i + 1]) ? i + 2 : i + 1
+      let j = from < n && pattern[from] === "]" ? pattern.indexOf("]", from + 1) : -1
+      if (j < 0) j = pattern.indexOf("]", from)
       if (j < 0) out.push("\\[")
       else {
         let body = pattern.slice(i + 1, j)

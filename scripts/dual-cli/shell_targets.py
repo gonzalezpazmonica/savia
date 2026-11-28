@@ -718,7 +718,13 @@ def _glob_atoms(pattern):
         elif c == "?":
             out.append("[^/]")
         elif c == "[":
-            j = pattern.find("]", i + 2 if i + 1 < n and pattern[i + 1] in "!^" else i + 1)
+            # As fnmatch and find: a `]` right after `[` or `[!`/`[^` is a literal member when a later `]`
+            # closes the class (`[]h]ooks` reaches `hooks`). With no later close (`[]`, `[!]`) the old
+            # reading stays: an empty class, re.error, INVALID_EVENT, so the gate denies.
+            start = i + 2 if i + 1 < n and pattern[i + 1] in "!^" else i + 1
+            j = pattern.find("]", start + 1) if start < n and pattern[start] == "]" else -1
+            if j < 0:
+                j = pattern.find("]", start)
             if j < 0:
                 out.append(r"\[")
             else:
