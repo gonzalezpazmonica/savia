@@ -47,13 +47,9 @@ Análisis profundo de un PR:
 
 ### `/review-community merge {pr}`
 
-Merge de un PR aprobado:
+**Retirado.** Este subcomando fusionaba sin permiso firmado de la persona. `bash scripts/review-community.sh merge {pr}` ahora rehúsa y sale con código 3.
 
-1. Mostrar banner: `🦉 Review · Merge`
-2. Confirmar con el usuario antes de merge
-3. `bash scripts/review-community.sh merge {pr}`
-4. Verificar que el merge fue exitoso
-5. Banner fin
+Para fusionar una PR de la comunidad: revisión registrada y permiso de la persona con `scripts/merge-sprint.sh`, igual que cualquier otra PR.
 
 ### `/review-community release {version}`
 
