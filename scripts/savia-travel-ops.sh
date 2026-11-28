@@ -104,7 +104,7 @@ do_init() {
   if command -v npm &>/dev/null; then
     if ! command -v claude &>/dev/null; then
       log_info "Installing Claude Code via npm..."
-      npm install -g @anthropic-ai/claude-code 2>/dev/null && \
+      npm install -g @anthropic-ai/claude-code@2.1.332 2>/dev/null && \
         log_ok "Claude Code installed" || \
         log_warn "Install failed — install Claude Code manually"
     else log_ok "Claude Code already installed"; fi

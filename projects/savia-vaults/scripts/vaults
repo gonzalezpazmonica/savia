@@ -22,6 +22,24 @@ warn() { echo -e "${YELLOW}WARN:${NC} $*" >&2; }
 info() { echo -e "${GREEN}→${NC} $*"; }
 header() { echo -e "\n${BOLD}${CYAN}$*${NC}"; }
 
+# El nombre de cúpula es un nombre bajo VAULT_ROOT, nunca una ruta: expresión
+# cerrada y, si ya existe, realpath dentro de VAULT_ROOT (un enlace que sale se
+# rechaza). Uso: vp="$(_dome_path "$name")" || exit 1
+_dome_path() {
+  local n="$1"
+  [[ "$n" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] \
+    || die "Invalid dome name: '$n' (allowed: [A-Za-z0-9][A-Za-z0-9._-]{0,127})"
+  local p="${VAULT_ROOT}/${n}"
+  if [[ -e "$p" || -L "$p" ]]; then
+    local root real
+    root="$(realpath -- "$VAULT_ROOT" 2>/dev/null)" || die "Cannot resolve VAULT_ROOT: $VAULT_ROOT"
+    real="$(realpath -- "$p" 2>/dev/null)" || die "Cannot resolve dome: $n"
+    [[ "$real" == "$root/"* ]] || die "Dome '$n' resolves outside VAULT_ROOT: $real"
+  fi
+  printf '%s\n' "$p"
+}
+_default_dome() { ls "$VAULT_ROOT" 2>/dev/null | head -1; }
+
 # ── Help ──
 show_help() {
   cat << 'HELP'
@@ -110,7 +128,7 @@ cmd_server_start() {
     esac
   done
   [[ -z "$name" ]] && die "--name required"
-  local vault_path="${VAULT_ROOT}/${name}"
+  local vault_path; vault_path="$(_dome_path "$name")" || exit 1
   [[ ! -d "$vault_path" ]] && die "Vault not found: $vault_path. Create with: vaults dome create $name"
   local pid_file="${vault_path}/.savia-vault/server.pid"
   if [[ -f "$pid_file" ]]; then
@@ -138,7 +156,7 @@ cmd_server_stop() {
   local name="" force=false
   while [[ $# -gt 0 ]]; do case "$1" in --name) name="$2"; shift 2 ;; --force) force=true; shift ;; *) shift ;; esac; done
   [[ -z "$name" ]] && die "--name required"
-  local pid_file="${VAULT_ROOT}/${name}/.savia-vault/server.pid"
+  local pid_file; pid_file="$(_dome_path "$name")/.savia-vault/server.pid" || exit 1
   if [[ -f "$pid_file" ]]; then
     local pid; pid=$(cat "$pid_file")
     info "Stopping ${name} server (PID $pid)..."
@@ -163,7 +181,7 @@ cmd_server_status() {
   local name=""
   while [[ $# -gt 0 ]]; do case "$1" in --name) name="$2"; shift 2 ;; *) shift ;; esac; done
   [[ -z "$name" ]] && die "--name required"
-  local pid_file="${VAULT_ROOT}/${name}/.savia-vault/server.pid"
+  local pid_file; pid_file="$(_dome_path "$name")/.savia-vault/server.pid" || exit 1
   if [[ -f "$pid_file" ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
     echo -e "${GREEN}RUNNING${NC} — ${name} (PID $(cat "$pid_file"))"
   else
@@ -175,7 +193,7 @@ cmd_server_logs() {
   local name="" follow=false lines=50
   while [[ $# -gt 0 ]]; do case "$1" in --name) name="$2"; shift 2 ;; --follow) follow=true; shift ;; --lines) lines="$2"; shift 2 ;; *) shift ;; esac; done
   [[ -z "$name" ]] && die "--name required"
-  local log_file="${VAULT_ROOT}/${name}/.savia-vault/server.log"
+  local log_file; log_file="$(_dome_path "$name")/.savia-vault/server.log" || exit 1
   [[ ! -f "$log_file" ]] && die "Log file not found: $log_file"
   if $follow; then tail -f -n "$lines" "$log_file"; else tail -n "$lines" "$log_file"; fi
 }
@@ -221,7 +239,8 @@ cmd_dome_create() {
   local name="" path="" template=""
   while [[ $# -gt 0 ]]; do case "$1" in --name) name="$2"; shift 2 ;; --path) path="$2"; shift 2 ;; --template) template="$2"; shift 2 ;; *) name="$1"; shift ;; esac; done
   [[ -z "$name" ]] && die "Dome name required"
-  local vault_path="${path:-${VAULT_ROOT}/${name}}"
+  local vault_path
+  if [[ -n "$path" ]]; then vault_path="$path"; else vault_path="$(_dome_path "$name")" || exit 1; fi
   [[ -d "$vault_path" ]] && die "Dome already exists: $vault_path"
   mkdir -p "$vault_path"
   cd "$vault_path" && git init && git config user.name "SaviaVaults" && git config user.email "vault@example.com"
@@ -229,7 +248,8 @@ cmd_dome_create() {
   echo "# ${name} — Routing Map" > "$vault_path/MAP.md"
   mkdir -p "$vault_path/.savia-vault"
   echo '{}' > "$vault_path/.savia-vault/users.json"
-  echo '{"version":"1.0","vaults":{"'$name'":{"path":"'$vault_path'"}},"server":{"transport":"mcp","a2aPort":8923},"federation":{"enabled":false,"domes":[]}}' > "$vault_path/savia-vaults.config.json"
+  python3 -c 'import json,sys; n,vp,out=sys.argv[1:4]; json.dump({"version":"1.0","vaults":{n:{"path":vp}},"server":{"transport":"mcp","a2aPort":8923},"federation":{"enabled":False,"domes":[]}}, open(out,"w"))' \
+    "$name" "$vault_path" "$vault_path/savia-vaults.config.json"
   cd "$vault_path" && git add -A && git commit -m "init: ${name} dome" 2>/dev/null || true
   info "Dome '${name}' created at ${vault_path}"
 }
@@ -263,7 +283,7 @@ cmd_dome_list() {
 
 cmd_dome_info() {
   local name="${1:-}"; shift 2>/dev/null || true; [[ -z "$name" ]] && die "Dome name required"
-  local vault_path="${VAULT_ROOT}/${name}"; [[ ! -d "$vault_path" ]] && die "Dome not found: $vault_path"
+  local vault_path; vault_path="$(_dome_path "$name")" || exit 1; [[ ! -d "$vault_path" ]] && die "Dome not found: $vault_path"
   header "Dome: $name"
   echo "  Path:      $vault_path"
   local notes; notes=$(find "$vault_path" -name "*.md" ! -path "*/.git/*" ! -path "*/.trash/*" 2>/dev/null | wc -l)
@@ -283,7 +303,7 @@ cmd_dome_delete() {
   local name="" force=false
   while [[ $# -gt 0 ]]; do case "$1" in --name) name="$2"; shift 2 ;; --force) force=true; shift ;; *) name="$1"; shift ;; esac; done
   [[ -z "$name" ]] && die "Dome name required"
-  local vault_path="${VAULT_ROOT}/${name}"; [[ ! -d "$vault_path" ]] && die "Dome not found: $vault_path"
+  local vault_path; vault_path="$(_dome_path "$name")" || exit 1; [[ ! -d "$vault_path" ]] && die "Dome not found: $vault_path"
   $force || { echo -n "Delete dome '${name}'? This cannot be undone. [y/N] "; read -r ans; [[ "$ans" != "y" && "$ans" != "Y" ]] && die "Aborted."; }
   rm -rf "$vault_path"; info "Dome '$name' deleted."
 }
@@ -291,7 +311,7 @@ cmd_dome_delete() {
 cmd_dome_rename() {
   local name="${1:-}"; local new_name="${2:-}"
   [[ -z "$name" || -z "$new_name" ]] && die "Usage: vaults dome rename <name> <new-name>"
-  local old_path="${VAULT_ROOT}/${name}"; local new_path="${VAULT_ROOT}/${new_name}"
+  local old_path new_path; old_path="$(_dome_path "$name")" || exit 1; new_path="$(_dome_path "$new_name")" || exit 1
   [[ ! -d "$old_path" ]] && die "Dome not found: $old_path"
   [[ -d "$new_path" ]] && die "Target already exists: $new_path"
   mv "$old_path" "$new_path"; info "Renamed '$name' → '$new_name'"
@@ -314,46 +334,53 @@ cmd_dome_federate_add() {
   [[ -z "$id" || -z "$url" ]] && die "Usage: vaults dome federate add <id> <url> [--token] [--weight]"
   info "Registering federated dome: $id → $url"
   # Add to active dome's config
-  local config_file="${VAULT_ROOT}/$(ls "$VAULT_ROOT" 2>/dev/null | head -1)/savia-vaults.config.json"
+  local config_file; config_file="$(_dome_path "$(_default_dome)")/savia-vaults.config.json" || exit 1
   [[ ! -f "$config_file" ]] && die "No active dome found. Create one first: vaults dome create <name>"
-  python3 -c "
-import json, sys
-with open('$config_file') as f: cfg = json.load(f)
-cfg.setdefault('federation',{}).setdefault('domes',[])
+  # Datos por argv: nunca dentro del código Python. weight tiene que ser un número finito.
+  python3 -c '
+import json, math, sys
+config_file, fid, url, token, weight = sys.argv[1:6]
+w = float(weight)
+if not math.isfinite(w): sys.exit(1)
+with open(config_file) as f: cfg = json.load(f)
+cfg.setdefault("federation",{}).setdefault("domes",[])
 # Remove existing entry for same id
-cfg['federation']['domes'] = [d for d in cfg['federation']['domes'] if d.get('id') != '$id']
-cfg['federation']['domes'].append({'id':'$id','name':'$id','url':'$url','authToken':'$token','timeout':5000,'enabled':True,'weight':$weight,'tags':[],'status':'unknown'})
-cfg['federation']['enabled'] = True
-with open('$config_file','w') as f: json.dump(cfg, f, indent=2)
-print('OK')
-" 2>/dev/null && info "Federated dome registered." || die "Failed to update config."
+cfg["federation"]["domes"] = [d for d in cfg["federation"]["domes"] if d.get("id") != fid]
+cfg["federation"]["domes"].append({"id":fid,"name":fid,"url":url,"authToken":token,"timeout":5000,"enabled":True,"weight":w,"tags":[],"status":"unknown"})
+cfg["federation"]["enabled"] = True
+with open(config_file,"w") as f: json.dump(cfg, f, indent=2)
+print("OK")
+' "$config_file" "$id" "$url" "$token" "$weight" 2>/dev/null && info "Federated dome registered." || die "Failed to update config."
 }
 
 cmd_dome_federate_remove() {
   local id="${1:-}"; [[ -z "$id" ]] && die "Usage: vaults dome federate remove <id>"
   info "Removing federated dome: $id"
-  local config_file="${VAULT_ROOT}/$(ls "$VAULT_ROOT" 2>/dev/null | head -1)/savia-vaults.config.json"
-  python3 -c "
-import json
-with open('$config_file') as f: cfg = json.load(f)
-cfg.setdefault('federation',{}).setdefault('domes',[])
-cfg['federation']['domes'] = [d for d in cfg['federation']['domes'] if d.get('id') != '$id']
-with open('$config_file','w') as f: json.dump(cfg, f, indent=2)
-" 2>/dev/null && info "Federated dome removed." || die "Failed to update config."
+  local config_file; config_file="$(_dome_path "$(_default_dome)")/savia-vaults.config.json" || exit 1
+  python3 -c '
+import json, sys
+config_file, fid = sys.argv[1:3]
+with open(config_file) as f: cfg = json.load(f)
+cfg.setdefault("federation",{}).setdefault("domes",[])
+cfg["federation"]["domes"] = [d for d in cfg["federation"]["domes"] if d.get("id") != fid]
+with open(config_file,"w") as f: json.dump(cfg, f, indent=2)
+' "$config_file" "$id" 2>/dev/null && info "Federated dome removed." || die "Failed to update config."
 }
 
 cmd_dome_federate_list() { header "Federated Domes"; cmd_dome_federate_health; }
 cmd_dome_federate_health() {
-  local config_file="${VAULT_ROOT}/$(ls "$VAULT_ROOT" 2>/dev/null | head -1)/savia-vaults.config.json"
+  local config_file; config_file="$(_dome_path "$(_default_dome)")/savia-vaults.config.json" || exit 1
   [[ ! -f "$config_file" ]] && { echo "  No domes configured."; return; }
-  python3 -c "
-import json
-with open('$config_file') as f: cfg = json.load(f)
-domes = cfg.get('federation',{}).get('domes',[])
-if not domes: print('  No federated domes.')
+  python3 -c '
+import json, sys
+with open(sys.argv[1]) as f: cfg = json.load(f)
+domes = cfg.get("federation",{}).get("domes",[])
+if not domes: print("  No federated domes.")
 for d in domes:
-    print(f\"  {d['id']:20s} → {d['url']:40s} [{'enabled' if d.get('enabled',True) else 'disabled'}] weight={d.get('weight',1.0)}\")
-" 2>/dev/null
+    state = "enabled" if d.get("enabled",True) else "disabled"
+    fid, url, w = d["id"], d["url"], d.get("weight", 1.0)
+    print(f"  {fid:20s} → {url:40s} [{state}] weight={w}")
+' "$config_file" 2>/dev/null
 }
 
 cmd_dome_sync() {
@@ -361,7 +388,7 @@ cmd_dome_sync() {
   while [[ $# -gt 0 ]]; do case "$1" in --name) name="$2"; shift 2 ;; --source) source="$2"; shift 2 ;; *) [[ -z "$name" ]] && { name="$1"; shift; } || { source="$1"; shift; } ;; esac; done
   [[ -z "$name" ]] && die "Dome name required"
   [[ -z "$source" ]] && die "Source directory required"
-  local vault_path="${VAULT_ROOT}/${name}"; [[ ! -d "$vault_path" ]] && die "Dome not found: $vault_path"
+  local vault_path; vault_path="$(_dome_path "$name")" || exit 1; [[ ! -d "$vault_path" ]] && die "Dome not found: $vault_path"
   info "Syncing $source → $name..."
   rsync -a --delete --exclude '.git' --exclude '.savia-vault' "$source/" "$vault_path/" 2>/dev/null || cp -r "$source/"* "$vault_path/" 2>/dev/null
   cd "$vault_path" && git add -A && git commit -m "sync: $(date -Iseconds)" 2>/dev/null || true
@@ -378,7 +405,8 @@ cmd_dome_index() {
   [[ "$name" == "savia-docs" ]] || die "dome index solo sincroniza savia-docs (pedido: $name)"
   info "Rebuilding index for $name..."
   # Arg 1 vacío = repo de Savia ($SAVIA_ROOT o el de este script); arg 2 = la cúpula a sincronizar.
-  bash "$SCRIPT_DIR/index-docs.sh" "" "${VAULT_ROOT}/${name}" || die "Sincronización de $name fallida"
+  local _vp; _vp="$(_dome_path "$name")" || exit 1
+  bash "$SCRIPT_DIR/index-docs.sh" "" "$_vp" || die "Sincronización de $name fallida"
 }
 
 cmd_dome_stats() {
@@ -393,7 +421,7 @@ cmd_dome_search() {
   done
   [[ -z "$query" ]] && die "Search query required"
   if [[ -n "$dome" ]]; then
-    local vault_path="${VAULT_ROOT}/${dome}"
+    local vault_path; vault_path="$(_dome_path "$dome")" || exit 1
     grep -rli "$query" "$vault_path" --include="*.md" 2>/dev/null | head -n "$max" | while read -r f; do echo "  ${f#$vault_path/}"; done
   else
     grep -rli "$query" "$VAULT_ROOT" --include="*.md" 2>/dev/null | head -n "$max" | while read -r f; do echo "  ${f#$VAULT_ROOT/}"; done
@@ -437,18 +465,19 @@ cmd_user_add() {
   while [[ $# -gt 0 ]]; do case "$1" in --role) role="$2"; shift 2 ;; --dome) dome="$2"; shift 2 ;; *) username="$1"; shift ;; esac; done
   [[ -z "$username" ]] && die "Username required"
   [[ ! "$role" =~ ^(admin|reader|writer)$ ]] && die "Invalid role: $role. Use admin, reader, or writer."
-  local vault_path; vault_path="${VAULT_ROOT}/${dome:-$(ls "$VAULT_ROOT" 2>/dev/null | head -1)}"
+  local vault_path; vault_path="$(_dome_path "${dome:-$(_default_dome)}")" || exit 1
   [[ ! -d "$vault_path" ]] && die "No dome found. Create one or specify --dome."
   echo -n "Password for $username: "; read -rs pass; echo
   [[ ${#pass} -lt 8 ]] && die "Password must be at least 8 characters."
   local users_file="${vault_path}/.savia-vault/users.json"
   local hash; hash=$(echo -n "$pass" | sha256sum | cut -d' ' -f1)
-  python3 -c "
+  python3 -c '
 import json, sys
-with open('$users_file') as f: users = json.load(f)
-users['$username'] = {'role':'$role','passwd_hash':'$hash','created':'$(date -Iseconds)'}
-with open('$users_file','w') as f: json.dump(users, f, indent=2)
-" 2>/dev/null || die "Failed to add user."
+users_file, username, role, phash, created = sys.argv[1:6]
+with open(users_file) as f: users = json.load(f)
+users[username] = {"role":role,"passwd_hash":phash,"created":created}
+with open(users_file,"w") as f: json.dump(users, f, indent=2)
+' "$users_file" "$username" "$role" "$hash" "$(date -Iseconds)" 2>/dev/null || die "Failed to add user."
   info "User '$username' added with role '$role'."
 }
 
@@ -456,26 +485,29 @@ cmd_user_remove() {
   local username="" dome=""
   while [[ $# -gt 0 ]]; do case "$1" in --dome) dome="$2"; shift 2 ;; *) username="$1"; shift ;; esac; done
   [[ -z "$username" ]] && die "Username required"
-  local vault_path="${VAULT_ROOT}/${dome:-$(ls "$VAULT_ROOT" 2>/dev/null | head -1)}"
-  python3 -c "
-import json
-with open('$vault_path/.savia-vault/users.json') as f: users = json.load(f)
-if '$username' in users: del users['$username']
-with open('$vault_path/.savia-vault/users.json','w') as f: json.dump(users, f, indent=2)
-" 2>/dev/null && info "User '$username' removed." || die "Failed to remove user."
+  local vault_path; vault_path="$(_dome_path "${dome:-$(_default_dome)}")" || exit 1
+  python3 -c '
+import json, sys
+users_file, username = sys.argv[1:3]
+with open(users_file) as f: users = json.load(f)
+if username in users: del users[username]
+with open(users_file,"w") as f: json.dump(users, f, indent=2)
+' "$vault_path/.savia-vault/users.json" "$username" 2>/dev/null && info "User '$username' removed." || die "Failed to remove user."
 }
 
 cmd_user_list() {
   local dome=""
   while [[ $# -gt 0 ]]; do case "$1" in --dome) dome="$2"; shift 2 ;; *) shift ;; esac; done
-  local vault_path="${VAULT_ROOT}/${dome:-$(ls "$VAULT_ROOT" 2>/dev/null | head -1)}"
+  local vault_path; vault_path="$(_dome_path "${dome:-$(_default_dome)}")" || exit 1
   header "Users"
-  python3 -c "
-import json
-with open('$vault_path/.savia-vault/users.json') as f: users = json.load(f)
-if not users: print('  No users.')
-for u, d in users.items(): print(f\"  {u:20s} role={d.get('role','reader'):10s} created={d.get('created','unknown')}\")
-" 2>/dev/null
+  python3 -c '
+import json, sys
+with open(sys.argv[1]) as f: users = json.load(f)
+if not users: print("  No users.")
+for u, d in users.items():
+    role, created = d.get("role", "reader"), d.get("created", "unknown")
+    print(f"  {u:20s} role={role:10s} created={created}")
+' "$vault_path/.savia-vault/users.json" 2>/dev/null
 }
 
 cmd_user_passwd() {
@@ -484,30 +516,32 @@ cmd_user_passwd() {
   [[ -z "$username" ]] && die "Username required"
   echo -n "New password for $username: "; read -rs pass; echo
   [[ ${#pass} -lt 8 ]] && die "Password must be at least 8 characters."
-  local vault_path="${VAULT_ROOT}/${dome:-$(ls "$VAULT_ROOT" 2>/dev/null | head -1)}"
+  local vault_path; vault_path="$(_dome_path "${dome:-$(_default_dome)}")" || exit 1
   local hash; hash=$(echo -n "$pass" | sha256sum | cut -d' ' -f1)
-  python3 -c "
-import json
-with open('$vault_path/.savia-vault/users.json') as f: users = json.load(f)
-if '$username' not in users: exit(1)
-users['$username']['passwd_hash'] = '$hash'
-with open('$vault_path/.savia-vault/users.json','w') as f: json.dump(users, f, indent=2)
-" 2>/dev/null && info "Password changed for '$username'." || die "User not found."
+  python3 -c '
+import json, sys
+users_file, username, phash = sys.argv[1:4]
+with open(users_file) as f: users = json.load(f)
+if username not in users: sys.exit(1)
+users[username]["passwd_hash"] = phash
+with open(users_file,"w") as f: json.dump(users, f, indent=2)
+' "$vault_path/.savia-vault/users.json" "$username" "$hash" 2>/dev/null && info "Password changed for '$username'." || die "User not found."
 }
 
 cmd_user_perm() {
   local username="" permission="" value="" dome=""
   while [[ $# -gt 0 ]]; do case "$1" in --dome) dome="$2"; shift 2 ;; *) [[ -z "$username" ]] && { username="$1"; shift; } || [[ -z "$permission" ]] && { permission="$1"; shift; } || { value="$1"; shift; } ;; esac; done
   [[ -z "$username" || -z "$permission" || -z "$value" ]] && die "Usage: vaults user perm <username> <permission> <value>"
-  local vault_path="${VAULT_ROOT}/${dome:-$(ls "$VAULT_ROOT" 2>/dev/null | head -1)}"
-  python3 -c "
-import json
-with open('$vault_path/.savia-vault/users.json') as f: users = json.load(f)
-if '$username' not in users: exit(1)
-users['$username']['permissions'] = users['$username'].get('permissions',{})
-users['$username']['permissions']['$permission'] = '$value' == 'true'
-with open('$vault_path/.savia-vault/users.json','w') as f: json.dump(users, f, indent=2)
-" 2>/dev/null && info "Permission '$permission' = $value for '$username'." || die "User not found."
+  local vault_path; vault_path="$(_dome_path "${dome:-$(_default_dome)}")" || exit 1
+  python3 -c '
+import json, sys
+users_file, username, permission, value = sys.argv[1:5]
+with open(users_file) as f: users = json.load(f)
+if username not in users: sys.exit(1)
+users[username]["permissions"] = users[username].get("permissions",{})
+users[username]["permissions"][permission] = value == "true"
+with open(users_file,"w") as f: json.dump(users, f, indent=2)
+' "$vault_path/.savia-vault/users.json" "$username" "$permission" "$value" 2>/dev/null && info "Permission '$permission' = $value for '$username'." || die "User not found."
 }
 
 # ── Backup commands ──
@@ -544,7 +578,7 @@ cmd_backup() {
 cmd_backup_create() {
   local name="" output_dir="" compress=false
   while [[ $# -gt 0 ]]; do case "$1" in --name) name="$2"; shift 2 ;; --output) output_dir="$2"; shift 2 ;; --compress) compress=true; shift ;; *) shift ;; esac; done
-  local vault_path="${VAULT_ROOT}/${name:-$(ls "$VAULT_ROOT" 2>/dev/null | head -1)}"
+  local vault_path; vault_path="$(_dome_path "${name:-$(_default_dome)}")" || exit 1
   [[ ! -d "$vault_path" ]] && die "Dome not found: $vault_path"
   local backup_dir="${output_dir:-${VAULT_ROOT}/.backups}"; mkdir -p "$backup_dir"
   local ts; ts=$(date +%Y%m%d-%H%M%S)
@@ -640,7 +674,7 @@ cmd_conf_set() {
   while [[ $# -gt 0 ]]; do case "$1" in --dome) dome="$2"; shift 2 ;; *) level="$1"; shift ;; esac; done
   [[ -z "$level" || -z "$dome" ]] && die "Usage: vaults confidentiality set <N1|N2|N3|N4> --dome <name>"
   [[ ! "$level" =~ ^N[1-4]$ ]] && die "Invalid level: $level. Use N1, N2, N3, or N4."
-  local vault_path="${VAULT_ROOT}/${dome}"; [[ ! -d "$vault_path" ]] && die "Dome not found: $vault_path"
+  local vault_path; vault_path="$(_dome_path "$dome")" || exit 1; [[ ! -d "$vault_path" ]] && die "Dome not found: $vault_path"
   echo "{\"level\":\"$level\",\"set_at\":\"$(date -Iseconds)\",\"set_by\":\"$(whoami)\"}" > "$vault_path/.savia-vault/confidentiality.json"
   info "Confidentiality set to $level for dome '$dome'."
 }
@@ -649,7 +683,7 @@ cmd_conf_get() {
   local dome=""
   while [[ $# -gt 0 ]]; do case "$1" in --dome) dome="$2"; shift 2 ;; *) shift ;; esac; done
   [[ -z "$dome" ]] && die "--dome required"
-  local conf_file="${VAULT_ROOT}/${dome}/.savia-vault/confidentiality.json"
+  local conf_file; conf_file="$(_dome_path "$dome")/.savia-vault/confidentiality.json" || exit 1
   [[ -f "$conf_file" ]] && cat "$conf_file" || echo '{"level":"N1","note":"default"}'
 }
 
@@ -660,7 +694,7 @@ cmd_conf_list() {
     local name; name=$(basename "$d")
     local conf_file="${d}.savia-vault/confidentiality.json"
     local level="N1"
-    [[ -f "$conf_file" ]] && level=$(python3 -c "import json; print(json.load(open('$conf_file')).get('level','N1'))" 2>/dev/null || echo "N1")
+    [[ -f "$conf_file" ]] && level=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("level","N1"))' "$conf_file" 2>/dev/null || echo "N1")
     printf "  %-30s %s\n" "$name" "$level"
   done
 }
@@ -669,9 +703,9 @@ cmd_conf_audit() {
   local dome="" output=""
   while [[ $# -gt 0 ]]; do case "$1" in --dome) dome="$2"; shift 2 ;; --output) output="$2"; shift 2 ;; *) shift ;; esac; done
   [[ -z "$dome" ]] && die "--dome required"
-  local vault_path="${VAULT_ROOT}/${dome}"
+  local vault_path; vault_path="$(_dome_path "$dome")" || exit 1
   local conf_file="${vault_path}/.savia-vault/confidentiality.json"
-  local level; level=$(python3 -c "import json; print(json.load(open('$conf_file')).get('level','N1'))" 2>/dev/null || echo "N1")
+  local level; level=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("level","N1"))' "$conf_file" 2>/dev/null || echo "N1")
   header "Confidentiality Audit: $dome (Level: $level)"
   echo "  Checking for N3+ data in N1/N2 dome..."
   local findings=0

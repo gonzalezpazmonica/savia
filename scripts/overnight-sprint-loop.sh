@@ -47,6 +47,9 @@ _warn() { printf 'WARN:  %s\n' "$*" >&2; }
 
 _jq_available() { command -v jq &>/dev/null; }
 
+# Resolve timeout(1): GNU coreutils name, or gtimeout (Homebrew coreutils).
+_timeout_bin() { command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null; }
+
 # Read a single value from state.json
 _state_value() {
   local sprint_id="$1"
@@ -56,11 +59,12 @@ _state_value() {
   if _jq_available; then
     jq -r "$query" "$sf"
   else
-    python3 -c "
+    # Datos por argv, nunca interpolados en el código (SE-498 AC-10).
+    python3 - "$sf" "$query" <<'PY'
 import sys, json
-data = json.load(open('$sf'))
+data = json.load(open(sys.argv[1]))
 import re
-parts = [p for p in re.split(r'[.\[\]]+', '$query') if p]
+parts = [p for p in re.split(r'[.\[\]]+', sys.argv[2]) if p]
 val = data
 for p in parts:
     if p.lstrip('-').isdigit():
@@ -68,7 +72,7 @@ for p in parts:
     else:
         val = val.get(p, '')
 print(val if not isinstance(val, (dict, list)) else json.dumps(val))
-"
+PY
   fi
 }
 
@@ -80,13 +84,13 @@ _pending_tasks() {
   if _jq_available; then
     jq -r '.tasks[] | select(.status == "pending") | .id' "$sf"
   else
-    python3 -c "
-import json
-data = json.load(open('$sf'))
+    python3 - "$sf" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
 for t in data.get('tasks', []):
     if t.get('status') == 'pending':
         print(t['id'])
-"
+PY
   fi
 }
 
@@ -98,14 +102,14 @@ _task_description() {
   if _jq_available; then
     jq -r --argjson id "$task_id" '.tasks[] | select(.id == $id) | .description' "$sf"
   else
-    python3 -c "
-import json
-data = json.load(open('$sf'))
+    python3 - "$sf" "$task_id" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
 for t in data.get('tasks', []):
-    if str(t.get('id')) == '$task_id':
+    if str(t.get('id')) == sys.argv[2]:
         print(t.get('description', ''))
         break
-"
+PY
   fi
 }
 
@@ -114,6 +118,10 @@ _audit() {
   local sprint_id="$1"
   local message="$2"
   local audit_file="$AGENT_RUNS_DIR/${sprint_id}-audit.log"
+  # One entry per line: escape CR/LF so a task description cannot forge
+  # extra audit lines (SE-498 AC-10).
+  message="${message//$'\r'/\\r}"
+  message="${message//$'\n'/\\n}"
   printf '[%s] %s\n' "$(_now)" "$message" >> "$audit_file"
 }
 
@@ -177,6 +185,10 @@ _coherence_gate() {
 #     2 → TOKEN_EXHAUSTION (trigger model escalation)
 #     3 → OOM | TIMEOUT | INFRA_ERROR (abort without escalation)
 #     * → generic failure
+#
+#   It runs in a child `bash` under timeout(1), with its arguments as positional
+#   parameters. run_loop exports it with `export -f`; an override that calls
+#   other functions of its own must export them too.
 
 run_agent_task() {
   local sprint_id="$1"
@@ -214,10 +226,18 @@ parse_args() {
 run_loop() {
   local sprint_id="$SPRINT_ID"
   local audit_file="$AGENT_RUNS_DIR/${sprint_id}-audit.log"
+  # Fail closed: without timeout(1) a task would run with no time-box (SE-498 AC-10).
+  local timeout_bin
+  timeout_bin="$(_timeout_bin)" \
+    || _err "timeout (coreutils) no está en PATH: el bucle no lanza tareas sin límite de tiempo (SE-498 AC-10)"
+
   mkdir -p "$AGENT_RUNS_DIR"
 
   export OVERNIGHT_SPRINT_ID="$sprint_id"
-  export AGENT_RUNS_DIR
+  export AGENT_RUNS_DIR DRY_RUN
+  # The task runs in a child `bash` under timeout: export the runner (the
+  # caller's override, if any) and the helpers the default stub uses.
+  export -f run_agent_task _now _log _warn _err _audit
 
   # Initialize state (idempotent — no-op if state already exists)
   bash "$STATE_SCRIPT" init --sprint-id "$sprint_id" --tasks-file "$TASKS_FILE" >/dev/null
@@ -282,19 +302,16 @@ run_loop() {
 
       _log "  Attempting with model=$model_tier (timeout=${TASK_TIMEOUT_MIN}m)"
 
-      # Execute with time-box
+      # Execute with time-box (SE-498 AC-10). Arguments travel as positional
+      # parameters, never interpolated into the `bash -c` code: a quote in the
+      # description can no longer break out and run commands. There is no
+      # fallback without timeout — run_loop refuses to start without one.
       local timeout_secs=$(( TASK_TIMEOUT_MIN * 60 ))
       task_exit_code=0
 
-      if command -v timeout &>/dev/null; then
-        timeout "$timeout_secs" bash -c \
-          "run_agent_task '$sprint_id' '$task_id' '$description' '$model_tier'" \
-          || task_exit_code=$?
-      else
-        # Fallback without timeout (stdlib only)
-        run_agent_task "$sprint_id" "$task_id" "$description" "$model_tier" \
-          || task_exit_code=$?
-      fi
+      "$timeout_bin" "$timeout_secs" bash -c 'run_agent_task "$@"' run_agent_task \
+        "$sprint_id" "$task_id" "$description" "$model_tier" \
+        || task_exit_code=$?
 
       if [[ "$task_exit_code" -eq 0 ]]; then
         succeeded=1

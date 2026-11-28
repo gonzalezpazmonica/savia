@@ -48,7 +48,7 @@ fi
 
 if [[ -z "${CHANGED// /}" ]]; then
   log "No file changes detected"
-  SELECTED=$(python3 -c "import json; print(' '.join(json.load(open('$DEPS_FILE'))['core_tests']))")
+  SELECTED=$(python3 -c "import sys; import json; print(' '.join(json.load(open(sys.argv[1]))['core_tests']))" "$DEPS_FILE")
   echo "$SELECTED"
   exit 0
 fi
@@ -56,16 +56,16 @@ fi
 log "Changed files:"
 $VERBOSE && echo "$CHANGED" | sed 's/^/  /' >&2
 
-TOTAL_TESTS=$(python3 -c "import json; print(json.load(open('$DEPS_FILE'))['total_tests'])")
+TOTAL_TESTS=$(python3 -c "import sys; import json; print(json.load(open(sys.argv[1]))['total_tests'])" "$DEPS_FILE")
 SELECTED=""
 
 while IFS= read -r file; do
   [[ -z "$file" ]] && continue
 
-  matched=$(python3 -c "
+  matched=$(python3 -c "import sys
 import fnmatch, json, sys
-deps = json.load(open('$DEPS_FILE'))
-f = sys.argv[1].strip()
+deps = json.load(open(sys.argv[1]))
+f = sys.argv[2].strip()
 tests = set()
 
 if f in deps.get('mappings', {}):
@@ -81,7 +81,7 @@ for pattern, pt in deps.get('mappings', {}).items():
 
 for t in sorted(tests):
     print(t)
-" "$file")
+" "$DEPS_FILE" "$file")
 
   if [[ -n "$matched" ]]; then
     while IFS= read -r t; do
@@ -90,7 +90,7 @@ for t in sorted(tests):
   fi
 done <<< "$CHANGED"
 
-CORE=$(python3 -c "import json; print(' '.join(json.load(open('$DEPS_FILE'))['core_tests']))")
+CORE=$(python3 -c "import sys; import json; print(' '.join(json.load(open(sys.argv[1]))['core_tests']))" "$DEPS_FILE")
 SELECTED="$SELECTED $CORE"
 
 SELECTED=$(echo "$SELECTED" | tr ' ' '\n' | sort -u | tr '\n' ' ')

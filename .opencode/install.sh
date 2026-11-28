@@ -166,7 +166,7 @@ fi
 step 5 "Installing script dependencies..."
 
 if [[ -f "$SAVIA_HOME/scripts/package.json" ]]; then
-  (cd "$SAVIA_HOME/scripts" && npm install --silent 2>/dev/null) && ok "npm dependencies installed" || warn "npm install had warnings (non-critical)"
+  (cd "$SAVIA_HOME/scripts" && npm ci --silent 2>/dev/null) && ok "npm dependencies installed (lockfile)" || warn "npm ci had warnings (non-critical)"
 else
   warn "No package.json found in scripts/ — skipping npm install"
 fi

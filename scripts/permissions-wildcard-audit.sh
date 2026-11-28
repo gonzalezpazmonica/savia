@@ -93,30 +93,30 @@ audit_settings() {
   local f="$1"
   [[ ! -f "$f" ]] && return 0
 
-  if ! python3 -c "import json; json.load(open('$f'))" 2>/dev/null; then
+  if ! python3 -c "import sys; import json; json.load(open(sys.argv[1]))" "$f" 2>/dev/null; then
     add_finding "PERM-08" "MEDIUM" "Malformed JSON" "$f"
     return 0
   fi
 
   local allow_list deny_list default_mode skip_prompt
-  allow_list=$(python3 -c "
+  allow_list=$(python3 -c "import sys
 import json
-d = json.load(open('$f'))
+d = json.load(open(sys.argv[1]))
 for p in d.get('permissions',{}).get('allow',[]): print(p)
-" 2>/dev/null)
-  deny_list=$(python3 -c "
+" "$f" 2>/dev/null)
+  deny_list=$(python3 -c "import sys
 import json
-d = json.load(open('$f'))
+d = json.load(open(sys.argv[1]))
 for p in d.get('permissions',{}).get('deny',[]): print(p)
-" 2>/dev/null)
-  default_mode=$(python3 -c "
+" "$f" 2>/dev/null)
+  default_mode=$(python3 -c "import sys
 import json
-print(json.load(open('$f')).get('permissions',{}).get('defaultMode',''))
-" 2>/dev/null)
-  skip_prompt=$(python3 -c "
+print(json.load(open(sys.argv[1])).get('permissions',{}).get('defaultMode',''))
+" "$f" 2>/dev/null)
+  skip_prompt=$(python3 -c "import sys
 import json
-print(json.load(open('$f')).get('skipAutoPermissionPrompt', False))
-" 2>/dev/null)
+print(json.load(open(sys.argv[1])).get('skipAutoPermissionPrompt', False))
+" "$f" 2>/dev/null)
 
   # Count non-empty lines in deny_list (avoid multi-line fallback)
   if [[ -z "$deny_list" ]]; then

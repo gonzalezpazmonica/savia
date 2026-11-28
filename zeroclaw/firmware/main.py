@@ -37,8 +37,11 @@ try:
     wlan = network.WLAN(network.STA_IF)
     if wlan.isconnected():
         from lib.wifi_server import MiniHTTPServer
-        http_server = MiniHTTPServer(handler, port=80)
-        ip = http_server.start()
+        with open('config.json') as f:
+            _tok = json.load(f).get('http_token', '')
+        _srv = MiniHTTPServer(handler, port=80, token=_tok)
+        ip = _srv.start()  # ValueError sin http_token: solo serie (SE-442 #25)
+        http_server = _srv
         if heartbeat:
             heartbeat.set_wifi(ip)
         if lcd:

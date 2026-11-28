@@ -35,10 +35,11 @@ No envio datos a ningun servidor. No hay analytics, no hay tracking, no hay phon
 
 Si descubres un problema de seguridad (un script que filtra credenciales, un comando que expone datos en logs, o una configuración insegura por defecto), **NO abras un issue publico**.
 
-En su lugar:
-1. Ve al repositorio en GitHub
-2. Click **Security** > **Report a vulnerability**
-3. Describe el problema, pasos para reproducirlo, e impacto potencial
+En su lugar, usa el reporte privado de vulnerabilidades de GitHub:
+<https://github.com/gonzalezpazmonica/savia/security/advisories/new>
+
+1. Abre el enlace (o, en el repositorio, **Security** > **Report a vulnerability**)
+2. Describe el problema, pasos para reproducirlo, e impacto potencial
 
 Recibiras acuse en **72 horas** y plan de resolución en **14 dias**. Te acredito en las release notes salvo que prefieras anonimato.
 

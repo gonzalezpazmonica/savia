@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +26,7 @@ SCRIPT_DIR  = Path(__file__).resolve().parent
 WORKSPACE   = Path(os.environ.get("CLAUDE_PROJECT_DIR", SCRIPT_DIR.parent.parent))
 TAXONOMY_FILE = SCRIPT_DIR / "sensitive-taxonomy.json"
 LOG_DIR     = WORKSPACE / "output" / "cross-turn"
+SESSION_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,128}")
 
 
 def _load_taxonomy() -> dict:
@@ -70,6 +72,8 @@ def classify_domain(text: str) -> str:
 # ── Log helpers ──────────────────────────────────────────────────────────────
 
 def _log_path(session_id: str) -> Path:
+    if not isinstance(session_id, str) or not SESSION_ID_RE.fullmatch(session_id):
+        raise ValueError("invalid session id: %r" % (session_id,))
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     return LOG_DIR / f"{session_id}.jsonl"
 
@@ -159,6 +163,9 @@ def main() -> None:
     parser.add_argument("--report",  action="store_true", help="Report convergence status")
     parser.add_argument("--check",   action="store_true", help="Check convergence (exit 1 if alert)")
     args = parser.parse_args()
+    # The session id becomes a file name under LOG_DIR: never a path.
+    if not SESSION_ID_RE.fullmatch(args.session):
+        parser.error("invalid --session: expected [A-Za-z0-9_-]{1,128}")
 
     if args.text and args.turn:
         domain = classify_domain(args.text)

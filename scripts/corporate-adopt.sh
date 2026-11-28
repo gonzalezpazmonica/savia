@@ -53,20 +53,14 @@ write_ledger_entry() {
     prev_hash=$(sha256sum "$LEDGER" | awk '{print $1}')
   fi
 
-  python3 -c "
-import json
-obj = {
-  'entry_id': '$(echo "$entry_id" | sed "s/'/\\\\'/g")',
-  'action': '$action',
-  'reason': '$(echo "$reason" | sed "s/'/\\\\'/g")',
-  'signature': '$(echo "$signature" | sed "s/'/\\\\'/g")',
-  'body_id': '$(echo "$body_id" | sed "s/'/\\\\'/g")',
-  'body_version': '$body_version',
-  'prev_ledger_hash': '$prev_hash',
-  'timestamp': '$ts'
-}
-print(json.dumps(obj, ensure_ascii=False))
-" >> "$LEDGER" 2>/dev/null || true
+  # Los valores (id y body_id vienen de la tarjeta externa) van por argv.
+  python3 -c '
+import json, sys
+keys = ("entry_id", "action", "reason", "signature", "body_id",
+        "body_version", "prev_ledger_hash", "timestamp")
+print(json.dumps(dict(zip(keys, sys.argv[1:9])), ensure_ascii=False))
+' "$entry_id" "$action" "$reason" "$signature" "$body_id" "$body_version" "$prev_hash" "$ts" \
+    >> "$LEDGER" 2>/dev/null || true
 }
 
 detect_conflicts() {
@@ -83,16 +77,21 @@ detect_conflicts() {
   if [[ -f "$CRITERIO" ]]; then
     # Find existing entries in same ambito
     local same_scope
-    same_scope=$(python3 -c "
+    # ambito viene de la tarjeta externa: por argv y escapado como literal.
+    # Antes {ambito} era una variable de Python inexistente y nunca había conflictos.
+    same_scope=$(python3 -c '
 import re, sys
-with open('$CRITERIO') as f:
+with open(sys.argv[1]) as f:
     content = f.read()
+ambito = sys.argv[2]
+if not ambito:
+    sys.exit()
 # Find all CRIT entries in same ambito
-pattern = rf'(CRIT-\d+)\s*—.*\n.*ambito.*{ambito}'
+pattern = r"(CRIT-\d+)\s*—.*\n.*ambito.*" + re.escape(ambito)
 matches = re.findall(pattern, content, re.IGNORECASE)
 if matches:
-    print(','.join(matches))
-" 2>/dev/null)
+    print(",".join(matches))
+' "$CRITERIO" "$ambito" 2>/dev/null)
 
     if [[ -n "$same_scope" ]]; then
       conflicts="Personal criterion in same ambito ($ambito): $same_scope"
@@ -154,7 +153,7 @@ main() {
     exit 2
   fi
 
-  if ! python3 -c "import json; json.load(open('$CANDIDATE')); print('OK')" 2>/dev/null | grep -q OK; then
+  if ! python3 -c 'import json,sys; json.load(open(sys.argv[1])); print("OK")' "$CANDIDATE" 2>/dev/null | grep -q OK; then
     echo "ERROR: Body card is not valid JSON: $CANDIDATE" >&2
     exit 2
   fi
@@ -165,8 +164,10 @@ main() {
   echo "Step 1: Monotonicity gate..."
 
   local gate_output gate_rc
-  gate_output=$(bash "$GATE_SCRIPT" "$CANDIDATE" 2>&1) || true
-  gate_rc=$?
+  # El código de salida se captura en la misma orden: con «|| true» detrás,
+  # $? era siempre 0 y un gate en FAIL no paraba la adopción.
+  gate_rc=0
+  gate_output=$(bash "$GATE_SCRIPT" "$CANDIDATE" 2>&1) || gate_rc=$?
 
   echo "$gate_output"
 
@@ -183,14 +184,14 @@ main() {
   echo "Step 2: Entry-by-entry adoption"
 
   local body_id body_version entry_count
-  body_id=$(python3 -c "import json; d=json.load(open('$CANDIDATE')); print(d.get('body_id','UNKNOWN'))" 2>/dev/null || echo "UNKNOWN")
-  body_version=$(python3 -c "import json; d=json.load(open('$CANDIDATE')); print(d.get('version','0'))" 2>/dev/null || echo "0")
-  entry_count=$(python3 -c "
-import json
-card=json.load(open('$CANDIDATE'))
-entries=card.get('entries',card.get('criterios',[]))
+  body_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("body_id","UNKNOWN"))' "$CANDIDATE" 2>/dev/null || echo "UNKNOWN")
+  body_version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("version","0"))' "$CANDIDATE" 2>/dev/null || echo "0")
+  entry_count=$(python3 -c '
+import json, sys
+card=json.load(open(sys.argv[1]))
+entries=card.get("entries",card.get("criterios",[]))
 print(len(entries))
-" 2>/dev/null || echo "0")
+' "$CANDIDATE" 2>/dev/null || echo "0")
 
   echo "Body: $body_id v$body_version"
   echo "Entries to process: $entry_count"
@@ -206,13 +207,14 @@ print(len(entries))
 
   for i in $(seq 0 $((entry_count - 1))); do
     local entry_json
-    entry_json=$(python3 -c "
-import json
-card=json.load(open('$CANDIDATE'))
-entries=card.get('entries',card.get('criterios',[]))
-if $i < len(entries):
-    print(json.dumps(entries[$i],ensure_ascii=False))
-" 2>/dev/null)
+    entry_json=$(python3 -c '
+import json, sys
+card=json.load(open(sys.argv[1]))
+i=int(sys.argv[2])
+entries=card.get("entries",card.get("criterios",[]))
+if i < len(entries):
+    print(json.dumps(entries[i],ensure_ascii=False))
+' "$CANDIDATE" "$i" 2>/dev/null)
 
     if [[ -z "$entry_json" ]]; then
       continue

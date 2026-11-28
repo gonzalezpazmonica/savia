@@ -2,6 +2,7 @@
 # install.sh — SaviaVaults installer (Linux / macOS)
 # Copyright (c) 2026 Savia. MIT License.
 set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[savia-vaults]${NC} $*"; }
@@ -35,11 +36,14 @@ fi
 info "npm $(npm -v) ✓"
 echo ""
 
-# ── Install globally ──
-info "Installing savia-vaults..."
-npm install -g savia-vaults 2>&1 || {
-  warn "Global install failed. Trying npx fallback..."
-  info "Use: npx savia-vaults <command>"
+# ── Install globally from this checkout ──
+# SE-465 S3 (alerta SE-442 #83): savia-vaults no está publicado en el registro
+# npm; `npm install -g savia-vaults` sin versión instalaba lo que hubiera bajo
+# ese nombre. Se instala desde la fuente local con el lock versionado.
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+info "Installing savia-vaults from $PROJECT_DIR..."
+(cd "$PROJECT_DIR" && npm ci 2>&1 && npm run build 2>&1 && npm link 2>&1) || {
+  warn "Install from source failed. Run from the checkout: node $PROJECT_DIR/dist/cli/index.js <command>"
   exit 0
 }
 

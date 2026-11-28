@@ -181,7 +181,7 @@ fi
 # ---------------------------------------------------------------------------
 # Validate JSON syntax
 # ---------------------------------------------------------------------------
-if ! python3 -c "import json; json.load(open('$OPENCODE_CONFIG'))" 2>/dev/null; then
+if ! python3 -c "import sys; import json; json.load(open(sys.argv[1]))" "$OPENCODE_CONFIG" 2>/dev/null; then
   echo -e "${RED}FAIL${NC}: $OPENCODE_CONFIG is not valid JSON"
   exit 2
 fi
@@ -190,13 +190,13 @@ fi
 # Extract unique top-level keys (excluding $schema which is always valid)
 # ---------------------------------------------------------------------------
 readarray -t TOP_KEYS < <(
-  python3 -c "
+  python3 -c "import sys
 import json
-with open('$OPENCODE_CONFIG') as f:
+with open(sys.argv[1]) as f:
     d = json.load(f)
 for k in sorted(d.keys()):
     print(k)
-" 2>/dev/null
+" "$OPENCODE_CONFIG" 2>/dev/null
 )
 
 if [[ ${#TOP_KEYS[@]} -eq 0 ]]; then

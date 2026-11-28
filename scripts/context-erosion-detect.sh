@@ -188,7 +188,7 @@ if [[ -n "$TARGET_FILE" ]]; then
   capture_snapshot "$TARGET_FILE" "$snapshot_file"
   detect_erosion "$REPORT_DIR" "$EROSION_THRESHOLD_PCT" "$EROSION_MAX_WINDOW" > "$report_file"
 
-  erosion_count=$(python3 -c "import json; d=json.load(open('$report_file')); print(d.get('erosions_detected',0))" 2>/dev/null || echo 0)
+  erosion_count=$(python3 -c "import sys; import json; d=json.load(open(sys.argv[1])); print(d.get('erosions_detected',0))" "$report_file" 2>/dev/null || echo 0)
 
   if [[ "$erosion_count" -gt 0 ]]; then
     echo "EROSION DETECTED: $erosion_count volume losses exceeding ${EROSION_THRESHOLD_PCT}%"
@@ -206,7 +206,7 @@ fi
 if [[ -n "$SNAPSHOT_DIR" ]]; then
   detect_erosion "$SNAPSHOT_DIR" "$EROSION_THRESHOLD_PCT" "$EROSION_MAX_WINDOW" > "$report_file"
 
-  erosion_count=$(python3 -c "import json; d=json.load(open('$report_file')); print(d.get('erosions_detected',0))" 2>/dev/null || echo 0)
+  erosion_count=$(python3 -c "import sys; import json; d=json.load(open(sys.argv[1])); print(d.get('erosions_detected',0))" "$report_file" 2>/dev/null || echo 0)
 
   if [[ "$erosion_count" -gt 0 ]]; then
     echo "EROSION DETECTED: $erosion_count instances"
