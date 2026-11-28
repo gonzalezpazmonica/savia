@@ -30,7 +30,8 @@ roadmap current     # iniciativas activas con estado
 roadmap next        # candidatas ordenadas por prioridad/dependencias
 roadmap history SE-xxx
 roadmap validate    # estados conflictivos, ID collision, IMPLEMENTED sin
-                    # evidencia, APPROVED sin approval, prioridades contradictorias
+                    # evidencia, APPROVED sin approval, vuelta atrás desde IMPLEMENTED
+                    # (prioridades contradictorias: sin comprobar, ver §6)
 ```
 
 ## 5. Criterios de aceptación
@@ -48,3 +49,9 @@ roadmap validate    # estados conflictivos, ID collision, IMPLEMENTED sin
 ## Referencias
 
 - Auditoría externa §9 · SE-222 `spec-lifecycle.sh` · `docs/propuestas/LOG.md`
+
+## 6. Resto tras la graduación (2026-11-27)
+
+- **No volver de IMPLEMENTED**: `roadmap validate` lo comprueba sobre LOG.md (fechas estrictamente posteriores a la primera IMPLEMENTED; salidas legítimas SUPERSEDED/RETIRED/REJECTED/DEFERRED). El orden dentro de un mismo día no se evalúa.
+- **Roadmaps narrativos**: `ROADMAP-UNIFIED-20260827.md` marcado SUPERSEDED y `docs/ROADMAP.md` avisa de que su bloque de prioridad única es histórico.
+- **Prioridades contradictorias: NO comprobadas.** `planning-state.json` no guarda dependencias entre iniciativas y la prioridad de cada sesión de la cola difiere de la de sus iniciativas en muchos casos legítimos; sin un campo `depends_on` no hay contradicción verificable. Decisión pendiente de la operadora: añadir `depends_on` al esquema (y la comprobación) o retirar ese requisito de los AC.

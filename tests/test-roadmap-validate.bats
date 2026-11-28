@@ -634,3 +634,55 @@ park_entry() { # <blocked_by> [reason] : añade un aparcado a S01
   run grep -E '^SE-(424|488|496) ' docs/propuestas/status-drift-baseline.txt
   [ "$status" -ne 0 ]
 }
+
+# SE-378 §3: una iniciativa IMPLEMENTED no vuelve a un estado previo.
+implemented_fixture() {
+  jq '.initiatives[0].status="IMPLEMENTED" | .initiatives[0].evidence="PR #42"' \
+    "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  printf '%s\n' 'status: IMPLEMENTED' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
+}
+
+@test "validate accepts IMPLEMENTED followed by SUPERSEDED in LOG.md" {
+  implemented_fixture
+  printf '## 2026-09-05 SE-375 IMPLEMENTED\n\nok\n\n## 2026-09-06 SE-375 SUPERSEDED\n\nok\n' \
+    > "$FIXTURE/docs/propuestas/LOG.md"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -eq 0 ]
+}
+
+@test "validate rejects LOG.md moving an initiative back from IMPLEMENTED" {
+  implemented_fixture
+  printf '## 2026-09-05 SE-375 IMPLEMENTED\n\nok\n\n## 2026-09-06 SE-375 PROPOSED\n\nvuelta atrás\n\n## 2026-09-07 SE-375 IMPLEMENTED\n\nok\n' \
+    > "$FIXTURE/docs/propuestas/LOG.md"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FAIL: vuelta atrás desde IMPLEMENTED en LOG.md: SE-375"* ]]
+}
+
+# P2-1 de la revisión de #1675: cabeceras con flecha y paréntesis también cuentan.
+@test "validate rejects a step back after APPROVED→IMPLEMENTED written with an arrow" {
+  implemented_fixture
+  printf '## 2026-09-05 SE-375 APPROVED→IMPLEMENTED\n\nok\n\n## 2026-09-06 SE-375 IMPLEMENTED→APPROVED\n\nvuelta atrás\n\n## 2026-09-07 SE-375 IMPLEMENTED\n\nok\n' \
+    > "$FIXTURE/docs/propuestas/LOG.md"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FAIL: vuelta atrás desde IMPLEMENTED en LOG.md: SE-375"* ]]
+}
+
+@test "validate anchors IMPLEMENTED) and rejects a later PROPOSED" {
+  implemented_fixture
+  printf '## 2026-09-05 SE-375 (IMPLEMENTED)\n\nok\n\n## 2026-09-06 SE-375 PROPOSED\n\nvuelta atrás\n\n## 2026-09-07 SE-375 IMPLEMENTED\n\nok\n' \
+    > "$FIXTURE/docs/propuestas/LOG.md"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FAIL: vuelta atrás desde IMPLEMENTED en LOG.md: SE-375"* ]]
+}
+
+@test "validate accepts APPROVED→IMPLEMENTED followed by IMPLEMENTED→SUPERSEDED" {
+  implemented_fixture
+  printf '## 2026-09-05 SE-375 APPROVED→IMPLEMENTED\n\nok\n\n## 2026-09-06 SE-375 IMPLEMENTED→SUPERSEDED\n\nsalida legítima\n\n## 2026-09-07 SE-375 IMPLEMENTED\n\nok\n' \
+    > "$FIXTURE/docs/propuestas/LOG.md"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [[ "$output" != *"vuelta atrás desde IMPLEMENTED"* ]]
+}

@@ -172,3 +172,29 @@ _lp() {  # _lp <dir> <estado>: lección mínima de prueba
   [ "$status" -eq 2 ]
   [[ "$output" == *"--file"* ]]
 }
+@test "RESTO-497-b: si no se puede escribir el registro, la transición falla y la lección queda como estaba" {
+  D="$BATS_TEST_TMPDIR"; f=$(_lp "$D" canary)
+  before=$(cat "$f")
+  mkdir -p "$D/registro-es-directorio"
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh" --file "$f" --to active --human-trailer "se488:edge" --metric-before 0.5 --metric-after 0.6 --ledger "$D/registro-es-directorio"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"registro"* ]]
+  [ "$(cat "$f")" = "$before" ]
+}
+@test "RESTO-497-b: también canary sin registro escribible falla sin tocar la lección" {
+  D="$BATS_TEST_TMPDIR"; f=$(_lp "$D" proposed)
+  before=$(cat "$f")
+  mkdir -p "$D/reg"
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh" --file "$f" --to canary --ledger "$D/reg"
+  [ "$status" -ne 0 ]
+  [ "$(cat "$f")" = "$before" ]
+}
+@test "RESTO-497-b: padre del registro es un fichero (caso 4 de NOTAS) → salida 6, lección intacta, sin fila" {
+  D="$BATS_TEST_TMPDIR"; f=$(_lp "$D" canary)
+  before=$(cat "$f")
+  printf 'x' > "$D/padre"
+  run bash "$REPO_ROOT/scripts/learning-lifecycle.sh" --file "$f" --to active --human-trailer "se488:edge" --metric-before 0.5 --metric-after 0.6 --ledger "$D/padre/l.jsonl"
+  [ "$status" -eq 6 ]
+  [ "$(cat "$f")" = "$before" ]
+  [ "$(cat "$D/padre")" = "x" ]
+}

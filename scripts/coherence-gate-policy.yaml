@@ -31,9 +31,9 @@ gates:
     status: BLOCK
     risk_scope: [L4]
     calibration: complete
-    evidence: eval L4 8/8 covered 9 piezas (SE-387 D); bloquea si un L4 pierde cobertura
+    evidence: eval L4 12/12 covered 9 piezas (SE-387 D, PR 1645); bloquea si un L4 pierde cobertura
   - id: constitutional-coverage
     status: BLOCK
     risk_scope: [L4]
     calibration: complete
-    evidence: constitutional-coverage 10/10 COMPLETE (SE-387 B)
+    evidence: constitutional-coverage 14/14 COMPLETE (SE-387 B)

@@ -213,3 +213,10 @@ falta de métricas también dejan fila (`refused-invalid-trailer`,
 `refused-no-metrics`); las métricas admiten solo decimales simples (sin
 exponente, NaN ni infinito); la cabecera se edita solo dentro del frontmatter.
 Siguen abiertos los cuatro casos de la tabla anterior salvo el segundo.
+
+Corrección posterior (graduación S28, 2026-11-27): la frase anterior quedó
+desfasada. Con S0 fusionado, el caso 1 (sin cabecera) sale con 1 y el caso 3
+(métricas `x`/`y`) sale con 5; el caso 4 (registro no escribible) lo cierra
+RESTO-497-b: la transición se deshace, la lección queda intacta y sale con 6
+(`tests/test-scl-001-s2-lifecycle.bats`, casos «RESTO-497-b»). No queda
+abierto ninguno de los cuatro.

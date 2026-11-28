@@ -11,7 +11,7 @@
 #
 # Gate anti-auto-activación (CRIT-031 / ART-11): proposed→active and
 # canary→active REQUIRE provenance:human_authored with a human trailer.
-# No transition to active may originate from an agent. active→superseded and
+# Today only the trailer FORMAT is checked, not who wrote it (R10, S5/S6). active→superseded and
 # rollback ARE automatable (reversible, CRIT-022).
 #
 # Usage:
@@ -22,7 +22,8 @@
 #
 # Exit codes: 0 ok (o sin cambio), 1 invalid transition, 2 usage, 3 missing file,
 #             4 trailer humano ausente o con formato inválido,
-#             5 canary→active sin las dos métricas numéricas, o con regresión
+#             5 canary→active sin las dos métricas numéricas, o con regresión,
+#             6 no se pudo escribir el registro (la transición se deshace)
 #
 # SE-497 S0: --human-trailer debe casar ENTERO con
 #   ^(sha:[0-9a-f]{40}|se488:[A-Za-z0-9._-]{1,64})$
@@ -199,8 +200,18 @@ fi
 
 # ── Apply + record ──
 TR=""; [[ "$TO" == "active" ]] && TR="$HUMAN_TRAILER"
-apply_state "$TO" "$TR" || { echo "ERROR: no se pudo actualizar la cabecera de $FILE" >&2; exit 1; }
-record "$TO" "" "$REVERT"
+# RESTO-497-b: sin fila de auditoría no hay transición. Se guarda una copia de la
+# lección y, si el registro no se puede escribir, se restaura y se sale con 6.
+BAK="$(mktemp "${TMPDIR:-/tmp}/learning-lifecycle.XXXXXX")" \
+  || { echo "ERROR: no se pudo crear la copia de seguridad de $FILE" >&2; exit 6; }
+cp -p "$FILE" "$BAK" || { rm -f "$BAK"; echo "ERROR: no se pudo copiar $FILE" >&2; exit 6; }
+apply_state "$TO" "$TR" || { rm -f "$BAK"; echo "ERROR: no se pudo actualizar la cabecera de $FILE" >&2; exit 1; }
+if ! record "$TO" "" "$REVERT" 2>/dev/null; then
+  cp -p "$BAK" "$FILE"; rm -f "$BAK"
+  echo "ERROR [learning-lifecycle]: no se pudo escribir el registro $LEDGER; transición deshecha, $FILE sin cambios" >&2
+  exit 6
+fi
+rm -f "$BAK"
 
 echo "TRANSITION: $CURRENT → $TO (id=$ID actor=$ACTOR)"
 $REVERT && exit 5

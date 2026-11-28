@@ -93,6 +93,25 @@ latest_run() { ls -1t "$SAVIA_BENCH_DIR/runs" | head -1; }
   [ "$(jq -r ".\"$sel\".pass" "$SAVIA_BENCH_DIR/frontier.json")" -eq 1 ]
 }
 
+@test "AC4: a clean run that is worse does not replace the frontier" {
+  # Mismo comando (mismo selection_hash); el resultado depende de un fichero testigo.
+  printf 'task-a|true\ntask-b|[ ! -f %s/degraded ]\n' "$TMPDIR" > "$SAVIA_BENCH_VERIF_FILE"
+  bash "$RUNNER" --execute >/dev/null
+  first=$(jq -r '.[] .run_id' "$SAVIA_BENCH_DIR/frontier.json")
+  [ "$(jq -r '.[] .pass' "$SAVIA_BENCH_DIR/frontier.json")" -eq 2 ]
+  touch "$TMPDIR/degraded"
+  sleep 1
+  run bash "$RUNNER" --execute
+  [[ "$output" == *"frontier: unchanged"* ]]
+  [ "$(jq -r .dirty "$SAVIA_BENCH_DIR/runs/$(latest_run)/manifest.json")" = "false" ]
+  [ "$(jq -r .pass "$SAVIA_BENCH_DIR/runs/$(latest_run)/manifest.json")" -eq 1 ]
+  [ "$(jq -r '.[] .run_id' "$SAVIA_BENCH_DIR/frontier.json")" = "$first" ]
+  [ "$(jq -r '.[] .pass' "$SAVIA_BENCH_DIR/frontier.json")" -eq 2 ]
+}
+
+# Nota (RESTO-403-b): este test NO discrimina el flock (sin cerrojo, 5/5 y 15/15 pasan:
+# la ventana de carrera es de microsegundos y os.replace es atomico). El cerrojo se verifica
+# solo por lectura de codigo en run-benchmark.sh (fcntl.flock LOCK_EX).
 @test "AC4: concurrent runs do not corrupt the frontier" {
   bash "$RUNNER" --execute >/dev/null & bash "$RUNNER" --execute >/dev/null & wait
   jq -e . "$SAVIA_BENCH_DIR/frontier.json" >/dev/null

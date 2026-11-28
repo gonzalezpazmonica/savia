@@ -125,12 +125,81 @@ def only_assertions(s):
     """`[ a ] && [ b ] || true` anula aserciones; `[ a ] && accion || true` es preparación condicional."""
     return all(ASSERT_LINE.search(seg.strip()) for seg in s.split("&&"))
 
+HEREDOC_TAG = re.compile(r'-?[ \t]*([\'"]?)(\w+)\1')
+BLOCK_START = re.compile(r'^(?:@test\s|(?:setup|setup_file|teardown|teardown_file)\s*\(\))')
+
+def heredoc_tag(t):
+    """Terminador del heredoc que abre la línea, o None.
+
+    Solo cuenta `<<` fuera de comillas, que no sea `<<<` ni esté dentro de `$((…))`/`((…))`.
+    """
+    quote, arith, k = None, 0, 0
+    while k < len(t):
+        ch = t[k]
+        if quote:
+            if ch == "\\" and quote == '"':
+                k += 2
+                continue
+            if ch == quote:
+                quote = None
+        elif ch == "\\":
+            k += 2
+            continue
+        elif ch in "'\"":
+            quote = ch
+        elif t.startswith("((", k):
+            arith += 1
+            k += 2
+            continue
+        elif arith and t.startswith("))", k):
+            arith -= 1
+            k += 2
+            continue
+        elif ch == "#" and (k == 0 or t[k - 1] in " \t;"):
+            return None
+        elif not arith and t.startswith("<<", k):
+            if t.startswith("<<<", k):
+                k += 3
+                continue
+            m = HEREDOC_TAG.match(t, k + 2)
+            return m.group(2) if m else None
+        k += 1
+    return None
+
+def heredoc_closes(lines, j, tag):
+    """El terminador aparece antes del siguiente bloque (@test, setup, teardown) o del final."""
+    for x in lines[j + 1:]:
+        if BLOCK_START.match(x):
+            return False
+        if x.strip() == tag:
+            return True
+    return False
+
 def test_blocks(c):
     """(nombre, [(nº de línea, línea sin espacios)]) por cada @test."""
     lines = c.splitlines()
     i = 0
     while i < len(lines):
         m = re.match(r'^@test\s+(?:"((?:[^"\\]|\\.)*)"|\'([^\']*)\')\s*\{\s*(?:#.*)?$', lines[i])
+        hook = re.match(r'^(setup|setup_file)\s*\(\)\s*\{\s*(?:#.*)?$', lines[i])
+        if hook:
+            # RESTO-456-a: las aserciones anuladas de setup() también cuentan (solo V1)
+            j, body, tag = i + 1, [], None
+            while j < len(lines) and (tag or lines[j].rstrip() != "}"):
+                t = lines[j].strip()
+                if tag:  # cuerpo de un heredoc (p. ej. un script simulado): no es aserción de setup
+                    if t == tag:
+                        tag = None
+                elif t and not t.startswith("#"):
+                    body.append((j + 1, t))
+                    tag = heredoc_tag(t)
+                    # sin terminador antes del siguiente bloque no es heredoc: se analiza como código
+                    if tag and not heredoc_closes(lines, j, tag):
+                        tag = None
+                j += 1
+            yield hook.group(1) + "()", body
+            i = j + 1
+            continue
         if not m:
             i += 1
             continue
@@ -149,6 +218,8 @@ def vacuity_all(c):
         for idx, (n, s) in enumerate(body):
             if (ASSERT_LINE.search(s) and NEUTRALIZED.search(s) and only_assertions(s)) or IF_NOOP.match(s):
                 found.append({"test": name, "line": n, "kind": "V1", "text": s[:120]})
+            elif name.startswith("setup") and name.endswith("()"):
+                continue  # en setup() solo se busca V1; un run sin comprobar es preparación
             elif RUN_LINE.match(s) and not RUN_SELF_CHECKED.match(s):
                 same_line = re.split(r';\s*|\s&&\s', s, maxsplit=1)[1:]
                 rest = body[idx + 1:]

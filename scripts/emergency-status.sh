@@ -116,7 +116,13 @@ if command -v nvidia-smi &>/dev/null; then
   # nvidia-smi puede estar instalado sin driver cargado (sale 9): con pipefail+set -e
   # abortaba el informe sin resumen. Un fallo aqui no es un problema del modo emergencia.
   GPU=$(nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader 2>/dev/null | head -1 || true)
-  [[ -n "$GPU" ]] && echo -e "  GPU: ${BOLD}$GPU${NC}"
+  if [[ -n "$GPU" ]]; then
+    echo -e "  GPU: ${BOLD}$GPU${NC}"
+  else
+    echo -e "  GPU no disponible (nvidia-smi sin respuesta)"
+  fi
+else
+  echo -e "  GPU no disponible (nvidia-smi no instalado)"
 fi
 
 # ── Resumen ─────────────────────────────────────────────────────────────────

@@ -274,6 +274,30 @@ EOF
   [[ "$output" != *"GPU:"* ]]
 }
 
+@test "status: nvidia-smi con driver roto dice GPU no disponible (RESTO-455-a)" {
+  ready_env
+  export STUB_GPU=broken
+  run bash "$REPO_ROOT/$STATUS"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"GPU no disponible"* ]]
+  [[ "$output" == *"listo"* ]]
+}
+
+@test "status: nvidia-smi ausente del PATH dice GPU no disponible y llega al resumen" {
+  ready_env
+  mv "$TMP/bin/nvidia-smi" "$TMP/nvidia-smi.off"
+  # PATH hermetico: solo las herramientas del script, sin el nvidia-smi real del equipo
+  mkdir -p "$TMP/min"
+  for t in bash env awk grep sed head tail tr wc cat date dirname basename mkdir cut sort; do
+    p="$(command -v "$t" 2>/dev/null)" && ln -sf "$p" "$TMP/min/$t"
+  done
+  for t in curl ollama uname; do ln -sf "$TMP/bin/$t" "$TMP/min/$t"; done
+  PATH="$TMP/min" run /usr/bin/env bash "$REPO_ROOT/$STATUS"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"GPU no disponible"* ]]
+  [[ "$output" == *"listo"* ]]
+}
+
 @test "status: nvidia-smi funcional muestra la GPU y sigue hasta el resumen" {
   ready_env
   run bash "$REPO_ROOT/$STATUS"

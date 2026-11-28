@@ -95,7 +95,7 @@ if $CLEAN_ONLY; then
   clean_state_report "$CLEAN_REPO"
   exit $?
 fi
-TMPDIR_CI=$(mktemp -d 2>/dev/null || echo "/tmp/ci-$$"); mkdir -p "$TMPDIR_CI"
+TMPDIR_CI=$(mktemp -d 2>/dev/null || echo "/tmp/ci-$$"); mkdir -p "$TMPDIR_CI/raw"
 trap 'rm -rf "$TMPDIR_CI"' EXIT
 
 echo ""
@@ -107,6 +107,7 @@ check_coherence() {
   local out="$TMPDIR_CI/9-coherence"
   local g rc=0 blocks
   g=$(bash "$(dirname "${BASH_SOURCE[0]}")/coherence-gates.sh" 2>&1) || rc=$?
+  printf '%s\n' "$g" > "$TMPDIR_CI/raw/coherence.log"  # SE-387 §17
   # Falla cerrado: un BLOCK (en cualquier posición de línea) o un código ≠ 0
   # nunca pueden acabar en PASS/WARN. FAIL prevalece sobre WARN.
   blocks=$(printf '%s\n' "$g" | grep -E '^BLOCK|BLOCK coherence' | paste -sd'|' - | sed 's/|/ | /g')
@@ -326,6 +327,23 @@ report_unverified_coverage() {
   return 0
 }
 
+# SE-468 AC5: gates de CI que el detector de vacuidad (SE-456) no cubre; solo informa, sin afirmar
+# que sean vacuos ni que no lo sean. Registro: scripts/lib/unverified-gates.tsv.
+report_unverified_gates() {
+  [[ "${SAVIA_AUTHORITY_REPORT:-on}" == "off" ]] && return 0
+  local reg="${SAVIA_UNVERIFIED_GATES_FOR_TESTS:-$REPO_ROOT_CI/scripts/lib/unverified-gates.tsv}"
+  [[ -f "$reg" ]] || return 0
+  local wf name spec reason out=""
+  while IFS=$'\t' read -r wf name spec reason; do
+    [[ -z "$wf" || "$wf" == \#* ]] && continue
+    out+="    $name ($wf, $spec): $reason"$'\n'
+  done < "$reg"
+  [[ -z "$out" ]] && return 0
+  echo "  Gates sin cobertura del detector de vacuidad (no verificado, SE-444):"
+  printf '%s' "$out"
+  return 0
+}
+
 # ── Run checks in parallel ───────────────────────────────────────────────
 if $FRESH_ONLY; then
   check_generated_fresh
@@ -356,6 +374,18 @@ if ! $QUICK_MODE; then
 fi
 wait
 
+# ── SE-387 §17: informe de cierre desde la evidencia ya capturada (no repite gates)
+closure_status_report() {
+  local gen; gen="$(dirname "${BASH_SOURCE[0]}")/coherence-closure-status.py"
+  [ -f "$gen" ] || return 0
+  cat "$TMPDIR_CI"/8-fresh-* > "$TMPDIR_CI/raw/fresh.log" 2>/dev/null
+  if ! python3 "$gen" --root "$REPO_ROOT_CI" --gates-log "$TMPDIR_CI/raw/coherence.log" \
+       --fresh-log "$TMPDIR_CI/raw/fresh.log" >/dev/null 2>&1; then
+    echo "WARN Closure status: coherence-closure-status.py falló; informe §17 no regenerado" > "$TMPDIR_CI/9-closure"
+  fi
+}
+closure_status_report
+
 # ── Collect results ──────────────────────────────────────────────────────
 PASS=0; FAIL=0; WARN=0; ERRORS=""
 for f in "$TMPDIR_CI"/*; do
@@ -370,6 +400,7 @@ for f in "$TMPDIR_CI"/*; do
 done
 
 report_unverified_coverage
+report_unverified_gates
 echo ""
 echo "--- Results: $PASS passed, $FAIL failed, $WARN warnings ---"
 

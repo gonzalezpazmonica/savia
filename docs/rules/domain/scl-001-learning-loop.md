@@ -84,8 +84,15 @@ entradas al sustrato. Ese límite es alineación, no capacidad.
 ## Gates inmutables
 
 1. **No auto-activación** (CRIT-031 / ART-11): `proposed→active` y `canary→active`
-   REQUIEREN `--human-trailer`. Ninguna transición a `active` puede originarse en
-   un agente. `learning-lifecycle.sh --strict` lo bloquea con exit 4.
+   REQUIEREN `--human-trailer` con formato cerrado (`sha:<40 hex>` o
+   `se488:<id>`, SE-497 S0); sin él o con otro formato, exit 4 y fichero sin
+   tocar. **Límite actual**: el guion valida el *formato*, no la *autoría*. No
+   comprueba que el sha exista ni esté fusionado, y un agente que conozca el
+   formato puede escribirlo; editar a mano `lifecycle: active` y
+   `provenance: human_authored` también basta para que recall lo lea. Que la
+   transición pruebe a una persona es R10 (recibo + commit fusionado, SE-497
+   S5/S6), no aprobado aún. Si no se puede escribir el registro, la transición
+   se deshace y sale con 6 (RESTO-497-b).
 2. **Promoción condicionada a métrica**: en `canary`, si `metric_after <
    metric_before` (regresión de `L`), la entrada NO asciende — se revierte a
    `proposed` con causa registrada (el "arreglé un bug y metí otro" detectado en
@@ -127,7 +134,7 @@ bash scripts/learning-proposal.sh --origin "<origen>" \
 # S2 — ciclo de vida (humano activa)
 bash scripts/learning-lifecycle.sh --file <proposal.md> --to canary --actor agente
 bash scripts/learning-lifecycle.sh --file <proposal.md> --to active --actor operadora \
-  --human-trailer <sig> --metric-before <L> --metric-after <L>
+  --human-trailer <sha:40hex|se488:id> --metric-before <L> --metric-after <L>
 bash scripts/learning-rollback.sh --file <proposal.md> --reason "<motivo>"
 # S3 — métrica y reporte
 bash scripts/learning-metric.sh --p-consistent 0.8 --divergence 0.2 --ignorance-resolved 0.5
