@@ -1,0 +1,10 @@
+{
+  "id": "SE-538",
+  "status": "APPROVED",
+  "priority": "P2",
+  "phase": "D",
+  "title": "Avatar 2D elegible y desactivable en Sonora (S0 + 2 slices)",
+  "evidence": "docs/specs/SE-538-sonora-avatar-2d-elegible.spec.md",
+  "note": "Cara 2D no realista, al menos dos estilos y «sin cara»; boca por amplitud del audio reproducido ligada a la época de SE-537; movimiento reducido; sin red. Cierra la D2 de SE-432: la misma cara en Space y en Sonora (decisión de la operadora del 2026-11-26). Escena confirmada el 2026-11-26. Aprobada por la operadora el 2026-11-26 («Aprobar las tres»).",
+  "approval": "operadora, pregunta interactiva 2026-11-26 («Aprobar las tres»); se formaliza al fusionar (SE-488)"
+}
