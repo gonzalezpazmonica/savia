@@ -115,15 +115,16 @@ test_meta_files() {
     log_fail "CLAUDE.md missing command reference"
   fi
 
-  # Check README.md
-  if grep -q "/contribute\|/feedback\|Community\|Comunidad" "${REPO_ROOT}/README.md"; then
+  # Check README.md (desde b07306e88 la comunidad se enlaza con la sección
+  # Contribuir/Contributing → CONTRIBUTING.md; RESTO-535-b)
+  if grep -q "/contribute\|/feedback\|Community\|Comunidad\|(CONTRIBUTING.md)" "${REPO_ROOT}/README.md"; then
     log_pass "README.md mentions community features"
   else
     log_fail "README.md missing community reference"
   fi
 
   # Check README.en.md
-  if grep -q "/contribute\|/feedback\|Community\|Comunidad" "${REPO_ROOT}/README.en.md"; then
+  if grep -q "/contribute\|/feedback\|Community\|Comunidad\|(CONTRIBUTING.md)" "${REPO_ROOT}/README.en.md"; then
     log_pass "README.en.md mentions community features"
   else
     log_fail "README.en.md missing community reference"
