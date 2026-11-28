@@ -1,0 +1,12 @@
+# SE-537 — tests de Sonora que necesitan pesos de modelo descargados.
+# En CI y por defecto en local se saltan con este motivo (plugin
+# scripts/lib/sonora_weights_skip.py). Formato: <nodeid relativo a la app> | <motivo>
+# Con los pesos en caché: SONORA_WITH_WEIGHTS=1 bash scripts/sonora-tests.sh backend
+src-pyloid/tests/test_transcription.py::TestTranscriptionService::test_transcribe_empty_audio_returns_empty_string | carga whisper «tiny» (load_model, ~75 MB de Hugging Face)
+src-pyloid/tests/test_transcription.py::TestTranscriptionService::test_load_model_sets_current_model | carga whisper «tiny» (load_model, ~75 MB de Hugging Face)
+src-pyloid/tests/test_transcription.py::TestTranscriptionService::test_load_same_model_twice_is_noop | carga whisper «tiny» (load_model, ~75 MB de Hugging Face)
+src-pyloid/tests/test_transcription.py::TestTranscriptionService::test_unload_model_clears_current_model | carga whisper «tiny» (load_model, ~75 MB de Hugging Face)
+src-pyloid/tests/test_transcription.py::TestTranscriptionService::test_transcribe_returns_string | carga whisper «tiny» (load_model, ~75 MB de Hugging Face)
+src-pyloid/tests/test_transcription.py::TestTranscriptionService::test_transcribe_normalizes_audio | carga whisper «tiny» (load_model, ~75 MB de Hugging Face)
+src-pyloid/tests/test_transcription.py::TestTranscriptionService::test_transcribe_with_language_specified | carga whisper «tiny» (load_model, ~75 MB de Hugging Face)
+src-pyloid/tests/test_transcription.py::TestTranscriptionService::test_transcribe_with_auto_language | carga whisper «tiny» (load_model, ~75 MB de Hugging Face)
