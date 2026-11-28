@@ -210,6 +210,27 @@ _shim() {
   [ "$status" -ne 0 ]
 }
 
+@test "P2-3 negativo: una tilde no parte la palabra en fragmentos que casan con otra guia" {
+  printf '# Site Logo\n\nShow the brand logo in the header.\n' > "$G/ui-components/site-logo.md"
+  _pack
+  _import
+  # «diálogo» se partía en «di» + «logo» y devolvía site-logo.
+  run env WEB_GUIDANCE_DIR="$DEST" bash "$SRCH" search "diálogo"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"site-logo"* ]]
+  # Con tildes normalizadas, «diálog» sigue casando con dialog.
+  run env WEB_GUIDANCE_DIR="$DEST" bash "$SRCH" search "diálog"
+  [ "$status" -eq 0 ]
+  echo "$output" | cut -f1 | grep -qx dialog
+}
+
+@test "P2-3: el agente frontend-developer pide la consulta en ingles (Claude y OpenCode)" {
+  local f
+  for f in .claude/agents/frontend-developer.md .opencode/agents/frontend-developer.md; do
+    grep -q 'web-guidance.sh search "<consulta en inglés>"' "$f" || { echo "sin indicación: $f"; false; }
+  done
+}
+
 @test "AC-7 negativo: consulta sin coincidencias da lista vacia y codigo 0" {
   _pack
   _import

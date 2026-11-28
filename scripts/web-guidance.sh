@@ -22,8 +22,10 @@ case "$cmd" in
   search)
     [ $# -eq 2 ] || die 'uso: web-guidance.sh search "<consulta>"'
     python3 -I - "$GUIDES" "$2" <<'PY'
-import os, re, sys
+import os, re, sys, unicodedata
 root, query = sys.argv[1], sys.argv[2].lower()
+# Las guías están en inglés: sin tildes, «diálogo» no se parte en «di» + «logo».
+query = "".join(c for c in unicodedata.normalize("NFKD", query) if not unicodedata.combining(c))
 stop = {"the", "and", "for", "with", "how", "into", "from", "that", "this", "are", "use", "can"}
 terms = [t for t in re.split(r"[^a-z0-9]+", query) if len(t) >= 3 and t not in stop]
 if not terms:

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   paintVar,
   resolveFaceStyle,
@@ -109,9 +109,11 @@ export function SaviaFace({
   className,
 }: SaviaFaceProps) {
   const reduced = useReducedMotion(reducedMotion);
+  // Memorizado: un styleDef inválido avisa una vez, no en cada render. Va antes del
+  // return temprano (regla de los hooks); con «sin cara» no se usa el resultado.
+  const style = useMemo(() => resolveFaceStyle(styleDef ?? styleId), [styleDef, styleId]);
   if (styleId === "none" && styleDef === undefined) return null;
 
-  const style = resolveFaceStyle(styleDef ?? styleId);
   const speaking = mode === "speaking";
   // Con movimiento reducido la boca no sigue la voz: queda en una posición
   // fija que distingue «habla» de los demás estados.

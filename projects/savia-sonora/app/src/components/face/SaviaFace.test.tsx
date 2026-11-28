@@ -180,3 +180,18 @@ describe("estilo con URL externa", () => {
     expect(container.innerHTML).not.toMatch(/example\.com/);
   });
 });
+
+describe("estilo inválido y re-render", () => {
+  it("avisa una sola vez aunque la cara se vuelva a pintar con el mismo estilo", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const bad = JSON.parse(JSON.stringify(buhita)) as Record<string, unknown>;
+    bad.id = "rota";
+    (bad.shapes as Array<Record<string, unknown>>)[0].fill = "#ff0000";
+    const { rerender } = render(<SaviaFace styleDef={bad} mode="idle" reducedMotion={false} />);
+    for (const mode of ["listening", "thinking", "speaking", "idle"] as const) {
+      rerender(<SaviaFace styleDef={bad} mode={mode} level={0.5} reducedMotion={false} />);
+    }
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+});

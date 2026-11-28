@@ -56,7 +56,7 @@ Antes de escribir una sola línea de código:
    ```
 3. Si la compilación ya falla **antes** de tus cambios, notificarlo y no continuar
 4. Revisar los ficheros que la Spec indica modificar — leerlos completos antes de editar
-5. **Consultar guías web** (SE-539) antes de cada patrón de interfaz (diálogo, formulario, tabla, animación, tema, accesibilidad, rendimiento de interacción): `bash scripts/web-guidance.sh search "<consulta>"`, y leer la guía que case (`show <id>` da la ruta). En el informe, citar qué guía aplicó y en qué se apartó de ella. Prioridad: la spec aprobada y las reglas del workspace van por encima de la guía (sus «MANDATORY» ceden); las guías built-in-ai no se recomiendan. Respetar `**Browser Support:**` del `CLAUDE.md` del proyecto
+5. **Consultar guías web** (SE-539) antes de cada patrón de interfaz (diálogo, formulario, tabla, animación, tema, accesibilidad, rendimiento de interacción): `bash scripts/web-guidance.sh search "<consulta en inglés>"` (las guías están en inglés: «dialog», no «diálogo»), y leer la guía que case (`show <id>` da la ruta). En el informe, citar qué guía aplicó y en qué se apartó de ella. Prioridad: la spec aprobada y las reglas del workspace van por encima de la guía (sus «MANDATORY» ceden); las guías built-in-ai no se recomiendan. Respetar `**Browser Support:**` del `CLAUDE.md` del proyecto
 
 ## Convenciones Angular + React
 
