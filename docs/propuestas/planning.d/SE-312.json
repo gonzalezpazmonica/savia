@@ -1,0 +1,8 @@
+{
+  "id": "SE-312",
+  "status": "PROPOSED",
+  "title": "Savia Sonora frontend: rebrand Savia, UX/UI y alineación con Savia Web",
+  "phase": "D",
+  "evidence": "docs/evidence/sonora/se308-se312-reconciliacion.md; PR #951",
+  "note": "Registro mecánico, sin cambio de estado: la spec seguía en PROPOSED y fuera del registro aunque el código está entregado en #951. El informe de reconciliación propone IMPLEMENTED con resto (AC-8 sin reproducir, revisión humana en Windows y Linux, restos internos voiceflow). La decisión de estado es de la operadora."
+}

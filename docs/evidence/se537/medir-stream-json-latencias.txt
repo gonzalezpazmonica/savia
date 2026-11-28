@@ -1,0 +1,18 @@
+import json,sys
+for f in sys.argv[1:]:
+    send=None; ft=None; n=0; last=0; gaps=[]; res=None; init=None
+    print('##',f)
+    for l in open(f):
+        o=json.loads(l)
+        if o['ev']=='send': send=o['turn']; ft=None; n=0; last=0; gaps=[]
+        if o['ev']=='msg':
+            if o['sub']=='init' and init is None: init=o['dt']
+            if o['type']=='stream_event':
+                ev=o['obj']['event']
+                if ev[1]=='text_delta':
+                    n+=1
+                    if ft is None: ft=o['dt']
+                    if last: gaps.append(o['dt']-last)
+                    last=o['dt']
+            if o['type']=='result':
+                print(f" turno {send}: init={init} primer_text_delta={ft} deltas={n} gap_medio={sum(gaps)/len(gaps) if gaps else 0:.3f} max_gap={max(gaps) if gaps else 0:.3f} fin={o['dt']} api_ms={o['obj']['duration_api_ms']} coste={o['obj']['total_cost_usd']:.4f}")

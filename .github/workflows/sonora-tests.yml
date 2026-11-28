@@ -1,0 +1,86 @@
+name: Sonora Tests
+
+# SE-537: los tests de Savia Sonora (backend pytest y frontend vitest/tsc) se
+# ejecutan en el CI raíz. El workflow anidado en projects/savia-sonora/app no lo
+# ve GitHub. Misma lógica que en local: scripts/sonora-tests.sh.
+# Sin descargas de modelos: los tests que cargan pesos se saltan con motivo
+# (scripts/sonora-tests-weights.txt).
+
+on:
+  pull_request:
+    paths:
+      - 'projects/savia-sonora/**'
+      - 'scripts/sonora-tests.sh'
+      - 'scripts/sonora-tests-weights.txt'
+      - 'scripts/lib/sonora_weights_skip.py'
+      - '.github/workflows/sonora-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'projects/savia-sonora/**'
+      - 'scripts/sonora-tests.sh'
+      - 'scripts/sonora-tests-weights.txt'
+      - 'scripts/lib/sonora_weights_skip.py'
+      - '.github/workflows/sonora-tests.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: sonora-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Sonora backend (pytest, Python 3.12)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install system libraries (PortAudio, Qt offscreen)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libportaudio2 libasound2t64 \
+            libgl1 libegl1 libxkbcommon0 libfontconfig1 libdbus-1-3 \
+            libxcb-xinerama0 libxcb-cursor0 libxcb-shape0 libxcb-icccm4 \
+            libxcb-keysyms1 libxcb-render-util0 libxcb-image0 libnss3
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: '0.12.5'
+          enable-cache: false
+
+      - name: Backend tests
+        env:
+          SONORA_VENV: ${{ runner.temp }}/sonora-venv312
+        run: bash scripts/sonora-tests.sh backend
+
+  frontend:
+    name: Sonora frontend (vitest + tsc)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: Frontend tests and typecheck
+        run: bash scripts/sonora-tests.sh frontend

@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""SE-537 S0: driver de medicion de `claude -p` persistente en stream-json.
+
+Uso: python3 driver.txt <log.jsonl> <timeout_s> [--interrupt-after S] -- <flags de claude> -- <prompt1> [<prompt2> ...]
+Cada prompt es un turno. Se espera el evento `result` antes de enviar el siguiente.
+Registra cada linea de stdout con dt (s desde el envio del turno) en <log.jsonl>.
+"""
+import json, subprocess, sys, time, threading, queue, os
+
+def main():
+    a = sys.argv[1:]
+    log, tmo = a[0], float(a[1]); a = a[2:]
+    inter = None
+    if a[0] == "--interrupt-after":
+        inter = float(a[1]); a = a[2:]
+    i = a.index("--"); a = a[i+1:]
+    j = a.index("--"); flags, prompts = a[:j], a[j+1:]
+    cmd = ["claude", "-p", "--input-format", "stream-json", "--output-format", "stream-json",
+           "--verbose", "--include-partial-messages", "--replay-user-messages"] + flags
+    t0 = time.time()
+    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         text=True, bufsize=1, cwd=os.getcwd())
+    q = queue.Queue()
+    def rd(s, tag):
+        for line in s:
+            q.put((time.time(), tag, line.rstrip("\n")))
+        q.put((time.time(), tag, None))
+    threading.Thread(target=rd, args=(p.stdout, "out"), daemon=True).start()
+    threading.Thread(target=rd, args=(p.stderr, "err"), daemon=True).start()
+    out = open(log, "w")
+    def rec(**k): out.write(json.dumps(k, ensure_ascii=False) + "\n"); out.flush()
+    rec(ev="spawn", cmd=cmd)
+    def send_int():
+        ctl = {"type": "control_request", "request_id": "int1", "request": {"subtype": "interrupt"}}
+        p.stdin.write(json.dumps(ctl) + "\n"); p.stdin.flush()
+    for n, prompt in enumerate(prompts, 1):
+        ts = time.time()
+        msg = {"type": "user", "message": {"role": "user", "content": prompt}}
+        p.stdin.write(json.dumps(msg) + "\n"); p.stdin.flush()
+        rec(ev="send", turn=n, t=round(ts - t0, 3), prompt=prompt)
+        first = None; done = False; interrupted = False
+        while time.time() - ts < tmo:
+            if inter and not interrupted and time.time() - ts > inter:
+                send_int(); rec(ev="interrupt_sent", dt=round(time.time() - ts, 3)); interrupted = True
+            try: tt, tag, line = q.get(timeout=0.2)
+            except queue.Empty: continue
+            dt = round(tt - ts, 3)
+            if line is None:
+                rec(ev="eof", stream=tag, dt=dt)
+                if tag == "out": done = True; break
+                continue
+            try: o = json.loads(line)
+            except Exception: rec(ev="raw", stream=tag, dt=dt, line=line[:300]); continue
+            ty = o.get("type")
+            if ty == "control_request" and (o.get("request") or {}).get("subtype") == "can_use_tool":
+                pol = os.environ.get("PERM", "silent"); rq = o["request"]
+                rec(ev="can_use_tool", dt=dt, policy=pol, tool=rq.get("tool_name"), input=rq.get("input"), keys=sorted(rq))
+                if pol in ("allow", "deny"):
+                    r = {"behavior": "allow", "updatedInput": rq.get("input")} if pol == "allow" else {"behavior": "deny", "message": "denegado por Sonora: aprobar en la terminal"}
+                    p.stdin.write(json.dumps({"type": "control_response", "response": {"subtype": "success", "request_id": o["request_id"], "response": r}}) + "\n"); p.stdin.flush()
+                continue
+            sub = (o.get("event") or {}).get("type") if ty == "stream_event" else o.get("subtype")
+            if ty == "stream_event" and sub == "content_block_delta" and first is None:
+                first = dt; rec(ev="first_delta", dt=dt)
+            rec(ev="msg", dt=dt, type=ty, sub=sub,
+                obj=o if ty != "stream_event" else {"event": (o["event"].get("type"), (o["event"].get("delta") or {}).get("type"))})
+            if ty == "result":
+                done = True; rec(ev="turn_done", turn=n, dt=dt); break
+        if not done:
+            rec(ev="turn_timeout", turn=n, after=tmo)
+        if p.poll() is not None:
+            rec(ev="proc_exited", rc=p.returncode); break
+    rec(ev="end", alive=p.poll() is None, total=round(time.time() - t0, 3))
+    try: p.stdin.close()
+    except Exception: pass
+    try: p.wait(timeout=10)
+    except Exception: p.kill()
+    rec(ev="exit", rc=p.returncode)
+
+main()
