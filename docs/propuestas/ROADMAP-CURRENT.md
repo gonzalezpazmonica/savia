@@ -200,3 +200,6 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-531 [APPROVED] Ficha de harness ejecutable: capacidades del runtime y supervisión del proceso hijo — evidencia: docs/specs/SE-531-ficha-de-harness-ejecutable.spec.md
 - SE-532 [APPROVED] Catálogo de agentes con esquema, referencias comprobadas y retirada explícita (3 slices) — evidencia: docs/specs/SE-532-catalogo-de-agentes-con-esquema-y-retirada.spec.md
 - SE-535 [APPROVED] Entrada de skills externas: retirar la integración externa sin uso, las órdenes de marketplace sin implementación y un guion de experimentos sin consumidor; puerta en reserva (3 slices) — evidencia: docs/specs/SE-535-puerta-de-entrada-de-skills-externas.spec.md
+- SE-537 [APPROVED] Sonora conversa con la sesión de Claude de Savia (S0 + 3 slices) — evidencia: docs/specs/SE-537-sonora-conversa-con-la-sesion-de-claude.spec.md
+- SE-538 [APPROVED] Avatar 2D elegible y desactivable en Sonora (S0 + 2 slices) — evidencia: docs/specs/SE-538-sonora-avatar-2d-elegible.spec.md
+- SE-539 [APPROVED] Guías web modernas para el agente de front, en copia fija y sin código (2 slices) — evidencia: docs/specs/SE-539-guias-web-modernas-para-el-agente-de-front.spec.md
