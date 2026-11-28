@@ -1,13 +1,9 @@
 #!/usr/bin/env bats
-# PENDIENTE DE ACTIVAR — vive en tests-pending/, fuera de tests/, para que ningún runner la recoja
-# (tests/run-all.sh, test-auditor.sh y ci-reliability-gate.sh buscan *.bats de forma recursiva bajo tests/).
-# Describe el comportamiento CORRECTO de `merge-sprint.sh review-register` ante un informe con comillas o
-# caracteres raros en reviewer/author (defecto de inyección en el registro de revisiones, S-MS1). HOY FALLA: el defecto existe.
-# Activación: en la misma PR que arregle el ejecutor (restringir reviewer/author a [A-Za-z0-9._-]+, montar la
-# línea del registro con json.dumps y salir ≠ 0 si chain_append falla):
-#   git mv tests-pending/test-merge-sprint-review-register-injection.bats tests/
-# No se marcan como saltadas ni se debilitan: tienen que fallar hasta que el arreglo exista.
-# Ejecución manual: bats tests-pending/test-merge-sprint-review-register-injection.bats
+# Ref: scripts/merge-sprint.sh review-register — defecto de inyección en el registro de revisiones (S-MS1).
+# Activada el 2026-11-25 en la misma PR que arregla el ejecutor: reviewer/author restringidos a
+# [A-Za-z0-9._-]+ en ASCII, línea del registro montada con json.dumps y salida ≠ 0 si chain_append falla.
+# Antes vivía en tests-pending/: contra el ejecutor anterior fallaban 6 de 8 (A, B, C, D, E y G).
+# Ninguna aserción se ha debilitado al activarla.
 
 SCRIPT="scripts/merge-sprint.sh"
 
@@ -164,4 +160,41 @@ reg_lines() { [[ -f "$MERGE_SPRINT_HOME/reviews.jsonl" ]] && wc -l < "$MERGE_SPR
   [ "$status" -eq 0 ]
   [ "$(reg_lines)" -eq 1 ]
   [ "$(tail -1 "$MERGE_SPRINT_HOME/reviews.jsonl" | jq -r .reviewer)" = "Rev_Agent-2.x" ]
+}
+
+@test "S-MS1 invalid verdict grammar is rejected with exit 3 and nothing registered" {
+  mkpr 68 "scripts/i9.sh"
+  f="$TMPDIR_T/bad-grammar.md"
+  printf 'VERDICT: MAYBE pr=68 sha=%s role=correctness tier=2 reviewer=rev author=aut p0=0 p1=0 p2=0 p2_blocking=0\n' "$(sha_of 68)" > "$f"
+  run bash "$SCRIPT" review-register 68 "$f"
+  [ "$status" -eq 3 ]
+  [ "$(reg_lines)" -eq 0 ]
+}
+
+@test "S-MS1 edge: empty report is rejected and nothing registered" {
+  mkpr 69 "scripts/i10.sh"
+  f="$TMPDIR_T/empty.md"; : > "$f"
+  run bash "$SCRIPT" review-register 69 "$f"
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"registrada"* ]]
+  [ "$(reg_lines)" -eq 0 ]
+}
+
+@test "S-MS1 edge: nonexistent report file fails with error and nothing registered" {
+  run bash "$SCRIPT" review-register 70 "$TMPDIR_T/no-existe.md"
+  [ "$status" -ne 0 ]
+  [ "$(reg_lines)" -eq 0 ]
+}
+
+@test "S-MS1 boundary: identifier with a trailing space or tab is rejected (invalid)" {
+  mkpr 71 "scripts/i11.sh"
+  f="$TMPDIR_T/tab.md"
+  printf 'VERDICT: APPROVE pr=71 sha=%s role=correctness tier=2 reviewer=rev\tx author=aut p0=0 p1=0 p2=0 p2_blocking=0\n' "$(sha_of 71)" > "$f"
+  run bash "$SCRIPT" review-register 71 "$f"
+  [ "$status" -eq 3 ]
+  [ "$(reg_lines)" -eq 0 ]
+}
+
+@test "S-MS1 el ejecutor mantiene el modo estricto" {
+  grep -q '^set -uo pipefail' "$SCRIPT"
 }
