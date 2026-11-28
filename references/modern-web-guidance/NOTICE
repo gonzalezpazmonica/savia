@@ -1,0 +1,10 @@
+Copia fija de las guías de GoogleChrome/modern-web-guidance (Apache-2.0, ver LICENSE).
+Solo texto: skills/modern-web-guidance/guides/**/*.md. Sin código ni manifiestos.
+Las órdenes de recuperación por red de las referencias cruzadas se reescribieron a enlaces relativos.
+No editar a mano: para actualizar, ejecutar scripts/web-guidance-import.sh <commit> (SE-539 D6).
+
+URL: https://github.com/GoogleChrome/modern-web-guidance
+Commit: 2b4aa13a72dd47cd135b06ce5abfccd92e19b24f
+Date: 2026-11-26
+Files: 211
+Tree-SHA256: 47248515569d203470f6a9cf0b8028020532f953ee8f64158437333dcefb44cd

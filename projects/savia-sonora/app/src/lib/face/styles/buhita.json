@@ -1,0 +1,27 @@
+{
+  "id": "buhita",
+  "label": "Buhita",
+  "viewBox": "0 0 200 200",
+  "mouth": { "kind": "translateY", "max": 11, "staticLevel": 0.6 },
+  "shapes": [
+    { "el": "path", "part": "base", "fill": "body-2", "d": "M46 62 L40 22 L74 50 Z" },
+    { "el": "path", "part": "base", "fill": "body-2", "d": "M154 62 L160 22 L126 50 Z" },
+    { "el": "path", "part": "base", "fill": "body", "d": "M100 34 C150 34 172 70 170 112 C168 158 138 186 100 186 C62 186 32 158 30 112 C28 70 50 34 100 34 Z" },
+    { "el": "path", "part": "base", "fill": "body-2", "opacity": 0.8, "d": "M38 120 C30 140 38 164 56 174 C52 156 50 138 54 118 Z" },
+    { "el": "path", "part": "base", "fill": "body-2", "opacity": 0.8, "d": "M162 120 C170 140 162 164 144 174 C148 156 150 138 146 118 Z" },
+    { "el": "path", "part": "base", "fill": "none", "stroke": "ink", "strokeWidth": 2, "opacity": 0.35, "strokeLinecap": "round", "d": "M84 150 q6 6 12 0 M104 150 q6 6 12 0 M94 162 q6 6 12 0" },
+    { "el": "circle", "part": "base", "fill": "face", "cx": 72, "cy": 94, "r": 32 },
+    { "el": "circle", "part": "base", "fill": "face", "cx": 128, "cy": 94, "r": 32 },
+    { "el": "ellipse", "part": "base", "fill": "eye", "stroke": "ink", "strokeWidth": 2, "cx": 72, "cy": 94, "rx": 19, "ry": 19 },
+    { "el": "ellipse", "part": "base", "fill": "ink", "cx": 72, "cy": 94, "rx": 10, "ry": 10 },
+    { "el": "ellipse", "part": "base", "fill": "eye", "stroke": "ink", "strokeWidth": 2, "cx": 128, "cy": 94, "rx": 19, "ry": 19 },
+    { "el": "ellipse", "part": "base", "fill": "ink", "cx": 128, "cy": 94, "rx": 10, "ry": 10 },
+    { "el": "path", "part": "mouth", "fill": "accent-strong", "stroke": "ink", "strokeWidth": 1.5, "d": "M93 121 L107 121 L100 131 Z" },
+    { "el": "path", "part": "base", "fill": "accent-strong", "stroke": "ink", "strokeWidth": 1.5, "d": "M89 110 L111 110 L100 125 Z" },
+    { "el": "path", "part": "listen", "fill": "none", "stroke": "accent", "strokeWidth": 4, "strokeLinecap": "round", "d": "M24 84 q-8 12 0 24 M14 78 q-12 18 0 36 M176 84 q8 12 0 24 M186 78 q12 18 0 36" },
+    { "el": "circle", "part": "think", "fill": "accent", "cx": 150, "cy": 30, "r": 4 },
+    { "el": "circle", "part": "think", "fill": "accent", "cx": 163, "cy": 22, "r": 5 },
+    { "el": "circle", "part": "think", "fill": "accent", "cx": 178, "cy": 12, "r": 6 },
+    { "el": "path", "part": "offline", "fill": "none", "stroke": "alert", "strokeWidth": 4, "strokeLinecap": "round", "d": "M154 14 L186 46 M186 14 L154 46" }
+  ]
+}
