@@ -424,3 +424,66 @@ gate_run() {
   [ "$status" -eq 0 ]
   [ "$(printf '%s' "$output" | python3 -c "import json,sys; print(json.load(sys.stdin)['count'])")" -eq 0 ]
 }
+
+# Bloques que ve el motor (nombres), para comprobar que setup() no se come los @test siguientes.
+blocks_seen() {
+  python3 - "$1" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("eng", "scripts/test-auditor-engine.py")
+eng = importlib.util.module_from_spec(spec); spec.loader.exec_module(eng)
+print(sum(1 for n, _ in eng.test_blocks(open(sys.argv[1]).read()) if not n.endswith("()")))
+PY
+}
+
+# P1 de la revisión de #1675: `<<palabra` dentro de comillas o en aritmética no abre heredoc.
+@test "setup() con <<'PY' entre comillas no oculta los 17 @test de test-merge-plan.bats" {
+  [ "$(grep -c '^@test ' tests/test-merge-plan.bats)" -eq 17 ]
+  [ "$(blocks_seen tests/test-merge-plan.bats)" -eq 17 ]
+}
+
+@test "setup() con \$((1<<2)) no oculta el @test siguiente: su || true se detecta" {
+  printf '#!/usr/bin/env bats\nsetup() {\n  X=$((1<<2))\n}\n\n@test "caso" {\n  grep -q x f || true\n}\n' > "$FX/tests/arit.bats"
+  [ "$(vac_count arit)" -eq 1 ]
+  [ "$(vac_kind arit)" = "V1" ]
+}
+
+@test "setup() con <<< (here-string) no abre heredoc" {
+  printf '#!/usr/bin/env bats\nsetup() {\n  read -r A <<< "hola"\n}\n\n@test "caso" {\n  grep -q x f || true\n}\n' > "$FX/tests/herestr.bats"
+  [ "$(vac_count herestr)" -eq 1 ]
+}
+
+@test "setup() con heredoc sin terminador antes de } se reanaliza sin heredoc" {
+  printf '#!/usr/bin/env bats\nsetup() {\n  echo a <<FIN\n  grep -q x f || true\n}\n\n@test "caso" {\n  grep -q y f || true\n}\n' > "$FX/tests/sinfin.bats"
+  [ "$(blocks_seen "$FX/tests/sinfin.bats")" -eq 1 ]
+  [ "$(vac_count sinfin)" -eq 2 ]
+}
+
+@test "setup() con heredoc real: su cuerpo no cuenta y el @test siguiente sí se ve" {
+  printf '#!/usr/bin/env bats\nsetup() {\n  cat > s.sh <<'"'"'EOS'"'"'\ngrep -q x f || true\n}\nEOS\n}\n\n@test "caso" {\n  grep -q y f || true\n}\n' > "$FX/tests/heredoc.bats"
+  [ "$(blocks_seen "$FX/tests/heredoc.bats")" -eq 1 ]
+  [ "$(vac_count heredoc)" -eq 1 ]
+}
+
+# P2-2 de la revisión de #1675: el escaneo da 0 viendo los @test, no porque setup() se los coma.
+# Se compara cada fichero con su copia con setup() renombrado (sin analizador de setup):
+# el número de @test vistos tiene que ser el mismo.
+@test "el analizador de setup() no oculta ningún @test de los .bats del repo" {
+  run python3 - <<'PY'
+import importlib.util, os, re
+spec = importlib.util.spec_from_file_location("eng", "scripts/test-auditor-engine.py")
+eng = importlib.util.module_from_spec(spec); spec.loader.exec_module(eng)
+seen = lambda c: sum(1 for n, _ in eng.test_blocks(c) if not n.endswith("()"))
+bad, files = [], 0
+for d, _, fs in os.walk("tests"):
+    for f in fs:
+        if f.endswith(".bats"):
+            c = open(os.path.join(d, f), errors="replace").read()
+            files += 1
+            sin_hook = re.sub(r'^(setup|setup_file)(\s*\(\))', r'x_\1\2', c, flags=re.M)
+            if seen(c) != seen(sin_hook):
+                bad.append(f"{d}/{f}: {seen(c)}/{seen(sin_hook)}")
+print("\n".join(bad) if bad else f"OK {files}")
+PY
+  [ "$status" -eq 0 ]
+  [[ "$output" == "OK "* ]]
+}
