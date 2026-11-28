@@ -92,6 +92,9 @@ check_component \
 # Cualquier terminador de línea que no sea \n o \r\n, o un `\` fuera de cadenas, es ambiguo.
 # Toda `/` fuera de comentario/cadena que no siga a [A-Za-z0-9_$)\] (o siga a una palabra
 # reservada de JS) es ambigua. Mutar o reasignar BEFORE_GUARDS en la fundación se rechaza.
+# Ambiguo también: `#!` al inicio, `<!--`/`-->` o cualquier no ASCII fuera de comentarios y
+# cadenas, ficheros de más de 200 kB. BEFORE_GUARDS solo puede usarse como primer argumento
+# de runGuardsOnVariants( (ni spread, ni copia, ni Array.prototype.x.call).
 # LÍMITE: «usa BEFORE_GUARDS» es heurístico (identificador fuera de comentarios y cadenas).
 # Un uso sombreado (`(BEFORE_GUARDS) => ...`) o código muerto (`if (false) BEFORE_GUARDS`)
 # lo satisface; no se puede demostrar estáticamente que la lista llegue a ejecutarse.
@@ -116,7 +119,14 @@ package private protected public of async get set""".split())
 def read_src(path):
     """Texto del fichero; terminador de línea distinto de \n o \r\n = ambiguo (JS los
     cuenta: U+2028, U+2029; un \r suelto también)."""
-    text = Path(path).read_bytes().decode("utf-8").replace("\r\n", "\n")
+    raw = Path(path).read_bytes()
+    if len(raw) > 200000:  # tope: el análisis es O(n²) en el peor caso; ambiguo = inactivo
+        raise ValueError("fichero demasiado grande")
+    text = raw.decode("utf-8").replace("\r\n", "\n")
+    if text[:1] == "\ufeff":
+        text = text[1:]
+    if text.startswith("#!"):
+        raise ValueError("shebang")
     if any(ch in text for ch in ("\r", "\u2028", "\u2029", "\x85")):
         raise ValueError("terminador de línea no estándar")
     # BOM o cualquier carácter de formato Unicode (Cf) fuera de la posición 0: ambiguo.
@@ -185,6 +195,10 @@ def scan(src):
     res = "".join(out)
     if "\\" in res:
         raise ValueError("escape fuera de cadenas")
+    if not res.isascii():
+        raise ValueError("carácter no ASCII fuera de comentarios y cadenas")
+    if "<!--" in res or "-->" in res:
+        raise ValueError("comentario HTML")
     return res
 
 
@@ -260,7 +274,9 @@ try:
     if re.search(r"\b(?:const|let|var|function|class)\s+BEFORE_GUARDS\b", body):
         sys.exit(1)
     body = re.sub(r"\btypeof\s+BEFORE_GUARDS\b", " ", body)
-    if not re.search(r"(?<![\w$.])BEFORE_GUARDS\b(?!\s*:)", body):
+    uses = re.findall(r"(?<![\w$])BEFORE_GUARDS\b(?!\s*:)", body)
+    ok_uses = re.findall(r"\brunGuardsOnVariants\(\s*BEFORE_GUARDS\b", body)
+    if not uses or len(uses) != len(ok_uses):
         sys.exit(1)
 except Exception:
     sys.exit(1)

@@ -530,3 +530,83 @@ PY
   shield
   [ "$status" -eq 0 ]
 }
+
+# ── Ronda 6 (revisión #1671d): shebang, comentarios HTML, no ASCII, usos, tamaño ──
+
+@test "shebang en la posicion 0 de la fundacion" {
+  python3 - "$FOUNDATION" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]); p.write_text("#!/usr/bin/env bun\n" + p.read_text())
+PY
+  shield
+  wired_missing
+}
+
+@test "shebang tras BOM en before-guards.ts" {
+  python3 - "$GUARDS" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]); p.write_text("﻿#!/usr/bin/env bun\n" + p.read_text())
+PY
+  shield
+  wired_missing
+}
+
+@test "comentario HTML <!-- fuera de cadenas" {
+  printf '%s\n' 'const a = 1; <!-- x' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "comentario HTML --> fuera de cadenas" {
+  printf '%s\n' '--> x' >> "$GUARDS"
+  shield
+  wired_missing
+}
+
+@test "<!-- dentro de una cadena no afecta" {
+  printf '%s\n' 'const h = "<!-- ok -->";' >> "$FOUNDATION"
+  shield
+  [ "$status" -eq 0 ]
+}
+
+@test "identificador con U+0301 combinante en el uso" {
+  sub "$FOUNDATION" 'runGuardsOnVariants(BEFORE_GUARDS,' $'runGuardsOnVariants(BEFORE_GUARD\xc5\x9a,'
+  shield
+  wired_missing
+}
+
+@test "letra no ASCII fuera de comentarios en before-guards.ts" {
+  printf '%s\n' $'const \xd0\xb5 = 1;' >> "$GUARDS"
+  shield
+  wired_missing
+}
+
+@test "no ASCII dentro de comentarios y cadenas es valido" {
+  printf '%s\n' '// canción — ñ' 'const t = "año → x";' >> "$FOUNDATION"
+  shield
+  [ "$status" -eq 0 ]
+}
+
+@test "BEFORE_GUARDS como argumento de otra funcion" {
+  printf '%s\n' 'Array.prototype.splice.call(BEFORE_GUARDS, 0);' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "BEFORE_GUARDS esparcido o asignado a otra variable" {
+  printf '%s\n' 'const copia = [...BEFORE_GUARDS];' >> "$FOUNDATION"
+  shield
+  wired_missing
+}
+
+@test "fichero demasiado grande: fallo cerrado" {
+  python3 - "$FOUNDATION" <<'PY'
+import sys
+from pathlib import Path
+p = Path(sys.argv[1]); p.write_text(p.read_text() + "// relleno\n" * 40000)
+PY
+  shield
+  wired_missing
+}
