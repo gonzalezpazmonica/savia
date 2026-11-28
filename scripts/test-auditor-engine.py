@@ -125,6 +125,56 @@ def only_assertions(s):
     """`[ a ] && [ b ] || true` anula aserciones; `[ a ] && accion || true` es preparación condicional."""
     return all(ASSERT_LINE.search(seg.strip()) for seg in s.split("&&"))
 
+HEREDOC_TAG = re.compile(r'-?[ \t]*([\'"]?)(\w+)\1')
+BLOCK_START = re.compile(r'^(?:@test\s|(?:setup|setup_file|teardown|teardown_file)\s*\(\))')
+
+def heredoc_tag(t):
+    """Terminador del heredoc que abre la línea, o None.
+
+    Solo cuenta `<<` fuera de comillas, que no sea `<<<` ni esté dentro de `$((…))`/`((…))`.
+    """
+    quote, arith, k = None, 0, 0
+    while k < len(t):
+        ch = t[k]
+        if quote:
+            if ch == "\\" and quote == '"':
+                k += 2
+                continue
+            if ch == quote:
+                quote = None
+        elif ch == "\\":
+            k += 2
+            continue
+        elif ch in "'\"":
+            quote = ch
+        elif t.startswith("((", k):
+            arith += 1
+            k += 2
+            continue
+        elif arith and t.startswith("))", k):
+            arith -= 1
+            k += 2
+            continue
+        elif ch == "#" and (k == 0 or t[k - 1] in " \t;"):
+            return None
+        elif not arith and t.startswith("<<", k):
+            if t.startswith("<<<", k):
+                k += 3
+                continue
+            m = HEREDOC_TAG.match(t, k + 2)
+            return m.group(2) if m else None
+        k += 1
+    return None
+
+def heredoc_closes(lines, j, tag):
+    """El terminador aparece antes del siguiente bloque (@test, setup, teardown) o del final."""
+    for x in lines[j + 1:]:
+        if BLOCK_START.match(x):
+            return False
+        if x.strip() == tag:
+            return True
+    return False
+
 def test_blocks(c):
     """(nombre, [(nº de línea, línea sin espacios)]) por cada @test."""
     lines = c.splitlines()
@@ -142,8 +192,10 @@ def test_blocks(c):
                         tag = None
                 elif t and not t.startswith("#"):
                     body.append((j + 1, t))
-                    hd = re.search(r'<<-?\s*[\'"]?(\w+)[\'"]?', t)
-                    tag = hd.group(1) if hd else None
+                    tag = heredoc_tag(t)
+                    # sin terminador antes del siguiente bloque no es heredoc: se analiza como código
+                    if tag and not heredoc_closes(lines, j, tag):
+                        tag = None
                 j += 1
             yield hook.group(1) + "()", body
             i = j + 1
