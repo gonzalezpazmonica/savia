@@ -313,7 +313,7 @@ EMAILS=$(echo "$ADDED_LINES" | grep -oiE "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-z
   | grep -vE "^@[a-z]+\.[a-z]+$" \
   | grep -vE "@kotlinx\.|@orders\.|@router\.|@app\.|@pytest\.|@override|@mcp\.|@server\." \
   | grep -vE "^i@izs\.me$" `# SE-425: aviso público de npm (deprecated de glob) en package-lock.json` \
-  | grep -vE "@[0-9]+\.[0-9]+\." `# PR #1676: un dominio que empieza por dos etiquetas numéricas es una versión (lib@1.0.0.js, react@18.2.0.min.js), no un email; x@163.com sigue detectándose` \
+  | grep -viE "@[0-9]+(\.[0-9]+)+(\.min)?\.(js|mjs|cjs|css)(\.map)?$" `# PR #1676: versión + extensión de código al final (lib@1.0.0.js, react@18.2.0.min.js) no es email; a@1.2.example.org y x@163.com siguen detectándose` \
   | sort -u || true)
 if [ -n "$EMAILS" ]; then
   echo "::error::BLOCKED: Real emails found"

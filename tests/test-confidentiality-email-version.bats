@@ -1,9 +1,9 @@
 #!/usr/bin/env bats
 # Ref: PR #1676 (revisión, P1-1) — Check 3 de scripts/confidentiality-scan.sh.
 # La regex de email tomaba «lib@1.0.0.js» (URL de CDN con versión, en una guía de terceros) por un email
-# real y bloqueaba la PR. Arreglo causal: un dominio que empieza por dos o más etiquetas numéricas (forma
-# de versión x.y…, también react@18.2.0.min.js) no es un email. Los emails reales, incluidos los de dominio
-# con una sola etiqueta numérica (p. ej. 163.com o a@1.servicio.io), siguen detectándose.
+# real y bloqueaba la PR. Arreglo causal: una versión numérica (x.y…) seguida de una extensión de código
+# al final (js, mjs, cjs, css; opcional .min y .map) no es un email. Los emails reales, incluidos los de
+# dominio o subdominio numérico (163.com, a@1.servicio.io, a@1.2.example.org — P2-a), siguen detectándose.
 
 REPO="$BATS_TEST_DIRNAME/.."
 SCRIPT="scripts/confidentiality-scan.sh"
@@ -51,6 +51,25 @@ scan_line() {
     [ "$status" -eq 1 ] || { echo "no detectado: $s"; false; }
     [[ "$output" == *"Real emails found"* ]]
     [[ "$output" == *'"result":"findings"'* ]]
+  done
+}
+
+@test "email positivo: subdominio numérico (a@1.2.example.org, a@1.2.3.realcorp.net) sigue detectándose" {
+  # Revisión PR #1676, P2-a: la exclusión «@N.N.» dejaba pasar emails con subdominio numérico.
+  local s
+  for s in 'escribe a a@1.2.example.org' 'contacto a@1.2.3.realcorp.net' 'x@163.com'; do
+    scan_line "$s"
+    [ "$status" -eq 1 ] || { echo "no detectado: $s"; false; }
+    [[ "$output" == *"Real emails found"* ]]
+  done
+}
+
+@test "email negativo: versión con extensión compuesta (lib@1.0.0.js.map, ui@2.1.0.min.css) no es email" {
+  local s
+  for s in 'cdn/lib@1.0.0.js.map' 'cdn/ui@2.1.0.min.css' 'cdn/m@3.0.0.cjs'; do
+    scan_line "$s"
+    [[ "$output" != *"Real emails found"* ]] || { echo "falso positivo: $s"; false; }
+    [ "$status" -eq 0 ]
   done
 }
 
