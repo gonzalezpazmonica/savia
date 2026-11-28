@@ -79,7 +79,22 @@ SAVIA_GATE_UNKNOWN=block bash scripts/confidentiality-scan.sh --pr >/dev/null 2>
   || { _supervisor "Confidentiality scan blocked"; echo "ERROR: confidentiality-scan.sh --pr no dio CLEAN." >&2; exit 1; }
 echo "  Clean."
 echo -e "\n=== Step 5: Push ==="; export SAVIA_PUSH_PR=1
-git push origin "$BRANCH" 2>&1 | tail -3 || { echo "  Retrying..."; git push --force-with-lease origin "$BRANCH" 2>&1 | tail -3; }
+# El reintento forzado solo procede cuando el remoto rechaza por historia divergente
+# (rama rebasada). Ante cualquier otro fallo (red, permisos, hook, rama protegida)
+# no se fuerza: se informa y se sale. Antes se forzaba ante cualquier fallo (ruta A02).
+_push_branch() {
+  local out
+  if out=$(git push origin "$1" 2>&1); then printf '%s\n' "$out" | tail -3; return 0; fi
+  printf '%s\n' "$out" | tail -3
+  if grep -qE 'non-fast-forward|\(fetch first\)' <<<"$out"; then
+    echo "  Retrying (historia divergente)..."
+    git push --force-with-lease origin "$1" 2>&1 | tail -3
+    return "${PIPESTATUS[0]}"
+  fi
+  echo "ERROR: el push falló por un motivo distinto de historia divergente; no se fuerza." >&2
+  return 1
+}
+_push_branch "$BRANCH" || { _supervisor "Push failed"; exit 1; }
 
 # ── Step 6: PR ───────────────────────────────────────────────────────────
 echo -e "\n=== Step 6: PR ==="

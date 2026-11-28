@@ -126,13 +126,37 @@ if [[ -f "$SAVIA_ENV_SCRIPT" ]]; then
 fi
 
 # ── G3: Risk Score Gate ───────────────────────────────────────────────────────
+# Fail-closed: si la clave risk_score aparece, su valor y el umbral tienen que
+# ser números finitos. Cualquier otra cosa (texto, null, NaN, inf, lista, vacío
+# o un fallo de Python) bloquea. Antes, un valor no numérico hacía fallar a
+# Python con exit 1, que se leía como «no supera el umbral» y el gate pasaba.
 risk_score=$(json_field "$CONTEXT_JSON" "risk_score")
-if [[ -n "$risk_score" ]]; then
-  # Compare floats using python3 (bash can't do float comparison natively)
-  if python3 -c "import sys; sys.exit(0 if float('$risk_score') > float('$RISK_GATE_THRESHOLD') else 1)" 2>/dev/null; then
-    emit_result "G3" "BLOCK" "risk_score=$risk_score > threshold=$RISK_GATE_THRESHOLD"
-    exit 1
-  fi
+if [[ -n "$risk_score" || "$CONTEXT_JSON" =~ \"risk_score\"[[:space:]]*: ]]; then
+  # Values go in as argv, never inside the Python source (they come from --context).
+  # Exit 0 = pasa, 3 = supera el umbral, 4 = umbral inválido; cualquier otro = valor inválido.
+  python3 -c '
+import math, sys
+def num(s):
+    try:
+        v = float(s)
+    except (TypeError, ValueError):
+        return None
+    return v if math.isfinite(v) else None
+t = num(sys.argv[2])
+if t is None:
+    sys.exit(4)
+r = num(sys.argv[1])
+if r is None:
+    sys.exit(5)
+sys.exit(3 if r > t else 0)
+' "$risk_score" "$RISK_GATE_THRESHOLD" 2>/dev/null
+  rc=$?
+  case "$rc" in
+    0) ;;
+    3) emit_result "G3" "BLOCK" "risk_score=$risk_score > threshold=$RISK_GATE_THRESHOLD"; exit 1 ;;
+    4) emit_result "G3" "BLOCK" "RISK_GATE_THRESHOLD no numérico — fail-closed"; exit 1 ;;
+    *) emit_result "G3" "BLOCK" "risk_score no numérico o ilegible — fail-closed"; exit 1 ;;
+  esac
 fi
 
 # ── G4: Branch Safety Gate ───────────────────────────────────────────────────

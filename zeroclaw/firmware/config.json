@@ -2,6 +2,7 @@
     "device_id": "zeroclaw-01",
     "wifi_ssid": "",
     "wifi_pass": "",
+    "http_token": "",
     "host_url": "http://192.168.1.100:8765",
     "led_pin": 2,
     "watchdog_ms": 10000,

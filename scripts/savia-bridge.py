@@ -3605,7 +3605,12 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
                 import re
                 _SAFE_GIT_VALUE = re.compile(r'^[a-zA-Z0-9 ._@+\-áéíóúñÁÉÍÓÚÑüÜ()]{1,200}$')
                 _SAFE_EMAIL = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
-                _SAFE_CREDENTIAL = re.compile(r'^[a-zA-Z0-9._/\-]{1,100}$')
+                # Lista cerrada: git ejecuta credential.helper en cada operación
+                # con credenciales; una ruta o un nombre libre sería un binario ajeno.
+                _SAFE_CREDENTIALS = frozenset({
+                    "store", "cache", "manager", "manager-core", "osxkeychain",
+                    "libsecret", "wincred",
+                })
 
                 if "name" in data:
                     if not _SAFE_GIT_VALUE.match(data["name"]):
@@ -3625,9 +3630,13 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
                 if "credential_helper" in data:
                     val = data["credential_helper"]
+                    if not isinstance(val, str):
+                        self._send_json({"error": "Invalid credential helper: must be a string"}, 400)
+                        return
                     if val:
-                        if not _SAFE_CREDENTIAL.match(val):
-                            self._send_json({"error": "Invalid credential helper: only alphanumeric, dots, slashes, hyphens allowed"}, 400)
+                        if val not in _SAFE_CREDENTIALS:
+                            self._send_json({"error": "Invalid credential helper: allowed values are "
+                                             + ", ".join(sorted(_SAFE_CREDENTIALS))}, 400)
                             return
                         subprocess.run(['git', 'config', '--global', 'credential.helper', val],
                                        check=True, capture_output=True, timeout=5)

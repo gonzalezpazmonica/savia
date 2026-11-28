@@ -159,8 +159,9 @@ step 3 "Checking OpenCode..."
 # Pick with SAVIA_OPENCODE_FLAVOR=v1|v2 (default v2).
 OC_FLAVOR="${SAVIA_OPENCODE_FLAVOR:-v2}"
 case "$OC_FLAVOR" in
-  v1) OC_NPM_PKG="opencode-ai" ;;
-  v2) OC_NPM_PKG="@opencode/cli" ;;
+  # SE-465 S3: versión exacta, la misma que DEFAULT_V1/DEFAULT_V2 de scripts/opencode-install.sh.
+  v1) OC_NPM_PKG="opencode-ai";   OC_NPM_VER="1.19.3" ;;
+  v2) OC_NPM_PKG="@opencode/cli"; OC_NPM_VER="2.0.32" ;;
   *)  fail "SAVIA_OPENCODE_FLAVOR must be v1 or v2 (got: $OC_FLAVOR)"; exit 1 ;;
 esac
 
@@ -170,7 +171,14 @@ if command -v opencode &>/dev/null; then
 else
   info "OpenCode not found — installing $OC_NPM_PKG ($OC_FLAVOR)..."
   if command -v npm &>/dev/null; then
-    if npm install -g "$OC_NPM_PKG" 2>/dev/null; then
+    # Literal versions so the pin is auditable (check-pinned-installs.sh fails closed on variables).
+    oc_npm_global() {
+      case "$OC_FLAVOR" in
+        v1) npm install -g opencode-ai@1.19.3 ;;
+        v2) npm install -g @opencode/cli@2.0.32 ;;
+      esac
+    }
+    if oc_npm_global 2>/dev/null; then
       ok "OpenCode installed via npm ($OC_NPM_PKG)"
     else
       warn "npm install failed — trying binary download..."
@@ -178,7 +186,7 @@ else
         bash "$SAVIA_HOME/scripts/opencode-install.sh" && ok "OpenCode installed via binary" || warn "OpenCode binary install failed"
       else
         warn "OpenCode installer not available yet — install manually:"
-        echo "    npm install -g $OC_NPM_PKG"
+        echo "    npm install -g ${OC_NPM_PKG}@${OC_NPM_VER}"
       fi
     fi
   else
@@ -225,7 +233,7 @@ fi
 step 5 "Installing script dependencies..."
 
 if [[ -f "$SAVIA_HOME/scripts/package.json" ]]; then
-  (cd "$SAVIA_HOME/scripts" && npm install --silent 2>/dev/null) && ok "npm dependencies installed" || warn "npm install had warnings (non-critical)"
+  (cd "$SAVIA_HOME/scripts" && npm ci --silent 2>/dev/null) && ok "npm dependencies installed (lockfile)" || warn "npm ci had warnings (non-critical)"
 else
   warn "No package.json found in scripts/ — skipping npm install"
 fi

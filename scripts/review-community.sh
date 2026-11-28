@@ -98,21 +98,14 @@ do_review() {
 }
 
 # ── Merge de un PR ──────────────────────────────────────────────────
+# Retirado: este subcomando fusionaba sin permiso firmado de la persona, sin
+# comprobar la revisión y sin atar la fusión al commit revisado (ruta A09 del
+# inventario de rutas de efecto). Las fusiones van solo por el camino con
+# permiso. No llama a ninguna API: rehúsa y sale con 3.
 do_merge() {
-  local pr_number="${1:?Uso: review-community.sh merge {número_pr}}"
-  check_gh
-
-  log_info "Verificando estado del PR #$pr_number..."
-
-  # Verificar que está aprobado
-  local review_state
-  review_state=$(gh pr view "$pr_number" --repo "$REPO_FULL" --json reviewDecision --jq '.reviewDecision' 2>/dev/null || echo "")
-
-  log_info "Estado de review: ${review_state:-NONE}"
-  log_info "Haciendo merge squash del PR #$pr_number..."
-  gh pr merge "$pr_number" --repo "$REPO_FULL" --squash 2>&1
-
-  log_ok "PR #$pr_number mergeado con squash"
+  log_error "review-community.sh merge está retirado: fusionaba sin permiso firmado."
+  log_info "Para fusionar una PR usa scripts/merge-sprint.sh (revisión registrada y permiso de la persona)."
+  exit 3
 }
 
 # ── Crear release ───────────────────────────────────────────────────

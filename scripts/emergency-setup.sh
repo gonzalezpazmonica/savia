@@ -100,7 +100,9 @@ else
   else
     echo -e "  ${YELLOW}→${NC} Instalando Ollama..."
     if [[ "$OS" == "Linux" ]]; then
-      curl -fsSL https://ollama.ai/install.sh | sh
+      # SE-465 S2: instalador de una etiqueta fija, verificado por SHA-256 antes de ejecutar.
+      source "$SCRIPT_DIR_EM/lib/verified-installer.sh"
+      savia_install_ollama_pinned || { echo -e "  ${RED}✗${NC} Instalación de Ollama fallida"; exit 1; }
     elif [[ "$OS" == "Darwin" ]]; then
       # macOS: descargar tgz y extraer binario
       TMP_TGZ="$(mktemp)"; curl -fSL "https://ollama.com/download/ollama-darwin.tgz" -o "$TMP_TGZ"

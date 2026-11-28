@@ -90,7 +90,7 @@ import_snapshot() {
 
   # Verificar SHA si hay meta
   if [[ -f "$SNAPSHOT_META" ]]; then
-    local saved_sha; saved_sha=$(python3 -c "import json; d=json.load(open('$SNAPSHOT_META')); print(d.get('sha256',''))" 2>/dev/null || echo "")
+    local saved_sha; saved_sha=$(python3 -c "import sys; import json; d=json.load(open(sys.argv[1])); print(d.get('sha256',''))" "$SNAPSHOT_META" 2>/dev/null || echo "")
     if [[ -n "$saved_sha" ]]; then
       local actual_sha; actual_sha=$(sha256sum "$snap" 2>/dev/null | cut -d' ' -f1 || echo "")
       if [[ -n "$actual_sha" && "$saved_sha" != "$actual_sha" ]]; then

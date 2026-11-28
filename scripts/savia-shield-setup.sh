@@ -53,8 +53,13 @@ else
     brew install ollama 2>&1 | tail -3
     check_ok "Ollama instalado via brew"
   else
-    curl -fsSL https://ollama.ai/install.sh | sh 2>&1 | tail -3
-    check_ok "Ollama instalado via curl"
+    # SE-465 S2: instalador de una etiqueta fija, verificado por SHA-256 antes de ejecutar.
+    source "$SCRIPT_DIR_SS/lib/verified-installer.sh"
+    if savia_install_ollama_pinned 2>&1 | tail -3; [ "${PIPESTATUS[0]}" -eq 0 ]; then
+      check_ok "Ollama $OLLAMA_PINNED_VERSION instalado (instalador verificado)"
+    else
+      check_warn "Instalación de Ollama fallida"
+    fi
   fi
 fi
 
@@ -74,7 +79,8 @@ if python3 -c "import presidio_analyzer" 2>/dev/null; then
   check_ok "Presidio instalado"
 else
   check_warn "Instalando Presidio..."
-  pip install presidio-analyzer presidio-anonymizer 2>&1 | tail -3
+  # SE-465 S4: versiones y hashes fijados en un lock versionado.
+  pip install --require-hashes -r "$SCRIPT_DIR_SS/requirements/shield-presidio.lock.txt" 2>&1 | tail -3
   check_ok "Presidio instalado"
 fi
 if python3 -c "import spacy; spacy.load('es_core_news_md')" 2>/dev/null; then

@@ -262,3 +262,20 @@ EOF
   done
   [ "$status" -eq 0 ]
 }
+
+# ── Barrido Python 2026-11-27: el id de sesión del modo post no es una ruta ──
+
+@test "post: --session con ../ no escribe fuera de --state-dir" {
+  mkdir -p "$TMPD/state"
+  python3 "$GUARD" --session "../escapado" --tool Read --args '{"file_path":"a.py"}' \
+    --turn t1 --state-dir "$TMPD/state" 2>/dev/null || true
+  [ ! -e "$TMPD/escapado.json" ]
+  ls -A "$TMPD/state" | grep -q json
+}
+
+@test "post: --session absoluto no escribe en la ruta absoluta" {
+  mkdir -p "$TMPD/state"
+  python3 "$GUARD" --session "$TMPD/abs" --tool Read --args '{"file_path":"a.py"}' \
+    --turn t1 --state-dir "$TMPD/state" 2>/dev/null || true
+  [ ! -e "$TMPD/abs.json" ]
+}

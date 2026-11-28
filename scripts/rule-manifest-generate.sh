@@ -108,4 +108,4 @@ fi
 
 # 3) Escribir solo el manifest (RN-01: nunca toca reglas/CRITERIO/CONSTITUCION)
 cp "$TMP.json" "$OUTPUT"
-echo "Generated $OUTPUT ($(python3 -c "import json,sys; print(json.load(open('$OUTPUT'))['total'])" ) reglas)"
+echo "Generated $OUTPUT ($(python3 -c "import sys; import json,sys; print(json.load(open(sys.argv[1]))['total'])" "$OUTPUT" ) reglas)"

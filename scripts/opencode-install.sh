@@ -102,29 +102,13 @@ if [[ "$LINK_ONLY" -ne 1 ]]; then
     run npm install --prefix "${OPENCODE_DIR}" "${NPM_PKG}@${VERSION}" >/dev/null 2>&1 || return 1
     run ln -sf "${OPENCODE_DIR}/node_modules/.bin/opencode" "${OPENCODE_DIR}/bin/opencode"
   }
-  if [[ "$FLAVOR" == "v2" ]]; then
-    # npm only: the registry checks the package integrity; there is no installer script to trust.
-    if [[ "$DRY_RUN" -eq 1 ]]; then
-      echo "DRY-RUN: would npm install ${NPM_PKG}@${VERSION} under ${OPENCODE_DIR}"
-    else
-      install_npm || die "npm install ${NPM_PKG}@${VERSION} failed (need npm; or install manually and re-run with --link-only)" 3
-    fi
-  elif command -v curl >/dev/null 2>&1; then
-    if [[ "$DRY_RUN" -eq 1 ]]; then
-      echo "DRY-RUN: would download opencode v${VERSION} via official installer (npm ${NPM_PKG} as fallback)"
-    else
-      # Official installer pattern (mirrors https://opencode.ai/install). The
-      # installer pins SAVIA_HOME by setting OPENCODE_INSTALL_DIR. If the
-      # network is unreachable we fail soft and let the user retry.
-      if ! OPENCODE_INSTALL_DIR="${OPENCODE_DIR}/bin" \
-           OPENCODE_VERSION="${VERSION}" \
-           curl -fsSL https://opencode.ai/install 2>/dev/null | bash >/dev/null 2>&1; then
-        echo "WARN: official installer unavailable — falling back to npm" >&2
-        install_npm || die "npm install ${NPM_PKG}@${VERSION} failed (run --link-only after manual install)" 3
-      fi
-    fi
+  # SE-465 S2 (alerta SE-442 #89): both flavors install from npm with an exact
+  # version; the registry checks the package integrity. The v1 path used to pipe
+  # the official remote installer into bash, i.e. ran whatever that domain served.
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "DRY-RUN: would npm install ${NPM_PKG}@${VERSION} under ${OPENCODE_DIR}"
   else
-    die "curl not available — install opencode manually then re-run with --link-only" 3
+    install_npm || die "npm install ${NPM_PKG}@${VERSION} failed (need npm; or install manually and re-run with --link-only)" 3
   fi
 fi
 

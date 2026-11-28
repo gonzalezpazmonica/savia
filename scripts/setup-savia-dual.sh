@@ -74,7 +74,9 @@ install_ollama() {
   fi
   say "Installing Ollama from official installer..."
   if [[ "$PLATFORM" == "linux" ]]; then
-    run "curl -fsSL https://ollama.com/install.sh | sh"
+    # SE-465 S2: instalador de una etiqueta fija, verificado por SHA-256 antes de ejecutar.
+    source "$SCRIPT_DIR/lib/verified-installer.sh"
+    run "savia_install_ollama_pinned"
   else
     if command -v brew >/dev/null 2>&1; then
       run "brew install ollama"

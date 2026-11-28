@@ -178,7 +178,7 @@ main() {
     exit 2
   fi
 
-  if ! python3 -c "import json; json.load(open('$CANDIDATE')); print('OK')" 2>/dev/null | grep -q OK; then
+  if ! python3 -c 'import json,sys; json.load(open(sys.argv[1])); print("OK")' "$CANDIDATE" 2>/dev/null | grep -q OK; then
     echo "ERROR: Body card is not valid JSON: $CANDIDATE" >&2
     exit 2
   fi
@@ -201,14 +201,14 @@ print('entry:%d' % bad[0] if bad else 'ok')
   fi
 
   local body_id body_version entry_count
-  body_id=$(python3 -c "import json; d=json.load(open('$CANDIDATE')); print(d.get('body_id','UNKNOWN'))" 2>/dev/null || echo "UNKNOWN")
-  body_version=$(python3 -c "import json; d=json.load(open('$CANDIDATE')); print(d.get('version','0'))" 2>/dev/null || echo "0")
-  entry_count=$(python3 -c "
-import json
-card=json.load(open('$CANDIDATE'))
-entries=card.get('entries',card.get('criterios',[]))
+  body_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("body_id","UNKNOWN"))' "$CANDIDATE" 2>/dev/null || echo "UNKNOWN")
+  body_version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("version","0"))' "$CANDIDATE" 2>/dev/null || echo "0")
+  entry_count=$(python3 -c '
+import json, sys
+card=json.load(open(sys.argv[1]))
+entries=card.get("entries",card.get("criterios",[]))
 print(len(entries))
-" 2>/dev/null || echo "0")
+' "$CANDIDATE" 2>/dev/null || echo "0")
 
   echo "=== Monotonicity Gate ==="
   echo "Body: $body_id v$body_version"
@@ -225,13 +225,14 @@ print(len(entries))
 
   for i in $(seq 0 $((entry_count - 1))); do
     local entry_json
-    entry_json=$(python3 -c "
-import json
-card=json.load(open('$CANDIDATE'))
-entries=card.get('entries',card.get('criterios',[]))
-if $i < len(entries):
-    print(json.dumps(entries[$i],ensure_ascii=False))
-" 2>/dev/null)
+    entry_json=$(python3 -c '
+import json, sys
+card=json.load(open(sys.argv[1]))
+i=int(sys.argv[2])
+entries=card.get("entries",card.get("criterios",[]))
+if i < len(entries):
+    print(json.dumps(entries[i],ensure_ascii=False))
+' "$CANDIDATE" "$i" 2>/dev/null)
 
     if [[ -z "$entry_json" ]]; then
       continue

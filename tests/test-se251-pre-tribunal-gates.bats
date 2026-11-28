@@ -359,3 +359,63 @@ _verd() { echo "$output" | jq -r .verdict; }
   run _g --decision deploy --context '{"source_branch":"feature/x","target_branch":"main"}'
   [ "$status" -eq 0 ]
 }
+
+# ── Barrido Python 2026-11-27: risk_score nunca entra como código Python ─────
+
+@test "G3: un risk_score con comillas no ejecuta código (inyección en python3 -c)" {
+  sentinel="$BATS_TEST_TMPDIR/pwned-g3"
+  ctx=$(SENT="$sentinel" python3 -c 'import os; print("{\"risk_score\":\"0\x27)*0+0*len(str(__import__(\x27pathlib\x27).Path(\x27%s\x27).touch()))+float(\x270\"}" % os.environ["SENT"])')
+  run env RISK_GATE_THRESHOLD=0.8 bash "$SCRIPT" --decision deploy --context "$ctx"
+  [ ! -e "$sentinel" ]
+}
+
+@test "G3: el umbral con comillas tampoco se evalúa como código" {
+  sentinel="$BATS_TEST_TMPDIR/pwned-g3-umbral"
+  thr=$(SENT="$sentinel" python3 -c 'import os; print("0\x27)*0+__import__(\x27os\x27).system(\x27touch %s\x27)+float(\x270" % os.environ["SENT"])')
+  run env RISK_GATE_THRESHOLD="$thr" bash "$SCRIPT" --decision deploy --context '{"risk_score":0.5}'
+  [ ! -e "$sentinel" ]
+}
+
+@test "G3: tras el arreglo la comparación numérica sigue igual (0.9 bloquea, 0.5 no)" {
+  run env RISK_GATE_THRESHOLD=0.8 bash "$SCRIPT" --decision deploy --context '{"risk_score":0.9}'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"G3"* ]]
+  run env RISK_GATE_THRESHOLD=0.8 bash "$SCRIPT" --decision deploy --context '{"risk_score":0.5}'
+  [[ "$output" != *'"gate":"G3"'* ]]
+}
+
+# ── G3 falla cerrado (barrido Python, hallazgo fuera de clase) ──────────────
+
+@test "G3 fail-closed: risk_score no numérico bloquea" {
+  _w
+  for v in '"alto"' 'null' '"NaN"' '"inf"' '[0.9]' '""' 'true'; do
+    run _g --decision deploy --context "{\"risk_score\":$v}"
+    [ "$status" -eq 1 ]
+    [ "$(_gate)" = "G3" ]
+    [ "$(_verd)" = "BLOCK" ]
+    [[ "$output" == *"no numérico"* ]]
+  done
+}
+
+@test "G3 fail-closed: umbral no numérico bloquea si hay risk_score" {
+  _w
+  for t in abc nan inf 0.8x; do
+    RISK_GATE_THRESHOLD="$t" run _g --decision deploy --context '{"risk_score":0.1}'
+    [ "$status" -eq 1 ]
+    [ "$(_gate)" = "G3" ]
+    [[ "$output" == *"RISK_GATE_THRESHOLD"* ]]
+  done
+}
+
+@test "G3 fail-closed: números válidos siguen funcionando" {
+  _w
+  run _g --decision deploy --context '{"risk_score": 0}'
+  [ "$status" -eq 0 ]
+  run _g --decision deploy --context '{"risk_score":1e-3}'
+  [ "$status" -eq 0 ]
+  run _g --decision deploy --context '{"risk_score":-0.2}'
+  [ "$status" -eq 0 ]
+  run _g --decision deploy --context '{"risk_score":9E-1}'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"> threshold"* ]]
+}
