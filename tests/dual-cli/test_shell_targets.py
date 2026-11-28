@@ -103,6 +103,17 @@ class ShellTargetCorpusTests(unittest.TestCase):
         with self.assertRaises(ProtocolError):
             shell_targets.protected_target("rm -rf [z-a]", "/w", "/w", gates.PROTECTED_PATHS)
 
+    def test_recursive_removal_of_the_root_reaches_the_gates(self):
+        """Auditoría de mutación 2026-11-27 (T9, paridad): `rm -rf /` es padre de toda puerta. normpath deja
+        `//` tal cual (POSIX), así que sin el rstrip `//` + sep no prefija ninguna puerta."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = os.path.realpath(tmp)
+            for target in ("/", "//", "///", "/.", "//./"):
+                for verb in ("rm -rf", "rm -r", "rm -fr --"):
+                    got = shell_targets.protected_target(f"{verb} {target}", root, root, gates.PROTECTED_PATHS)
+                    self.assertEqual(got, target, (verb, target))
+            self.assertIsNone(shell_targets.protected_target("touch /", root, root, gates.PROTECTED_PATHS))
+
     def test_home_is_expanded_both_ways(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = os.path.realpath(tmp)

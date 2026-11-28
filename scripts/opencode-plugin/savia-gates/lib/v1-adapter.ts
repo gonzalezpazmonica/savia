@@ -13,12 +13,16 @@ const INTERNAL_AGENTS = ["title", "summary", "compaction"]
  *  cannot be resolved, or a config that does not answer in time, counts as "" (unknown, so cloud). */
 async function turnProviders(ctx: PluginInput, agent: string | undefined, messageProvider: string | undefined): Promise<string[]> {
   const of = (m: unknown) => (typeof m === "string" && m.includes("/") ? m.split("/")[0] : "")
+  let timer: ReturnType<typeof setTimeout> | undefined
   try {
-    let timer: ReturnType<typeof setTimeout> | undefined
+    // The call goes first and inside an async function, so a synchronous throw (or no client) is a rejection
+    // here; the timer is armed after and always cleared. An armed timer left behind rejected later unhandled.
+    const answer = (async () => ctx.client.config.get())()
+    answer.catch(() => {}) // a late rejection after the timer won is not unhandled either
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error("config.get timeout")), CONFIG_TIMEOUT_MS)
     })
-    const cfg: any = (await Promise.race([ctx.client.config.get(), timeout]).finally(() => clearTimeout(timer)))?.data ?? {}
+    const cfg: any = (await Promise.race([answer, timeout]))?.data ?? {}
     const agentModel = agent ? cfg.agent?.[agent]?.model : undefined
     const out = [of(agentModel ?? cfg.model), of(cfg.small_model ?? cfg.model)]
     for (const a of INTERNAL_AGENTS) {
@@ -29,6 +33,8 @@ async function turnProviders(ctx: PluginInput, agent: string | undefined, messag
     return out
   } catch {
     return [""]
+  } finally {
+    clearTimeout(timer)
   }
 }
 

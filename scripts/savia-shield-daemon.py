@@ -247,14 +247,51 @@ def unmask(text):
 
 TOKEN = ""
 def load_token():
+    """Load ~/.savia/shield-token, creating it (0600) if missing.
+
+    Never serves in open access: returns False when no usable token exists
+    (empty file, unreadable, cannot be created) and the caller must not start.
+    The hooks read the same file on every call, so a freshly created token
+    is picked up without restarting anything.
+    """
     global TOKEN
+    TOKEN = ""
     tp = os.path.expanduser("~/.savia/shield-token")
-    if os.path.exists(tp):
-        with open(tp) as f: TOKEN = f.read().strip()
-        print(f"  Auth: token loaded", file=sys.stderr)
-    else:
+    try:
+        if not os.path.exists(tp):
+            import secrets
+            os.makedirs(os.path.dirname(tp), mode=0o700, exist_ok=True)
+            fd = os.open(tp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(secrets.token_hex(32) + "\n")
+            print("  Auth: token created (0600)", file=sys.stderr)
+        with open(tp) as f:
+            TOKEN = f.read().strip()
+    except OSError as e:
+        print(f"  Auth: cannot load or create token: {e}", file=sys.stderr)
         TOKEN = ""
-        print(f"  Auth: NO TOKEN (open access!)", file=sys.stderr)
+    if not TOKEN:
+        print(f"  Auth: no usable token at {tp}; refusing open access", file=sys.stderr)
+        return False
+    print("  Auth: token loaded", file=sys.stderr)
+    return True
+
+
+def _workspace_path(fp):
+    """Resolve fp (relative paths against the workspace) with realpath.
+
+    Returns the resolved path only if it lies inside the workspace root;
+    otherwise None. Symlinks and '..' are resolved before the check, so
+    neither can escape (CodeQL py/path-injection #30-#32).
+    """
+    root = os.path.realpath(PROJ)
+    full = os.path.realpath(os.path.join(root, fp))
+    try:
+        if os.path.commonpath([root, full]) == root:
+            return full
+    except ValueError:  # different drives on Windows
+        pass
+    return None
 
 
 def gate(hook_input):
@@ -269,6 +306,10 @@ def gate(hook_input):
 
     # Normalize path separators (Windows uses \, patterns use /)
     fp_norm = fp.replace("\\", "/")
+    # Classify the canonical path: "projects/../docs/x" is docs/, not private.
+    # Lexical only (no filesystem access), so outside paths are never touched.
+    import posixpath
+    fp_norm = posixpath.normpath(fp_norm)
 
     # Destination classification — private paths skip scanning
     private_patterns = ["/projects/", "projects/", ".local.", "/output/", "private-agent-memory",
@@ -299,11 +340,14 @@ def gate(hook_input):
     import unicodedata
     content = unicodedata.normalize("NFKC", content)
 
-    # Cross-write detection: if file exists, combine existing + new content
+    # Cross-write detection: if file exists, combine existing + new content.
+    # Only files inside the workspace are read (realpath + containment):
+    # anything else would give a local caller a one-bit oracle over arbitrary
+    # files. Outside the workspace the content alone is still scanned below.
     crosswrite_pat = re.compile(r'Server=.*[Pp]assword=|[Pp]assword=.*Server=', re.I)
     # Resolve Git Bash paths on Windows (/tmp/... -> C:\Users\...\Temp\...)
     fp_disk = fp
-    if not os.path.isfile(fp_disk) and sys.platform == 'win32' and fp.startswith('/'):
+    if sys.platform == 'win32' and fp.startswith('/'):
         import subprocess as _sp
         try:
             _r = _sp.run(['cygpath', '-w', fp], capture_output=True, text=True, timeout=2)
@@ -311,7 +355,8 @@ def gate(hook_input):
                 fp_disk = _r.stdout.strip()
         except Exception:
             pass
-    if os.path.isfile(fp_disk):
+    fp_disk = _workspace_path(fp_disk)
+    if fp_disk is not None and os.path.isfile(fp_disk):
         try:
             with open(fp_disk, 'r', encoding='utf-8', errors='ignore') as f:
                 existing = f.read(10000)
@@ -347,12 +392,11 @@ def _ollama_model_loaded():
 
 class H(http.server.BaseHTTPRequestHandler):
     def _check_auth(self):
-
-        if not TOKEN: return True
+        # Fail-closed: without a loaded token nothing is authorized.
+        if not TOKEN: return False
+        import hmac
         auth = self.headers.get('X-Shield-Token', '')
-        if auth != TOKEN:
-            return False
-        return True
+        return hmac.compare_digest(auth.encode(), TOKEN.encode())
     def _j(self):
         n=int(self.headers.get('Content-Length',0))
         if n > 1048576: raise ValueError('Request too large (max 1MB)')
@@ -382,7 +426,10 @@ class H(http.server.BaseHTTPRequestHandler):
 
 if __name__=='__main__':
     import argparse; p=argparse.ArgumentParser(); p.add_argument('--port',type=int,default=PORT)
-    a=p.parse_args(); print(f"Savia Shield Daemon :{a.port}",file=sys.stderr); init(); load_token()
+    a=p.parse_args(); print(f"Savia Shield Daemon :{a.port}",file=sys.stderr)
+    if not load_token():
+        print("  Refusing to start without auth token (~/.savia/shield-token)",file=sys.stderr); sys.exit(2)
+    init()
     s=http.server.HTTPServer(('127.0.0.1',a.port),H); print(f"  Ready",file=sys.stderr)
     try: s.serve_forever()
     except KeyboardInterrupt: print("\nStopped.",file=sys.stderr)
