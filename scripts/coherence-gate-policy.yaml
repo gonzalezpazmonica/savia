@@ -31,7 +31,7 @@ gates:
     status: BLOCK
     risk_scope: [L4]
     calibration: complete
-    evidence: eval L4 8/8 covered 9 piezas (SE-387 D); bloquea si un L4 pierde cobertura
+    evidence: bloquea si un L4 pierde cobertura de definicion (SE-387 D); la cobertura de comportamiento (solo evals que ejecutan) va en modo informe, ver coherence-gates.sh
   - id: constitutional-coverage
     status: BLOCK
     risk_scope: [L4]

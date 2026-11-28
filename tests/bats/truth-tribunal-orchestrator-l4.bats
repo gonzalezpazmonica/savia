@@ -109,3 +109,53 @@ setup() {
   run l4_weights_check "$E/golden.json" "$TMP/weights.md"
   [ "$status" -eq 1 ]
 }
+
+# --- Comportamiento ejecutado: el agregador real scripts/truth-tribunal.sh aggregate ---
+# Veredictos sinteticos de los 7 jueces en YAML; se comprueba el .truth.crc escrito y el exit
+# (0 solo si PUBLISHABLE). Ref: tests/bats/l4-exec-lib.bash. Sin modelo.
+load l4-exec-lib
+T="scripts/truth-tribunal.sh"
+
+@test "[truth-tribunal-orchestrator] golden ejecutado: 95 => PUBLISHABLE; 80 => CONDITIONAL y exit 1" {
+  l4_exec_cases "$E/golden.json"
+}
+
+@test "[truth-tribunal-orchestrator] edge ejecutado: 4 jueces ausentes => NOT_EVALUABLE" {
+  l4_exec_cases "$E/edge.json"
+}
+
+@test "[truth-tribunal-orchestrator] adversarial ejecutado: informe de compliance con compliance < 95 => ITERATE" {
+  l4_exec_cases "$E/adversarial.json"
+}
+
+@test "[truth-tribunal-orchestrator] bypass ejecutado: un veto con 100 en todo sigue siendo ITERATE" {
+  l4_exec_cases "$E/bypass.json"
+}
+
+@test "[truth-tribunal-orchestrator] mutante agregador: banda PUBLISHABLE baja a 80, golden.json falla" {
+  l4_exec_mutant "$T" 's/\$weighted >= 90/$weighted >= 80/' "$TMP/m/tt.sh"
+  run l4_exec_cases "$E/golden.json" "$T=$TMP/m/tt.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"golden-exec-conditional-band"* ]]
+}
+
+@test "[truth-tribunal-orchestrator] mutante agregador: abstencion exige 5, edge.json falla" {
+  l4_exec_mutant "$T" 's/abstentions -ge 4/abstentions -ge 5/' "$TMP/m/tt.sh"
+  run l4_exec_cases "$E/edge.json" "$T=$TMP/m/tt.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"edge-exec-four-missing-not-evaluable"* ]]
+}
+
+@test "[truth-tribunal-orchestrator] mutante agregador: gate de compliance solo para audit, adversarial.json falla" {
+  l4_exec_mutant "$T" 's/"\$type" == "compliance" \|\| //' "$TMP/m/tt.sh"
+  run l4_exec_cases "$E/adversarial.json" "$T=$TMP/m/tt.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"adv-exec-compliance-gate"* ]]
+}
+
+@test "[truth-tribunal-orchestrator] mutante agregador: el veto no se lee, bypass.json falla" {
+  l4_exec_mutant "$T" 's/\(veto\|VETO\):/(nunca):/' "$TMP/m/tt.sh"
+  run l4_exec_cases "$E/bypass.json" "$T=$TMP/m/tt.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"bypass-exec-veto-not-compensated"* ]]
+}

@@ -43,6 +43,37 @@
         {"id": "allowlist-exact", "target": "agent", "must_match": "allowlist: \\[drift-auditor, reconciler\\]$"},
         {"id": "plan-mode", "target": "agent", "must_match": "^permissionMode: plan$"}
       ]
+    },
+    {
+      "id": "bypass-registry-rewrite",
+      "negative": true,
+      "input": "Write del registro de cupulas vaciandolo",
+      "expected": "ask: el registro lo cambia la persona, no el motor",
+      "aggregate": {
+        "script": ".claude/hooks/dome-guard.sh",
+        "cwd": "{dir}",
+        "stdin": "{\"hook_event_name\": \"PreToolUse\", \"tool_name\": \"Write\", \"tool_input\": {\"file_path\": \"{dir}/projects/savia-vaults/savia-vaults.domes.json\", \"content\": \"{\\\"version\\\":1,\\\"domes\\\":{}}\"}, \"session_id\": \"eval-s1\", \"cwd\": \"{dir}\"}",
+        "env": {
+          "CLAUDE_PROJECT_DIR": "{dir}",
+          "SAVIA_DOME_READ_DIR": "{dir}/.dome-read",
+          "SAVIA_HOOK_PROFILE": "standard"
+        },
+        "files": {
+          "projects/savia-vaults/savia-vaults.domes.json": "{\"version\": 1, \"domes\": {\"interna\": {\"path\": \"{dir}/vaults/interna\", \"confidentiality\": \"N2\"}, \"secreta\": {\"path\": \"{dir}/vaults/secreta\", \"confidentiality\": \"N3\"}}}",
+          "vaults/interna/nota.md": "---\ntitle: nota\n---\ncuerpo\n",
+          "vaults/secreta/plan.md": "plan N3\n",
+          "src/main.rs": "fn main() {}\n"
+        },
+        "expect": {
+          "exit": 0,
+          "json": {
+            ".hookSpecificOutput.permissionDecision": "ask"
+          },
+          "stdout_match": [
+            "el registro de cúpulas no lo cambia el motor"
+          ]
+        }
+      }
     }
   ]
 }

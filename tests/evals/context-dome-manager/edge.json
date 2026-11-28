@@ -43,6 +43,37 @@
       "checks": [
         {"id": "refactor-thresholds", "target": "agent", "must_match": "refactorizar monolitos \\(>2000 lineas\\), consolidar atomicas \\(<50 lineas\\)"}
       ]
+    },
+    {
+      "id": "edge-read-n3-cloud-denied",
+      "negative": true,
+      "input": "Read de una nota N3 sin contexto de sesion (nube)",
+      "expected": "deny: N3 o superior no sale a la nube",
+      "aggregate": {
+        "script": ".claude/hooks/dome-guard.sh",
+        "cwd": "{dir}",
+        "stdin": "{\"hook_event_name\": \"PreToolUse\", \"tool_name\": \"Read\", \"tool_input\": {\"file_path\": \"{dir}/vaults/secreta/plan.md\"}, \"session_id\": \"eval-s1\", \"cwd\": \"{dir}\"}",
+        "env": {
+          "CLAUDE_PROJECT_DIR": "{dir}",
+          "SAVIA_DOME_READ_DIR": "{dir}/.dome-read",
+          "SAVIA_HOOK_PROFILE": "standard"
+        },
+        "files": {
+          "projects/savia-vaults/savia-vaults.domes.json": "{\"version\": 1, \"domes\": {\"interna\": {\"path\": \"{dir}/vaults/interna\", \"confidentiality\": \"N2\"}, \"secreta\": {\"path\": \"{dir}/vaults/secreta\", \"confidentiality\": \"N3\"}}}",
+          "vaults/interna/nota.md": "---\ntitle: nota\n---\ncuerpo\n",
+          "vaults/secreta/plan.md": "plan N3\n",
+          "src/main.rs": "fn main() {}\n"
+        },
+        "expect": {
+          "exit": 0,
+          "json": {
+            ".hookSpecificOutput.permissionDecision": "deny"
+          },
+          "stdout_match": [
+            "N3 o superior no sale a la nube"
+          ]
+        }
+      }
     }
   ]
 }

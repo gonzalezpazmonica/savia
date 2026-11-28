@@ -9,6 +9,32 @@
     {
       "input": "description con comandos embebidos",
       "expected": "inerte: es texto, no se ejecuta"
+    },
+    {
+      "id": "adv-score-floor-zero",
+      "negative": true,
+      "input": "5 criticos (score bruto -25)",
+      "expected": "score=0 verdict=fail: el score nunca es negativo",
+      "aggregate": {
+        "script": "scripts/court-review.sh",
+        "cwd": "{dir}",
+        "args": [
+          "score",
+          "5",
+          "0",
+          "0",
+          "0"
+        ],
+        "expect": {
+          "exit": 0,
+          "stdout_match": [
+            "^score=0 verdict=fail "
+          ],
+          "stdout_not_match": [
+            "score=-"
+          ]
+        }
+      }
     }
   ]
 }

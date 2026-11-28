@@ -13,6 +13,25 @@
     {
       "input": "permiso insuficiente",
       "expected": "LINKEDIN/PERMISSION estilo NOT_GRANTED explicito"
+    },
+    {
+      "id": "edge-gate-70-conditional",
+      "input": "gate con score 70 (borde inferior de conditional)",
+      "expected": "CONDITIONAL, exit 2",
+      "aggregate": {
+        "script": "scripts/coherence-court.sh",
+        "cwd": "{dir}",
+        "args": [
+          "gate",
+          "70"
+        ],
+        "expect": {
+          "exit": 2,
+          "stdout_match": [
+            "^CONDITIONAL: score=70"
+          ]
+        }
+      }
     }
   ]
 }

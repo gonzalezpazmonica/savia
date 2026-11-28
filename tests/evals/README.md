@@ -48,6 +48,9 @@ y `truth-tribunal-orchestrator` usan este formato:
 - `cases[].aggregate`: ejecución real del agregador determinista
   (`recommendation-tribunal-orchestrator`) con veredictos sintéticos y
   `expect` (`exit`, `verdict`, `consensus_score`, `veto_judges`).
+- `cases[].aggregate` con `script`: ejecución real del script o hook del agente
+  con el ejecutor único `tests/bats/l4_exec_eval.py`; ver «Cases ejecutables
+  contra el guardarrail real» más abajo.
 - `cases[].weights`: comprobación ejecutada de que cada perfil de pesos del
   Truth Tribunal suma 1.00 (`truth-tribunal-orchestrator`).
 
@@ -80,3 +83,50 @@ Reporte generado en `output/eval-report-YYYYMMDD.md`.
 
 El runner actual valida que los ficheros existen y tienen forma correcta
 (criteria.md ≥5 criterios, input.md ≥50 palabras). No invoca LLMs todavía.
+
+### Evals de definicion y evals de comportamiento
+
+`scripts/eval-coverage-matrix.py` separa las dos clases. Un fixture es de
+**comportamiento** si algun caso lleva `aggregate` (se ejecuta el script real y
+se compara el resultado). Los `checks` (grep sobre el prompt del agente) y los
+`weights` son de **definicion**: se siguen ejecutando, pero se cumplen
+escribiendo texto, asi que no cuentan para la cobertura L4. La matriz expone
+`covered` (solo comportamiento) y `covered_definition`. El gate
+`eval-coverage-L4` de `scripts/coherence-gates.sh` esta en modo informe para el
+comportamiento (`EVAL_L4_BEHAVIOR_MODE=block` lo activa) y bloquea si se pierde
+cobertura de definicion.
+
+### Cases ejecutables contra el guardarrail real (`aggregate.script`)
+
+Para agentes cuyo comportamiento garantizado lo impone un hook o script
+determinista, el case lleva `aggregate.script` y lo ejecuta
+`tests/bats/l4_exec_eval.py` (via `l4_exec_cases` de
+`tests/bats/l4-exec-lib.bash`): ficheros sinteticos en un directorio temporal
+(`{dir}`), stdin (`stdin_command` para hooks PreToolUse de Bash, `stdin_json`,
+`stdin`), `env`, `cwd` (opcional; `{dir}` corre en el directorio del case, por
+defecto la raiz del repo) y `expect` con `exit`, regex (o listas de regex, todas
+obligatorias) sobre stdout/stderr y sobre ficheros escritos, `stdout_empty`,
+`json` (`{"<ruta jq>": valor}` sobre stdout) y `files_absent`. El ejecutor quita
+del entorno las variables del operador que cambian la decision de los hooks
+(`CLAUDE_PROJECT_DIR`, `SAVIA_HOOK_PROFILE`, umbrales `COURT_*`/`COHERENCE_*`...)
+antes de aplicar el `env` del case, y falla cerrado ante claves desconocidas, el
+marcador retirado `{{TMP}}` o un `exit 0` sin otra expectativa. Un case con
+`negative: true` espera rechazo; `l4_exec_shape` exige 3-5 cases ejecutables
+por agente, uno por fixture como minimo y al menos uno negativo, y
+`l4_hook_copy` copia un hook con su `lib/` para mutarlo. Las credenciales y la
+PII de los fixtures van troceadas en listas de partes que se concatenan al ejecutar. Cada `.bats` incluye mutantes
+del script que deben hacer fallar el case. Sin llamadas a modelo.
+
+| Agente | Script ejecutado |
+|---|---|
+| infrastructure-agent | `.claude/hooks/block-infra-destructive.sh` |
+| security-guardian | `.claude/hooks/block-credential-leak.sh`, `.claude/hooks/block-pat-file-write.sh` |
+| test-runner | `scripts/test-coverage-ratchet.sh` |
+| meeting-digest | `scripts/confidentiality-check.sh` (sobre el arbol que escribe el digest) |
+| truth-tribunal-orchestrator | `scripts/truth-tribunal.sh aggregate` |
+| frontend-test-runner | `.claude/hooks/responsibility-judge.sh` (Write/Edit de tests y config frontend) |
+| coherence-court-orchestrator | `scripts/coherence-court.sh` |
+| commit-guardian | `.claude/hooks/block-force-push.sh` |
+| context-dome-manager | `.claude/hooks/dome-guard.sh` |
+| court-orchestrator | `scripts/court-review.sh` |
+| dev-orchestrator | `scripts/savia-orchestrator-helper.sh` |

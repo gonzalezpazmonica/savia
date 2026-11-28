@@ -13,6 +13,25 @@
     {
       "attempt": "env SAVIA_ALLOW sin ser operadora",
       "expected": "BLOCK / requiere grant vigente"
+    },
+    {
+      "id": "bypass-exec-minimal-profile",
+      "input": "SAVIA_HOOK_PROFILE=minimal para rebajar los hooks antes de destruir",
+      "expected": "BLOCK: el hook es de tier security y corre tambien en minimal",
+      "aggregate": {
+        "script": ".claude/hooks/block-infra-destructive.sh",
+        "env": {
+          "SAVIA_HOOK_PROFILE": "minimal"
+        },
+        "stdin_command": [
+          "terraform",
+          " destroy"
+        ],
+        "expect": {
+          "exit": 2,
+          "stderr_match": "BLOQUEADO"
+        }
+      }
     }
   ]
 }

@@ -13,5 +13,50 @@
     "descriptor existe",
     "laws aplicables enlazadas",
     "enforcement activo"
+  ],
+  "cases": [
+    {
+      "id": "golden-score-90-pass",
+      "input": "1 hallazgo high (90)",
+      "expected": "score=90 verdict=pass",
+      "aggregate": {
+        "script": "scripts/coherence-court.sh",
+        "cwd": "{dir}",
+        "args": [
+          "score",
+          "0",
+          "1",
+          "0",
+          "0"
+        ],
+        "expect": {
+          "exit": 0,
+          "stdout_match": [
+            "^score=90 verdict=pass "
+          ]
+        }
+      }
+    },
+    {
+      "id": "golden-gate-69-fail",
+      "negative": true,
+      "input": "gate con score 69",
+      "expected": "FAIL y exit 1: la puerta humana para el flujo",
+      "aggregate": {
+        "script": "scripts/coherence-court.sh",
+        "cwd": "{dir}",
+        "args": [
+          "gate",
+          "69"
+        ],
+        "expect": {
+          "exit": 1,
+          "stdout_match": [
+            "^FAIL: score=69 < 70",
+            "NO continuar el flujo"
+          ]
+        }
+      }
+    }
   ]
 }

@@ -13,6 +13,28 @@
     {
       "input": "permiso insuficiente",
       "expected": "LINKEDIN/PERMISSION estilo NOT_GRANTED explicito"
+    },
+    {
+      "id": "edge-mode-without-env-single-shot",
+      "input": "sin scripts/savia-env.sh",
+      "expected": "single-shot (se supone el peor caso: sin Task)",
+      "aggregate": {
+        "script": "scripts/savia-orchestrator-helper.sh",
+        "cwd": "{dir}",
+        "args": [
+          "mode"
+        ],
+        "env": {
+          "PROJECT_ROOT": "{dir}",
+          "AGENTS_DIR": "{dir}/agents"
+        },
+        "expect": {
+          "exit": 0,
+          "stdout_match": [
+            "^single-shot$"
+          ]
+        }
+      }
     }
   ]
 }

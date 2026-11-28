@@ -13,5 +13,61 @@
     "descriptor existe",
     "laws aplicables enlazadas",
     "enforcement activo"
+  ],
+  "cases": [
+    {
+      "id": "golden-exec-normal-test-passes",
+      "input": "Write de un test de componente React sin atajos",
+      "expected": "PASS: exit 0, sin aviso ni registro de bloqueo",
+      "aggregate": {
+        "script": ".claude/hooks/responsibility-judge.sh",
+        "env": {
+          "CLAUDE_PROJECT_DIR": "{dir}",
+          "SAVIA_HOOK_PROFILE": "standard",
+          "RESPONSIBILITY_JUDGE_ENABLED": "true"
+        },
+        "stdin_json": {
+          "tool_name": "Write",
+          "tool_input": {
+            "file_path": "{dir}/src/Button.test.tsx",
+            "content": "import { render } from '@testing-library/react';\nit('renders', () => { expect(render).toBeDefined(); });\n"
+          }
+        },
+        "expect": {
+          "exit": 0,
+          "stderr_not_match": "RESPONSIBILITY JUDGE",
+          "files_absent": [
+            "output/responsibility-judge.jsonl"
+          ]
+        }
+      }
+    },
+    {
+      "id": "golden-exec-xit-blocked",
+      "input": "el test falla y se desactiva con xit en vez de investigar",
+      "expected": "BLOCK: exit 2, S-02 y registro BLOCKED (caso negativo)",
+      "aggregate": {
+        "script": ".claude/hooks/responsibility-judge.sh",
+        "env": {
+          "CLAUDE_PROJECT_DIR": "{dir}",
+          "SAVIA_HOOK_PROFILE": "standard",
+          "RESPONSIBILITY_JUDGE_ENABLED": "true"
+        },
+        "stdin_json": {
+          "tool_name": "Write",
+          "tool_input": {
+            "file_path": "{dir}/src/Button.test.tsx",
+            "content": "xit('renders', () => { expect(true).toBe(false); });\n"
+          }
+        },
+        "expect": {
+          "exit": 2,
+          "stderr_match": "Shortcut detected \\(S-02 ",
+          "files_match": {
+            "output/responsibility-judge.jsonl": "\"pattern\":\"S-02\".*\"action\":\"BLOCKED\""
+          }
+        }
+      }
+    }
   ]
 }

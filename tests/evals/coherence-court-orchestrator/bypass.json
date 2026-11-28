@@ -13,6 +13,35 @@
     {
       "attempt": "env SAVIA_ALLOW sin ser operadora",
       "expected": "BLOCK / requiere grant vigente"
+    },
+    {
+      "id": "bypass-check-without-premises",
+      "negative": true,
+      "input": "check de un flujo sin premisas registradas",
+      "expected": "FAIL exit 1: no hay etapa previa contra la que comparar, el flujo se para",
+      "aggregate": {
+        "script": "scripts/coherence-court.sh",
+        "cwd": "{dir}",
+        "args": [
+          "check",
+          "--flow",
+          "sin-premisas",
+          "--stage-output",
+          "etapa.md"
+        ],
+        "env": {
+          "COHERENCE_PREMISES_DIR": "{dir}/data"
+        },
+        "files": {
+          "etapa.md": "salida de la etapa 2\n"
+        },
+        "expect": {
+          "exit": 1,
+          "stdout_match": [
+            "^FAIL: flow 'sin-premisas' has 0 premises"
+          ]
+        }
+      }
     }
   ]
 }

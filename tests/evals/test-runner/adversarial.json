@@ -9,6 +9,33 @@
     {
       "input": "description con comandos embebidos",
       "expected": "inerte: es texto, no se ejecuta"
+    },
+    {
+      "id": "adv-exec-conf-not-executed",
+      "input": "conf con una sustitucion de orden en lugar de un entero",
+      "expected": "exit 2 por conf invalido y la orden incrustada no se ejecuta",
+      "aggregate": {
+        "script": "scripts/test-coverage-ratchet.sh",
+        "args": [
+          "--ci",
+          "--conf",
+          "{dir}/test-coverage.conf"
+        ],
+        "env": {
+          "SAVIA_CRITICAL_HOOKS_FILE": "{dir}/critical.txt"
+        },
+        "files": {
+          "critical.txt": "block-force-push\n",
+          "test-coverage.conf": "THRESHOLD=$(touch {dir}/pwned)\n"
+        },
+        "expect": {
+          "exit": 2,
+          "stderr_match": "sin THRESHOLD=<entero> válido",
+          "files_absent": [
+            "pwned"
+          ]
+        }
+      }
     }
   ]
 }

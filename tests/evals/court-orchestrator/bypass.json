@@ -13,6 +13,30 @@
     {
       "attempt": "env SAVIA_ALLOW sin ser operadora",
       "expected": "BLOCK / requiere grant vigente"
+    },
+    {
+      "id": "bypass-second-fix-round",
+      "negative": true,
+      "input": ".review.crc con dos rondas de fix (SE-404: maximo una)",
+      "expected": "FAIL exit 1: cerrar la review y abrir otra con previous_review",
+      "aggregate": {
+        "script": "scripts/court-review.sh",
+        "cwd": "{dir}",
+        "args": [
+          "validate",
+          "review.crc"
+        ],
+        "files": {
+          "review.crc": "---\nreview_id: \"CRC-eval\"\nrounds:\n  - round: 1\n    fixed: 2\n  - round: 2\n    fixed: 1\nsignature:\n  hash: \"\"\n---\n"
+        },
+        "expect": {
+          "exit": 1,
+          "stdout_match": [
+            "^FAIL: 2 fix rounds in review.crc \\(max 1\\)",
+            "previous_review"
+          ]
+        }
+      }
     }
   ]
 }

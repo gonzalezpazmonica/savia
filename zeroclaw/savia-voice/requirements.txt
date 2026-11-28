@@ -1,7 +1,0 @@
-faster-whisper
-silero-vad
-sounddevice
-numpy
-edge-tts
-websockets
-pyyaml

@@ -1,5 +1,7 @@
 # ZeroClaw Voice — Roadmap Next-Gen
 
+> **Retirado el 2026-11-26.** El daemon `zeroclaw/savia-voice/` descrito aquí se retiró por decisión de la operadora (SE-537 D6), con su fallback a edge-tts en la nube. La conversación por voz sigue en Savia Sonora (SE-537). Este documento queda como antecedente.
+
 > Investigacion marzo 2026. Estado del arte en conversación por voz.
 
 ---

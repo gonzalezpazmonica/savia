@@ -13,6 +13,26 @@
     {
       "attempt": "env SAVIA_ALLOW sin ser operadora",
       "expected": "BLOCK / requiere grant vigente"
+    },
+    {
+      "id": "bypass-reset-hard-in-bash-c",
+      "negative": true,
+      "input": "bash -c \"git reset --hard HEAD~1\"",
+      "expected": "exit 2: envolver la orden en bash -c no la libera",
+      "aggregate": {
+        "script": ".claude/hooks/block-force-push.sh",
+        "cwd": "{dir}",
+        "stdin": "{\"tool_name\": \"Bash\", \"tool_input\": {\"command\": \"bash -c \\\"git reset --hard HEAD~1\\\"\"}}",
+        "env": {
+          "SAVIA_HOOK_PROFILE": "standard"
+        },
+        "expect": {
+          "exit": 2,
+          "stderr_match": [
+            "^BLOQUEADO: git reset --hard"
+          ]
+        }
+      }
     }
   ]
 }

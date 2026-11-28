@@ -13,5 +13,52 @@
     "descriptor existe",
     "laws aplicables enlazadas",
     "enforcement activo"
+  ],
+  "cases": [
+    {
+      "id": "golden-score-clean-pass",
+      "input": "sin hallazgos",
+      "expected": "score=100 verdict=pass",
+      "aggregate": {
+        "script": "scripts/court-review.sh",
+        "cwd": "{dir}",
+        "args": [
+          "score",
+          "0",
+          "0",
+          "0",
+          "0"
+        ],
+        "expect": {
+          "exit": 0,
+          "stdout_match": [
+            "^score=100 verdict=pass "
+          ]
+        }
+      }
+    },
+    {
+      "id": "golden-score-critical-fail",
+      "negative": true,
+      "input": "1 critico y 2 medios",
+      "expected": "score=69 verdict=fail",
+      "aggregate": {
+        "script": "scripts/court-review.sh",
+        "cwd": "{dir}",
+        "args": [
+          "score",
+          "1",
+          "0",
+          "2",
+          "0"
+        ],
+        "expect": {
+          "exit": 0,
+          "stdout_match": [
+            "^score=69 verdict=fail "
+          ]
+        }
+      }
+    }
   ]
 }

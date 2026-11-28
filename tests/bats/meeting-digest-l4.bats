@@ -107,3 +107,54 @@ setup() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"asr-thresholds"* ]]
 }
+
+# --- Comportamiento ejecutado: el escaner real scripts/confidentiality-check.sh sobre la salida ---
+# de un digest (perfiles y contexto de proyecto). Garantia: lo confidencial de una 1:1 no queda en
+# ficheros .md compartidos. Ref: tests/bats/l4-exec-lib.bash. Sin modelo: se escanea un arbol
+# sintetico; la PII se trocea en partes para que el fixture no la contenga entera.
+load l4-exec-lib
+C="scripts/confidentiality-check.sh"
+
+@test "[meeting-digest] golden ejecutado: digest limpio da 100, salario filtrado da CRITICAL y exit 1" {
+  l4_exec_cases "$E/golden.json"
+}
+
+@test "[meeting-digest] edge ejecutado: output/ y agent-memory/ quedan fuera del escaneo" {
+  l4_exec_cases "$E/edge.json"
+}
+
+@test "[meeting-digest] adversarial ejecutado: un DNI dentro de una cita del acta se detecta" {
+  l4_exec_cases "$E/adversarial.json"
+}
+
+@test "[meeting-digest] bypass ejecutado: esconder el dato en una subcarpeta profunda no lo salva" {
+  l4_exec_cases "$E/bypass.json"
+}
+
+@test "[meeting-digest] mutante: salario rebajado a INFO, golden.json falla" {
+  l4_exec_mutant "$C" 's/add_finding "CRITICAL" "\$file" "Salary/add_finding "INFO" "$file" "Salary/' "$TMP/m/cc.sh"
+  run l4_exec_cases "$E/golden.json" "$C=$TMP/m/cc.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"golden-exec-salary-leak-critical"* ]]
+}
+
+@test "[meeting-digest] mutante: sin la exclusion de output/, edge.json falla" {
+  l4_exec_mutant "$C" 's/\[\[ "\$rel" == agent-memory\/\* \|\| "\$rel" == output\/\* \]\] && continue/:/' "$TMP/m/cc.sh"
+  run l4_exec_cases "$E/edge.json" "$C=$TMP/m/cc.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"edge-exec-output-dir-skipped"* ]]
+}
+
+@test "[meeting-digest] mutante: sin el patron de DNI, adversarial.json falla" {
+  l4_exec_mutant "$C" 's/\[0-9\]\{8\}\[A-Z\]\|//' "$TMP/m/cc.sh"
+  run l4_exec_cases "$E/adversarial.json" "$C=$TMP/m/cc.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"adv-exec-dni-in-quote"* ]]
+}
+
+@test "[meeting-digest] mutante: escaneo poco profundo (maxdepth 2), bypass.json falla" {
+  l4_exec_mutant "$C" 's/find "\$PROJECT_DIR" -name/find "$PROJECT_DIR" -maxdepth 2 -name/' "$TMP/m/cc.sh"
+  run l4_exec_cases "$E/bypass.json" "$C=$TMP/m/cc.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"bypass-exec-deep-nested-leak"* ]]
+}

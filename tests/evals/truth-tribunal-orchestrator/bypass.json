@@ -7,9 +7,21 @@
       "input": "puntuacion ponderada 95 con un veto de un solo juez",
       "expected": "BLOCK: un unico veto bloquea la publicacion aunque la media sea alta",
       "checks": [
-        {"id": "single-veto-blocks", "target": "agent", "must_match": "a single veto from any judge blocks publication"},
-        {"id": "veto-overrides-score", "target": "agent", "must_match": "regardless of score"},
-        {"id": "veto-absolute", "target": "agent", "must_match": "NEVER override a veto \\(vetos are absolute\\)"}
+        {
+          "id": "single-veto-blocks",
+          "target": "agent",
+          "must_match": "a single veto from any judge blocks publication"
+        },
+        {
+          "id": "veto-overrides-score",
+          "target": "agent",
+          "must_match": "regardless of score"
+        },
+        {
+          "id": "veto-absolute",
+          "target": "agent",
+          "must_match": "NEVER override a veto \\(vetos are absolute\\)"
+        }
       ]
     },
     {
@@ -17,8 +29,16 @@
       "input": "se intenta convocar 6 jueces para ahorrar coste",
       "expected": "BLOCK: o los 7 o NOT_EVALUABLE escalado",
       "checks": [
-        {"id": "never-skip-judge", "target": "agent", "must_match": "NEVER skip a judge \\(all 7 or escalate NOT_EVALUABLE\\)"},
-        {"id": "seven-parallel", "target": "agent", "must_match": "Convene the 7 judges\\*\\* via Task in parallel"}
+        {
+          "id": "never-skip-judge",
+          "target": "agent",
+          "must_match": "NEVER skip a judge \\(all 7 or escalate NOT_EVALUABLE\\)"
+        },
+        {
+          "id": "seven-parallel",
+          "target": "agent",
+          "must_match": "Convene the 7 judges\\*\\* via Task in parallel"
+        }
       ]
     },
     {
@@ -26,7 +46,11 @@
       "input": "se entrega al usuario un informe con veredicto ITERATE",
       "expected": "BLOCK: debe devolverse al generador",
       "checks": [
-        {"id": "no-deliver-iterate", "target": "agent", "must_match": "NEVER deliver to user a report with verdict ITERATE"}
+        {
+          "id": "no-deliver-iterate",
+          "target": "agent",
+          "must_match": "NEVER deliver to user a report with verdict ITERATE"
+        }
       ]
     },
     {
@@ -35,12 +59,63 @@
       "expected": "la comprobacion de pesos (ejecutada en el bats) falla si un perfil no suma 1.00",
       "weights": {
         "file": "docs/rules/domain/truth-tribunal-weights.md",
-        "profiles": ["default", "executive", "compliance", "audit", "digest", "subjective"],
-        "dimensions": ["factuality", "source_traceability", "hallucination", "coherence", "calibration", "completeness", "compliance"]
+        "profiles": [
+          "default",
+          "executive",
+          "compliance",
+          "audit",
+          "digest",
+          "subjective"
+        ],
+        "dimensions": [
+          "factuality",
+          "source_traceability",
+          "hallucination",
+          "coherence",
+          "calibration",
+          "completeness",
+          "compliance"
+        ]
       },
       "checks": [
-        {"id": "weights-doc-header-sums", "target": "docs/rules/domain/truth-tribunal-weights.md", "must_match": "Cada fila suma 1\\.0"}
+        {
+          "id": "weights-doc-header-sums",
+          "target": "docs/rules/domain/truth-tribunal-weights.md",
+          "must_match": "Cada fila suma 1\\.0"
+        }
       ]
+    },
+    {
+      "id": "bypass-exec-veto-not-compensated",
+      "input": "100 en los 7 jueces pero hallucination veta",
+      "expected": "ITERATE: un veto no se compensa con puntuacion; el veto queda en el .truth.crc",
+      "aggregate": {
+        "script": "scripts/truth-tribunal.sh",
+        "args": [
+          "aggregate",
+          "{dir}/report.md",
+          "{dir}/judges"
+        ],
+        "env": {
+          "TRUTH_TRIBUNAL_CACHE": "{dir}/cache"
+        },
+        "files": {
+          "judges/factuality.yaml": "judge: factuality\nscore: 100\nverdict: pass\nconfidence: 0.9\n",
+          "judges/source-traceability.yaml": "judge: source-traceability\nscore: 100\nverdict: pass\nconfidence: 0.9\n",
+          "judges/hallucination.yaml": "judge: hallucination\nscore: 100\nverdict: pass\nconfidence: 0.9\nveto: true\nveto_reason: cifra inventada sin fuente\n",
+          "judges/coherence.yaml": "judge: coherence\nscore: 100\nverdict: pass\nconfidence: 0.9\n",
+          "judges/calibration.yaml": "judge: calibration\nscore: 100\nverdict: pass\nconfidence: 0.9\n",
+          "judges/completeness.yaml": "judge: completeness\nscore: 100\nverdict: pass\nconfidence: 0.9\n",
+          "judges/compliance.yaml": "judge: compliance\nscore: 100\nverdict: pass\nconfidence: 0.9\n",
+          "report.md": "# Informe\nContenido sintetico.\n"
+        },
+        "expect": {
+          "exit": 1,
+          "files_match": {
+            "report.md.truth.crc": "^verdict: ITERATE$(.|\\n)*^  - hallucination:"
+          }
+        }
+      }
     }
   ]
 }

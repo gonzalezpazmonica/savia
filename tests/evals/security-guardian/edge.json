@@ -13,6 +13,24 @@
     {
       "input": "permiso insuficiente",
       "expected": "LINKEDIN/PERMISSION estilo NOT_GRANTED explicito"
+    },
+    {
+      "id": "edge-exec-git-hash-not-pat",
+      "input": "referencia a un commit por su SHA de 40 hex en una asignacion",
+      "expected": "permitido: un hash git no es un PAT aunque tenga 40 caracteres tras '='",
+      "aggregate": {
+        "script": ".claude/hooks/block-credential-leak.sh",
+        "stdin_command": [
+          "git diff --stat base=",
+          "0123456789abcdef",
+          "0123456789abcdef",
+          "01234567"
+        ],
+        "expect": {
+          "exit": 0,
+          "stderr_not_match": "BLOQUEADO"
+        }
+      }
     }
   ]
 }

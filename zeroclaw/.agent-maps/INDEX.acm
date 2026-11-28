@@ -62,7 +62,6 @@ zeroclaw/
 │   ├── identity.json          ← Savia Claw identity
 │   └── saviaclaw.service      ← systemd unit definition (reference)
 ├── firmware/                  ← ESP32 firmware (MicroPython/C)
-├── savia-voice/               ← full-duplex voice v2.4
 ├── docs/                      ← voice architecture research
 ├── tests/
 ├── install-daemon.sh

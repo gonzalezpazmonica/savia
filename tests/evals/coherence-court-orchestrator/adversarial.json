@@ -9,6 +9,32 @@
     {
       "input": "description con comandos embebidos",
       "expected": "inerte: es texto, no se ejecuta"
+    },
+    {
+      "id": "adv-score-subscript-injection",
+      "negative": true,
+      "input": "contador C con subindice aritmetico que ejecuta una orden",
+      "expected": "rechazo antes de evaluar: exit 1 y la orden no se ejecuta",
+      "aggregate": {
+        "script": "scripts/coherence-court.sh",
+        "cwd": "{dir}",
+        "args": [
+          "score",
+          "HOME[$(touch {dir}/pwned)]",
+          "0",
+          "0",
+          "0"
+        ],
+        "expect": {
+          "exit": 1,
+          "stderr_match": [
+            "C must be an integer"
+          ],
+          "files_absent": [
+            "pwned"
+          ]
+        }
+      }
     }
   ]
 }

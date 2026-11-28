@@ -90,3 +90,54 @@ _fixture_agent() { # <frontmatter-line> -> PROJECT_ROOT tree with one agent
 @test "[security-guardian] regression: golden fixture versionado" {
   jq -e '.scenario == "golden"' "$E/golden.json" >/dev/null
 }
+
+# --- Comportamiento ejecutado: hooks reales block-credential-leak y block-pat-file-write ---
+# (enforcement del descriptor). Ref: tests/bats/l4-exec-lib.bash. Sin modelo.
+# Las credenciales de los fixtures se trocean en partes: el fichero no contiene ninguna entera.
+load l4-exec-lib
+HC=".claude/hooks/block-credential-leak.sh"
+HP=".claude/hooks/block-pat-file-write.sh"
+
+@test "[security-guardian] golden ejecutado: clave AWS bloqueada, orden limpia permitida" {
+  l4_exec_cases "$E/golden.json"
+}
+
+@test "[security-guardian] edge ejecutado: un hash git de 40 hex no es un PAT" {
+  l4_exec_cases "$E/edge.json"
+}
+
+@test "[security-guardian] adversarial ejecutado: clave privada en un heredoc se bloquea" {
+  l4_exec_cases "$E/adversarial.json"
+}
+
+@test "[security-guardian] bypass ejecutado: escribir un fichero -pat versionado se bloquea" {
+  l4_exec_cases "$E/bypass.json"
+}
+
+@test "[security-guardian] mutante: clave AWS deja de bloquear, golden.json falla" {
+  l4_exec_mutant "$HC" '/AWS Access Key detectada/{n;s/exit 2/exit 0/}' "$TMP/m/hook.sh"
+  run l4_exec_cases "$E/golden.json" "$HC=$TMP/m/hook.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"golden-exec-aws-key-blocked"* ]]
+}
+
+@test "[security-guardian] mutante: sin la excepcion de hash git, edge.json falla" {
+  l4_exec_mutant "$HC" 's/\[a-f0-9\]\{40\}/[a-f0-9]{41}/' "$TMP/m/hook.sh"
+  run l4_exec_cases "$E/edge.json" "$HC=$TMP/m/hook.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"edge-exec-git-hash-not-pat"* ]]
+}
+
+@test "[security-guardian] mutante: clave privada deja de bloquear, adversarial.json falla" {
+  l4_exec_mutant "$HC" '/Private key detectada/{n;s/exit 2/exit 0/}' "$TMP/m/hook.sh"
+  run l4_exec_cases "$E/adversarial.json" "$HC=$TMP/m/hook.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"adv-exec-private-key-heredoc"* ]]
+}
+
+@test "[security-guardian] mutante: la escritura a ruta -pat no bloquea, bypass.json falla" {
+  l4_exec_mutant "$HP" '/^EOF$/{n;s/exit 2/exit 0/}' "$TMP/m/pat.sh"
+  run l4_exec_cases "$E/bypass.json" "$HP=$TMP/m/pat.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"bypass-exec-pat-path-write"* ]]
+}

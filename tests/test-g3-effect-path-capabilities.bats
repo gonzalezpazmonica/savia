@@ -231,7 +231,7 @@ L4_OK='{"rows":[{"risk":"L4","covered":true},{"risk":"L4","covered":true},{"risk
   stub_gates "$L4_OK"
   run bash "$FAKE/scripts/coherence-gates.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"PASS coherence/eval-coverage-L4: 2/2 cubiertas"* ]]
+  [[ "$output" == *"PASS coherence/eval-coverage-L4: comportamiento 2/2"* ]]
 }
 
 # ═══════════════════════════════════════════════════════════════════
