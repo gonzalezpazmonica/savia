@@ -1,0 +1,9 @@
+{
+  "id": "SE-536",
+  "status": "PROPOSED",
+  "priority": "P3",
+  "phase": "D",
+  "title": "Retirada del ranking de skills y de la realimentación automática de memoria (2 slices)",
+  "evidence": "docs/specs/SE-536-retirada-ranking-de-skills-y-realimentacion-de-memoria.spec.md",
+  "note": "Nace del dictamen del 2026-11-23 sobre un documento de propuestas de memoria. Fallos reproducidos en copia aislada sobre main e3687a8cd: el ranking pierde la primera entrada, no filtra la ventana de fechas, no distingue una skill rota y admite JSON inválido; nunca ha recibido un dato. La realimentación de memoria decide por palabras sueltas y está apagada desde septiembre, pero sigue registrada como hook. La operadora decidió por pregunta interactiva retirar los dos. S1 ranking; S2 realimentación, que toca settings.json. Fuera: skill-detect y memory-decay. Sigue PROPOSED: decidir el alcance no es aprobar."
+}

@@ -1999,7 +1999,7 @@
         "value": "alto",
         "dependency_value": "sin esto SE-515 no pasa de orientativa",
         "effort": "S0 pequeño; SE-497 parte 2 media",
-        "prerequisites": "SE-473 S0 ya aprobado: medir primero. Aprobación de SE-497 por la operadora; S1–S2 de SE-473 necesitan nueva aprobación tras S0.",
+        "prerequisites": "SE-473 S0 ya aprobado: medir primero. SE-497 tiene aprobado solo S0 desde el 2026-11-23; los slices S4 a S7 de su parte 2 necesitan nueva decisión de la operadora; S1–S2 de SE-473 necesitan nueva aprobación tras S0.",
         "done": "Medición de S0 publicada; esquema único decidido; una cadena de firma falsificada no activa una lección (test negativo)."
       },
       {

@@ -26,6 +26,18 @@ check_contains() {
   fi
 }
 
+check_not_contains() {
+  local file="$WORKSPACE_DIR/$1"
+  local pattern="$2"
+  local label="$3"
+  [ -f "$file" ] || { fail "No existe: $label"; return; }
+  if grep -q "$pattern" "$file"; then
+    fail "Contiene '$pattern' en $label (no debe)"
+  else
+    pass "No contiene '$pattern' en $label"
+  fi
+}
+
 check_executable() {
   local file="$WORKSPACE_DIR/$1"
   local label="$2"
@@ -52,11 +64,10 @@ check_contains "scripts/review-community.sh" "do_summary" "review-community.sh"
 check_contains "scripts/review-community.sh" "gh pr list" "review-community.sh"
 check_contains "scripts/review-community.sh" "gh issue list" "review-community.sh"
 check_contains "scripts/review-community.sh" "gh pr diff" "review-community.sh"
-check_contains "scripts/review-community.sh" "gh pr merge" "review-community.sh"
+check_not_contains "scripts/review-community.sh" "gh pr merge" "review-community.sh (fusión retirada: solo por el camino con permiso)"
 check_contains "scripts/review-community.sh" "gh release create" "review-community.sh"
 check_contains "scripts/review-community.sh" "validate-commands" "review-community.sh"
 check_contains "scripts/review-community.sh" "AKIA" "review-community.sh (secrets detection)"
-check_contains "scripts/review-community.sh" "squash" "review-community.sh (merge strategy)"
 check_contains "scripts/review-community.sh" "community" "review-community.sh (label)"
 
 echo ""

@@ -1,10 +1,14 @@
 #!/usr/bin/env bats
-# SE-498 F0 — reconcile (R5) sobre un ledger JSONL interino (SE-493 aún no está implementado).
+# SE-498 F0 — reconcile (R5) sobre un ledger JSONL interino (SE-493 se retiró el 2026-11-14; no hay transición de abandono).
 # La clasificación es total: lo que no casa con una fila concreta es INDETERMINATE.
+# Ref: docs/specs/SE-498-global-stop-cross-executor-revocation.spec.md (R5).
+# Cada test trabaja en su BATS_TEST_TMPDIR (repo, diario y ledger propios; ver fixtures/savia-control/setup).
 
 load fixtures/savia-control/setup
 
 setup() { setup_control; }
+
+teardown() { unset SAVIA_EFFECT_LEDGER SAVIA_CONTROL_DIR MERGE_SPRINT_HOME GH_STUB_DIR; }
 
 ledger() { printf '%s\n' "$@" > "$SAVIA_EFFECT_LEDGER"; }
 
@@ -26,17 +30,33 @@ ledger() { printf '%s\n' "$@" > "$SAVIA_EFFECT_LEDGER"; }
   [[ "$output" == *"INDETERMINATE raro [executor:a] (irreversible"* ]]
 }
 
-@test "R5: PREPARED sin la transición abandon disponible queda INDETERMINATE (fail-closed)" {
+@test "R5: PREPARED queda INDETERMINATE: no hay transición de abandono" {
   ledger '{"effect_id":"p1","state":"PREPARED","executor":"a"}'
   sc pause --scope executor:a --reason x
-  run sc reconcile; [ "$status" -eq 5 ]; [[ "$output" == *"INDETERMINATE p1"* ]]
+  run sc reconcile; [ "$status" -eq 5 ]; [ "$status" -ne 0 ]; [[ "$output" == *"INDETERMINATE p1"* ]]
 }
 
-@test "R5: PREPARED con abandon que funciona y el ámbito parado queda REJECTED" {
-  printf '#!/usr/bin/env python3\nimport sys; sys.exit(0 if sys.argv[1:3][0] == "abandon" else 1)\n' > "$R/scripts/effect-ledger.py"
+@test "R5: un ABANDONED heredado del ledger se clasifica REJECTED y no deja nada incierto" {
+  ledger '{"effect_id":"ab1","state":"ABANDONED","executor":"a"}'
+  sc pause --scope executor:a --reason x
+  run sc reconcile; echo "$output"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"REJECTED ab1"* ]]
+  [[ "$output" != *"INDETERMINATE ab1"* ]]
+}
+
+@test "R5 negativo: aunque reaparezca un guion con el nombre del libro retirado, no se invoca y PREPARED sigue INDETERMINATE" {
+  # Nombre partido: el test de retirada de SE-493 prohíbe citar el guion entero.
+  local viejo="$R/scripts/effect-""ledger.py"
+  printf '#!/usr/bin/env python3\nimport pathlib,sys\npathlib.Path(sys.argv[0]+".llamado").write_text("x")\nsys.exit(0)\n' > "$viejo"
   ledger '{"effect_id":"p1","state":"PREPARED","executor":"a"}'
   sc pause --scope executor:a --reason x
-  run sc reconcile; [ "$status" -eq 0 ]; [[ "$output" == *"REJECTED p1"* ]]
+  run sc reconcile
+  [ "$status" -eq 5 ]
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"INDETERMINATE p1"* ]]
+  [[ "$output" != *"REJECTED p1"* ]]
+  [ ! -e "$viejo.llamado" ]
 }
 
 @test "R5: los efectos de ámbitos en RUNNING no entran en el informe ni en el exit" {
@@ -55,8 +75,33 @@ ledger() { printf '%s\n' "$@" > "$SAVIA_EFFECT_LEDGER"; }
   ls "$SAVIA_CONTROL_DIR"/reports/reconcile-*.json >/dev/null
 }
 
-@test "R5: un ledger ilegible hace salir 2 a reconcile" {
+@test "R5 error: un ledger ilegible (invalid JSON) hace salir 2 a reconcile" {
   printf 'no json\n' > "$SAVIA_EFFECT_LEDGER"
   sc pause --reason x
-  run sc reconcile; [ "$status" -eq 2 ]; [[ "$output" == *LEDGER_UNREADABLE* ]]
+  run sc reconcile; [ "$status" -eq 2 ]; [ "$status" -ne 0 ]; [[ "$output" == *LEDGER_UNREADABLE* ]]
+}
+
+@test "R5 empty: con el ledger vacío y un ámbito parado, reconcile no informa nada incierto" {
+  : > "$SAVIA_EFFECT_LEDGER"
+  sc pause --scope executor:a --reason x
+  run sc reconcile; echo "$output"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *INDETERMINATE* ]]
+}
+
+@test "R5 nonexistent: sin fichero de ledger, reconcile sale 0 y no lo crea" {
+  [ ! -e "$SAVIA_EFFECT_LEDGER" ]
+  sc pause --scope executor:a --reason x
+  run sc reconcile; echo "$output"
+  [ "$status" -eq 0 ]
+  [ ! -e "$SAVIA_EFFECT_LEDGER" ]
+}
+
+@test "R5 null: un estado nulo no casa con ninguna fila y queda INDETERMINATE" {
+  ledger '{"effect_id":"n1","state":null,"executor":"a"}'
+  sc pause --scope executor:a --reason x
+  run sc reconcile; echo "$output"
+  [ "$status" -eq 5 ]
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"INDETERMINATE n1"* ]]
 }

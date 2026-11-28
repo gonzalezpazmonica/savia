@@ -11,7 +11,8 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   GUARD="$REPO_ROOT/.opencode/plugins/guards/auto-redact-credentials.ts"
   TEST="$REPO_ROOT/.opencode/plugins/__tests__/auto-redact-credentials.test.ts"
-  FOUNDATION="$REPO_ROOT/.opencode/plugins/savia-foundation.ts"
+  FOUNDATION="$REPO_ROOT/.opencode/plugins/lib/before-guards.ts"  # SE-510 AC-7: la lista vive aquí
+  FOUNDATION_PLUGIN="$REPO_ROOT/.opencode/plugins/savia-foundation.ts"
   POLICY="$REPO_ROOT/docs/rules/domain/secret-redaction-policy.md"
   SPEC="$REPO_ROOT/docs/propuestas/SPEC-142-pretooluse-input-modification.md"
   TMPDIR_TEST="$(mktemp -d)"
@@ -64,7 +65,7 @@ teardown() {
 }
 
 @test "AC-06: import line uses correct relative path" {
-  grep -q 'import { autoRedactSecrets } from "./guards/auto-redact-credentials.ts"' "$FOUNDATION"
+  grep -q 'import { autoRedactSecrets } from "../guards/auto-redact-credentials.ts"' "$FOUNDATION"
 }
 
 @test "AC-07: policy doc exists and is ≤150 lines (Rule #11)" {
@@ -116,7 +117,7 @@ teardown() {
 }
 
 @test "edge: foundation file ≤200 lines (SPEC-127 cap preserved)" {
-  lines=$(wc -l < "$FOUNDATION")
+  lines=$(wc -l < "$FOUNDATION_PLUGIN")
   [ "$lines" -le 200 ]
 }
 

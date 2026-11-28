@@ -141,7 +141,7 @@ a cualquier objeto y actuar sobre él sin cambiar de herramienta.
 ## Decisiones pendientes
 
 - **D1**: familia tipográfica e iconos con licencia libre.
-- **D2**: avatar de Savia (buhita) en el producto.
+- **D2**: avatar de Savia (buhita) en el producto. **Decidida el 2026-11-26** por la operadora en pregunta interactiva («Sí, la misma (Recommended)»): Space y Sonora comparten la misma cara, con el formato de estilos de SE-538.
 - **D3**: dirección visual por defecto tras la prueba de la operadora.
 
 ## OpenCode Implementation Plan
